@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Holy Curadoria de Imóveis — Imóveis de alto padrão em Chapecó, Balneário Camboriú, Itapema e Porto Belo, SC.">
+<title>Holy Curadoria de Imóveis — Alto Padrão em Santa Catarina</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Base ──────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --olive:#2d3a1f;
+  --olive-mid:#4a5c2f;
+  --olive-lt:#8fa060;
+  --gold:#b8993a;
+  --gold-lt:#d4b86a;
+  --cream:#f5f3ee;
+  --cream-dk:#ede9e0;
+  --ink:#1a1c18;
+  --ink-mid:#3d4237;
+  --muted:#7a7d72;
+  --white:#ffffff;
+  --serif:'Playfair Display',Georgia,serif;
+  --sans:'Inter',-apple-system,sans-serif;
+}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);color:var(--ink);background:var(--cream);overflow-x:hidden}
+img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+
+/* ── Nav ────────────────────────────────────────────────────────── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 48px;height:72px;
+  background:rgba(45,58,31,0.96);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid rgba(184,153,58,0.2);
+  transition:background 0.3s;
+}
+.nav-logo img{height:44px;width:auto}
+.nav-links{display:flex;gap:36px;list-style:none}
+.nav-links a{
+  font-size:13px;font-weight:500;letter-spacing:0.04em;
+  color:rgba(245,243,238,0.8);
+  transition:color 0.2s;
+  position:relative;
+}
+.nav-links a::after{
+  content:'';position:absolute;bottom:-2px;left:0;right:0;height:1px;
+  background:var(--gold);transform:scaleX(0);transition:transform 0.2s;
+}
+.nav-links a:hover{color:var(--white)}
+.nav-links a:hover::after{transform:scaleX(1)}
+.nav-cta{
+  background:var(--gold);color:var(--olive);
+  padding:9px 22px;border-radius:4px;
+  font-size:13px;font-weight:600;letter-spacing:0.03em;
+  transition:background 0.2s;
+}
+.nav-cta:hover{background:var(--gold-lt)}
+.nav-mobile{display:none;background:none;border:none;cursor:pointer;color:var(--cream)}
+
+/* ── Hero ────────────────────────────────────────────────────────── */
+.hero{
+  position:relative;height:100vh;min-height:640px;
+  display:flex;align-items:flex-end;
+  overflow:hidden;
+}
+.hero-bg{
+  position:absolute;inset:0;
+  background-image:url('/img/moov-aerial.jpg');
+  background-size:cover;background-position:center 30%;
+  transform:scale(1.04);
+  animation:heroZoom 12s ease-out forwards;
+}
+@keyframes heroZoom{from{transform:scale(1.04)}to{transform:scale(1)}}
+.hero-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(to top, rgba(26,28,24,0.88) 0%, rgba(26,28,24,0.3) 50%, rgba(26,28,24,0.15) 100%);
+}
+.hero-content{
+  position:relative;z-index:1;
+  padding:0 80px 80px;
+  max-width:780px;
+}
+.hero-kicker{
+  font-family:var(--sans);font-size:12px;font-weight:500;
+  letter-spacing:0.18em;color:var(--gold);
+  margin-bottom:20px;
+}
+.hero-title{
+  font-family:var(--serif);font-size:clamp(44px,5.5vw,76px);
+  font-weight:700;line-height:1.08;
+  color:var(--white);
+  margin-bottom:24px;
+}
+.hero-title em{font-style:italic;color:var(--gold-lt)}
+.hero-sub{
+  font-size:17px;font-weight:300;line-height:1.6;
+  color:rgba(245,243,238,0.75);
+  max-width:520px;margin-bottom:40px;
+}
+.hero-actions{display:flex;gap:16px;flex-wrap:wrap}
+.btn-primary{
+  background:var(--gold);color:var(--olive);
+  padding:14px 32px;border-radius:4px;
+  font-size:14px;font-weight:600;letter-spacing:0.03em;
+  transition:background 0.2s,transform 0.15s;
+  display:inline-block;
+}
+.btn-primary:hover{background:var(--gold-lt);transform:translateY(-1px)}
+.btn-outline{
+  border:1px solid rgba(245,243,238,0.4);color:var(--cream);
+  padding:14px 32px;border-radius:4px;
+  font-size:14px;font-weight:500;
+  transition:border-color 0.2s,color 0.2s;
+  display:inline-block;
+}
+.btn-outline:hover{border-color:var(--gold);color:var(--gold)}
+
+/* ── Section Base ──────────────────────────────────────────────── */
+section{padding:96px 80px}
+.section-dark{background:var(--olive);color:var(--cream)}
+.section-mid{background:var(--cream-dk)}
+
+.section-label{
+  font-size:12px;font-weight:500;letter-spacing:0.16em;
+  color:var(--gold);margin-bottom:12px;
+}
+.section-title{
+  font-family:var(--serif);font-size:clamp(32px,3.5vw,52px);
+  font-weight:700;line-height:1.12;margin-bottom:20px;
+}
+.section-body{
+  font-size:17px;font-weight:300;line-height:1.7;
+  color:var(--ink-mid);max-width:600px;
+}
+.section-dark .section-body{color:rgba(245,243,238,0.72)}
+.section-dark .section-title{color:var(--cream)}
+
+/* ── Empreendimentos ─────────────────────────────────────────────── */
+#empreendimentos{padding:96px 80px}
+.empr-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
+  gap:2px;margin-top:56px;
+}
+.empr-card{
+  position:relative;overflow:hidden;
+  aspect-ratio:4/3;cursor:pointer;
+}
+.empr-card img{
+  width:100%;height:100%;object-fit:cover;
+  transition:transform 0.6s cubic-bezier(0.25,0.46,0.45,0.94);
+}
+.empr-card:hover img{transform:scale(1.06)}
+.empr-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(to top, rgba(26,28,24,0.85) 0%, transparent 60%);
+  display:flex;flex-direction:column;justify-content:flex-end;
+  padding:28px;
+}
+.empr-tag{
+  font-size:10px;font-weight:600;letter-spacing:0.12em;
+  color:var(--gold);margin-bottom:8px;
+  background:rgba(26,28,24,0.5);padding:4px 8px;border-radius:2px;
+  display:inline-block;align-self:flex-start;
+}
+.empr-name{
+  font-family:var(--serif);font-size:26px;font-weight:600;
+  color:var(--white);line-height:1.2;margin-bottom:6px;
+}
+.empr-local{font-size:13px;color:rgba(245,243,238,0.65)}
+.empr-arrow{
+  position:absolute;top:20px;right:20px;
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(184,153,58,0);border:1px solid rgba(184,153,58,0.3);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--gold);font-size:18px;
+  transition:all 0.25s;
+}
+.empr-card:hover .empr-arrow{background:var(--gold);color:var(--olive);border-color:var(--gold)}
+
+/* ── MOOV Feature Section ────────────────────────────────────────── */
+.moov-hero{
+  position:relative;padding:0;
+  display:grid;grid-template-columns:1fr 1fr;
+  min-height:640px;overflow:hidden;
+}
+.moov-images{position:relative;overflow:hidden}
+.moov-images .main-img{width:100%;height:100%;object-fit:cover}
+.moov-content{
+  background:var(--olive);
+  padding:80px 64px;
+  display:flex;flex-direction:column;justify-content:center;
+}
+.moov-content .section-label{margin-bottom:8px}
+.moov-gallery{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:3px;
+  padding:0 80px 80px;background:var(--ink);
+}
+.moov-gallery img{
+  width:100%;aspect-ratio:1;object-fit:cover;
+  transition:opacity 0.2s;cursor:pointer;
+}
+.moov-gallery img:hover{opacity:0.85}
+
+/* ── Diferenciais ────────────────────────────────────────────────── */
+.difs-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:1px;background:var(--cream-dk);
+  margin-top:64px;
+}
+.dif-item{
+  background:var(--cream);padding:40px 36px;
+  transition:background 0.2s;
+}
+.dif-item:hover{background:var(--cream-dk)}
+.dif-icon{font-size:28px;margin-bottom:16px}
+.dif-title{
+  font-family:var(--serif);font-size:20px;font-weight:600;
+  margin-bottom:10px;color:var(--olive);
+}
+.dif-desc{font-size:14px;line-height:1.65;color:var(--muted)}
+
+/* ── Imoveis listing ─────────────────────────────────────────────── */
+#imoveis-lista{padding:96px 80px;background:var(--cream-dk)}
+.imoveis-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+  gap:24px;margin-top:56px;
+}
+.imovel-card{
+  background:var(--white);border-radius:8px;
+  overflow:hidden;
+  transition:transform 0.2s,box-shadow 0.2s;
+}
+.imovel-card:hover{transform:translateY(-4px);box-shadow:0 16px 40px rgba(26,28,24,0.12)}
+.imovel-foto{
+  width:100%;aspect-ratio:16/10;object-fit:cover;
+  background:#e8e4dc;
+  display:flex;align-items:center;justify-content:center;
+  font-size:40px;
+}
+.imovel-body{padding:20px 22px 24px}
+.imovel-local{font-size:12px;color:var(--muted);margin-bottom:6px}
+.imovel-nome{font-family:var(--serif);font-size:20px;font-weight:600;margin-bottom:10px;color:var(--ink)}
+.imovel-specs{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:14px}
+.imovel-valor{font-size:22px;font-weight:600;color:var(--olive-mid);margin-bottom:16px}
+.imovel-cta{
+  display:block;text-align:center;padding:10px;
+  background:var(--olive-mid);color:var(--white);
+  border-radius:4px;font-size:13px;font-weight:600;
+  transition:background 0.2s;
+}
+.imovel-cta:hover{background:var(--olive)}
+.imoveis-empty{
+  text-align:center;padding:80px 40px;
+  color:var(--muted);grid-column:1/-1;
+}
+.imoveis-empty h3{font-family:var(--serif);font-size:24px;color:var(--ink);margin-bottom:12px}
+
+/* ── Sobre ───────────────────────────────────────────────────────── */
+.sobre-grid{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:96px;align-items:center;
+}
+.sobre-stats{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:32px;margin-top:48px;
+}
+.stat-item{border-left:2px solid var(--gold);padding-left:16px}
+.stat-num{font-family:var(--serif);font-size:38px;font-weight:700;color:var(--cream);line-height:1}
+.stat-label{font-size:13px;color:rgba(245,243,238,0.6);margin-top:4px}
+.sobre-img-wrap{position:relative}
+.sobre-img-wrap img{width:100%;border-radius:2px}
+.sobre-badge{
+  position:absolute;bottom:-20px;left:-20px;
+  background:var(--gold);color:var(--olive);
+  padding:20px 24px;border-radius:4px;
+  font-family:var(--serif);font-size:15px;font-weight:600;
+  max-width:200px;line-height:1.3;
+}
+
+/* ── Contato ─────────────────────────────────────────────────────── */
+#contato{padding:96px 80px}
+.contato-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:start}
+.contato-form{display:flex;flex-direction:column;gap:14px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-input{
+  padding:13px 16px;border-radius:4px;
+  border:1px solid var(--cream-dk);
+  font-family:var(--sans);font-size:14px;
+  background:var(--cream);color:var(--ink);
+  transition:border-color 0.2s;width:100%;
+}
+.form-input:focus{outline:none;border-color:var(--olive-mid)}
+select.form-input{cursor:pointer}
+.form-submit{
+  padding:15px;background:var(--olive-mid);color:var(--white);
+  border:none;border-radius:4px;font-family:var(--sans);
+  font-size:15px;font-weight:600;cursor:pointer;
+  transition:background 0.2s;
+}
+.form-submit:hover{background:var(--olive)}
+.form-msg{display:none;padding:12px;border-radius:4px;font-size:14px;text-align:center}
+.contato-info{display:flex;flex-direction:column;gap:32px;padding-top:16px}
+.info-item h4{font-size:12px;letter-spacing:0.1em;color:var(--gold);margin-bottom:6px;font-weight:600}
+.info-item p{font-size:15px;color:var(--ink-mid);line-height:1.6}
+.wa-btn{
+  display:inline-flex;align-items:center;gap:10px;
+  background:#25D366;color:var(--white);
+  padding:12px 24px;border-radius:4px;
+  font-size:14px;font-weight:600;
+  margin-top:8px;width:fit-content;
+  transition:background 0.2s;
+}
+.wa-btn:hover{background:#1db954}
+
+/* ── Footer ──────────────────────────────────────────────────────── */
+footer{
+  background:var(--ink);color:rgba(245,243,238,0.5);
+  padding:48px 80px;
+  display:flex;justify-content:space-between;align-items:center;
+  flex-wrap:wrap;gap:24px;
+}
+footer img{height:36px;opacity:0.8}
+footer p{font-size:13px}
+.footer-links{display:flex;gap:24px}
+.footer-links a{font-size:13px;transition:color 0.2s}
+.footer-links a:hover{color:var(--gold)}
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+@media(max-width:960px){
+  nav{padding:0 24px}
+  .nav-links,.nav-cta{display:none}
+  .nav-mobile{display:block}
+  section{padding:64px 24px}
+  #empreendimentos{padding:64px 24px}
+  .hero-content{padding:0 24px 56px;max-width:100%}
+  .hero-title{font-size:38px}
+  .moov-hero{grid-template-columns:1fr}
+  .moov-content{padding:48px 24px;order:2}
+  .moov-gallery{grid-template-columns:repeat(2,1fr);padding:0 24px 48px}
+  .difs-grid{grid-template-columns:1fr}
+  .sobre-grid{grid-template-columns:1fr;gap:48px}
+  .sobre-badge{display:none}
+  .contato-grid{grid-template-columns:1fr;gap:48px}
+  .form-row{grid-template-columns:1fr}
+  footer{flex-direction:column;align-items:flex-start;padding:40px 24px}
+  #imoveis-lista{padding:64px 24px}
+}
+</style>
+</head>
+<body>
+
+<!-- ── NAV ─────────────────────────────────────────────────────── -->
+<nav id="main-nav">
+  <a href="/" class="nav-logo">
+    <img src="/img/logo.png" alt="Holy Curadoria de Imóveis">
+  </a>
+  <ul class="nav-links">
+    <li><a href="#empreendimentos">Empreendimentos</a></li>
+    <li><a href="#imoveis-lista">Imóveis</a></li>
+    <li><a href="#sobre">Quem Somos</a></li>
+    <li><a href="#contato">Contato</a></li>
+  </ul>
+  <a href="#contato" class="nav-cta">Fale Conosco</a>
+  <button class="nav-mobile" onclick="document.querySelector('.nav-links').style.display='flex';document.querySelector('.nav-links').style.flexDirection='column';document.querySelector('.nav-links').style.position='fixed';document.querySelector('.nav-links').style.inset='72px 0 0 0';document.querySelector('.nav-links').style.background='rgba(45,58,31,0.98)';document.querySelector('.nav-links').style.padding='32px 24px';document.querySelector('.nav-links').style.gap='24px';this.textContent='✕';this.onclick=function(){document.querySelector('.nav-links').style.display='none';this.textContent='☰';this.onclick=arguments.callee.caller};">☰</button>
+</nav>
+
+<!-- ── HERO ─────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <p class="hero-kicker">Chapecó · Balneário Camboriú · Itapema · Porto Belo</p>
+    <h1 class="hero-title">O imóvel certo<br>para a sua <em>família</em></h1>
+    <p class="hero-sub">Curadoria de imóveis de alto padrão em Santa Catarina. Atendimento personalizado, do primeiro contato à entrega das chaves.</p>
+    <div class="hero-actions">
+      <a href="#imoveis-lista" class="btn-primary">Ver Imóveis Disponíveis</a>
+      <a href="https://wa.me/5549984354873?text=Olá! Gostaria de saber mais sobre os imóveis disponíveis." target="_blank" class="btn-outline">Falar no WhatsApp</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── EMPREENDIMENTOS ───────────────────────────────────────────── -->
+<section id="empreendimentos" style="background:var(--ink)">
+  <div class="section-label" style="color:var(--gold)">Empreendimentos</div>
+  <h2 class="section-title" style="color:var(--cream)">Projetos exclusivos<br>em Santa Catarina</h2>
+
+  <div class="empr-grid" style="margin-top:56px">
+
+    <!-- MOOV -->
+    <div class="empr-card" onclick="location.href='#moov'">
+      <img src="/img/moov-front.jpg" alt="Moov Residence — Chapecó SC">
+      <div class="empr-overlay">
+        <span class="empr-tag">Chapecó · SC</span>
+        <h3 class="empr-name">Moov Residence</h3>
+        <p class="empr-local">Apartamentos de 64m² a 77m² · 25 andares</p>
+      </div>
+      <div class="empr-arrow">›</div>
+    </div>
+
+    <!-- SKY -->
+    <div class="empr-card" onclick="location.href='#contato'">
+      <div style="width:100%;height:100%;background:linear-gradient(135deg,#1a2410 0%,#2d3a1f 100%);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+        <img src="/img/logo.png" alt="Sky Residence" style="width:120px;opacity:0.7">
+        <p style="color:rgba(245,243,238,0.4);font-size:13px">Em breve</p>
+      </div>
+      <div class="empr-overlay">
+        <span class="empr-tag">Chapecó · SC</span>
+        <h3 class="empr-name">Sky Residence</h3>
+        <p class="empr-local">Consulte disponibilidade</p>
+      </div>
+      <div class="empr-arrow">›</div>
+    </div>
+
+    <!-- PRIVILÈGE -->
+    <div class="empr-card" onclick="location.href='#contato'">
+      <div style="width:100%;height:100%;background:linear-gradient(135deg,#1a2410 0%,#2d3a1f 100%);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+        <img src="/img/logo.png" alt="Privilège Residence" style="width:120px;opacity:0.7">
+        <p style="color:rgba(245,243,238,0.4);font-size:13px">Em breve</p>
+      </div>
+      <div class="empr-overlay">
+        <span class="empr-tag">SC</span>
+        <h3 class="empr-name">Privilège Residence</h3>
+        <p class="empr-local">Consulte disponibilidade</p>
+      </div>
+      <div class="empr-arrow">›</div>
+    </div>
+
+    <!-- LUXURY -->
+    <div class="empr-card" onclick="location.href='#contato'">
+      <div style="width:100%;height:100%;background:linear-gradient(135deg,#1a2410 0%,#2d3a1f 100%);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+        <img src="/img/logo.png" alt="Luxury Home Club" style="width:120px;opacity:0.7">
+        <p style="color:rgba(245,243,238,0.4);font-size:13px">Em breve</p>
+      </div>
+      <div class="empr-overlay">
+        <span class="empr-tag">SC</span>
+        <h3 class="empr-name">Luxury Home Club</h3>
+        <p class="empr-local">Consulte disponibilidade</p>
+      </div>
+      <div class="empr-arrow">›</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── MOOV DESTAQUE ─────────────────────────────────────────────── -->
+<div id="moov">
+  <div class="moov-hero">
+    <div class="moov-images">
+      <img src="/img/moov-corner.jpg" alt="Moov Residence Fachada" class="main-img">
+    </div>
+    <div class="moov-content">
+      <p class="section-label">Em Destaque</p>
+      <h2 class="section-title" style="color:var(--cream)">Moov Residence</h2>
+      <p style="font-size:16px;line-height:1.7;color:rgba(245,243,238,0.7);margin-bottom:32px">Um dos empreendimentos mais modernos de Chapecó. 25 andares, pavimento de lazer completo com piscina, academia, salões de festa, espaço coworking e muito mais.</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:36px">
+        <div style="border-left:2px solid var(--gold);padding-left:14px">
+          <div style="font-family:var(--serif);font-size:28px;font-weight:700;color:var(--cream)">25</div>
+          <div style="font-size:12px;color:rgba(245,243,238,0.5);margin-top:2px">andares</div>
+        </div>
+        <div style="border-left:2px solid var(--gold);padding-left:14px">
+          <div style="font-family:var(--serif);font-size:28px;font-weight:700;color:var(--cream)">5</div>
+          <div style="font-size:12px;color:rgba(245,243,238,0.5);margin-top:2px">unidades por andar</div>
+        </div>
+        <div style="border-left:2px solid var(--gold);padding-left:14px">
+          <div style="font-family:var(--serif);font-size:28px;font-weight:700;color:var(--cream)">64–77</div>
+          <div style="font-size:12px;color:rgba(245,243,238,0.5);margin-top:2px">m² privativos</div>
+        </div>
+        <div style="border-left:2px solid var(--gold);padding-left:14px">
+          <div style="font-family:var(--serif);font-size:28px;font-weight:700;color:var(--cream)">2–3</div>
+          <div style="font-size:12px;color:rgba(245,243,238,0.5);margin-top:2px">dormitórios</div>
+        </div>
+      </div>
+
+      <a href="https://wa.me/5549984354873?text=Olá! Tenho interesse no Moov Residence. Podemos conversar?" target="_blank" class="btn-primary">Saber Mais sobre o Moov</a>
+    </div>
+  </div>
+
+  <!-- Gallery -->
+  <div class="moov-gallery">
+    <img src="/img/moov-pool.jpg"  alt="Piscina Moov Residence" title="Área de Lazer">
+    <img src="/img/moov-base.jpg"  alt="Base Moov Residence" title="Fachada">
+    <img src="/img/moov-night.jpg" alt="Moov Noturno" title="Vista Noturna">
+    <img src="/img/moov-lazer.jpg" alt="Lazer Moov" title="Pavimento de Lazer">
+  </div>
+
+  <!-- Planta Baixa -->
+  <div style="background:var(--ink);padding:0 80px 80px;display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center">
+    <div>
+      <p class="section-label" style="color:var(--gold)">Planta Humanizada</p>
+      <h3 style="font-family:var(--serif);font-size:28px;font-weight:600;color:var(--cream);margin-bottom:16px">Pavimento Tipo</h3>
+      <p style="font-size:15px;line-height:1.7;color:rgba(245,243,238,0.65);margin-bottom:24px">5 unidades por andar com plantas inteligentes e funcionais. Do studio ao apartamento de 3 dormitórios — cada tipo pensado para maximizar conforto e aproveitamento de espaço.</p>
+      <a href="https://wa.me/5549984354873?text=Gostaria de saber sobre as plantas do Moov Residence." target="_blank" class="btn-primary">Solicitar Planta Completa</a>
+    </div>
+    <div>
+      <img src="/img/moov-planta.jpg" alt="Planta Baixa Moov Residence" style="border-radius:4px;width:100%">
+    </div>
+  </div>
+</div>
+
+<!-- ── IMÓVEIS DISPONÍVEIS ────────────────────────────────────────── -->
+<section id="imoveis-lista">
+  <div class="section-label">Portfólio</div>
+  <h2 class="section-title">Imóveis disponíveis</h2>
+  <p class="section-body">Curadoria atualizada dos melhores imóveis disponíveis em Santa Catarina. Cada imóvel é avaliado e selecionado pela nossa equipe.</p>
+
+  <div class="imoveis-grid" id="imoveis-container">
+    <div class="imoveis-empty">
+      <div style="font-size:40px;margin-bottom:16px">🏠</div>
+      <h3>Imóveis em cadastro</h3>
+      <p style="margin-bottom:24px">Estamos preparando nosso portfólio. Entre em contato para saber sobre os imóveis disponíveis.</p>
+      <a href="https://wa.me/5549984354873" target="_blank" class="btn-primary">Falar com um Consultor</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── DIFERENCIAIS ───────────────────────────────────────────────── -->
+<section style="padding:96px 80px;background:var(--cream)">
+  <div style="text-align:center;max-width:560px;margin:0 auto 0">
+    <div class="section-label" style="text-align:center">Por que a Holy</div>
+    <h2 class="section-title">Curadoria é mais<br>do que uma palavra</h2>
+  </div>
+
+  <div class="difs-grid">
+    <div class="dif-item">
+      <div class="dif-icon">🎯</div>
+      <h3 class="dif-title">Atendimento personalizado</h3>
+      <p class="dif-desc">Cada cliente recebe um consultor dedicado que acompanha todo o processo — da busca à assinatura do contrato.</p>
+    </div>
+    <div class="dif-item">
+      <div class="dif-icon">📍</div>
+      <h3 class="dif-title">Especialistas em SC</h3>
+      <p class="dif-desc">Conhecimento profundo do mercado catarinense: Chapecó, Balneário Camboriú, Itapema e Porto Belo.</p>
+    </div>
+    <div class="dif-item">
+      <div class="dif-icon">✦</div>
+      <h3 class="dif-title">Seleção rigorosa</h3>
+      <p class="dif-desc">Trabalhamos apenas com imóveis que passam pela nossa curadoria de qualidade, localização e potencial de valorização.</p>
+    </div>
+    <div class="dif-item">
+      <div class="dif-icon">🔑</div>
+      <h3 class="dif-title">Do lançamento à entrega</h3>
+      <p class="dif-desc">Acompanhamos empreendimentos na planta, em construção e prontos para morar. Transparência em cada etapa.</p>
+    </div>
+    <div class="dif-item">
+      <div class="dif-icon">📊</div>
+      <h3 class="dif-title">Inteligência de mercado</h3>
+      <p class="dif-desc">Análise de valorização, comparativos e dados do mercado imobiliário de SC para embasar cada decisão.</p>
+    </div>
+    <div class="dif-item">
+      <div class="dif-icon">🤝</div>
+      <h3 class="dif-title">Relacionamento duradouro</h3>
+      <p class="dif-desc">Nosso trabalho não termina na venda. Mantemos relacionamento pós-entrega com todos os nossos clientes.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── QUEM SOMOS ─────────────────────────────────────────────────── -->
+<section id="sobre" class="section-dark">
+  <div class="sobre-grid">
+    <div>
+      <div class="section-label">Quem Somos</div>
+      <h2 class="section-title">Holy Curadoria<br>de Imóveis</h2>
+      <p class="section-body" style="margin-bottom:32px">Nascemos em Chapecó-SC com uma missão clara: conectar famílias aos melhores imóveis de Santa Catarina. Unimos expertise de mercado, tecnologia e atendimento humano para oferecer uma experiência de compra diferenciada.</p>
+      <p class="section-body">Atuamos nos mercados de Chapecó, Balneário Camboriú, Itapema e Porto Belo — cidades com as maiores demandas e melhores oportunidades de valorização imobiliária em SC.</p>
+
+      <div class="sobre-stats">
+        <div class="stat-item">
+          <div class="stat-num">SC</div>
+          <div class="stat-label">4 cidades de atuação</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">4+</div>
+          <div class="stat-label">empreendimentos exclusivos</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">100%</div>
+          <div class="stat-label">foco em alto padrão</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">24h</div>
+          <div class="stat-label">atendimento pelo WhatsApp</div>
+        </div>
+      </div>
+    </div>
+    <div class="sobre-img-wrap">
+      <img src="/img/moov-aerial.jpg" alt="Chapecó-SC" style="border-radius:2px">
+      <div class="sobre-badge">Especializados no mercado de alto padrão catarinense</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CONTATO ────────────────────────────────────────────────────── -->
+<section id="contato">
+  <div class="section-label">Contato</div>
+  <h2 class="section-title">Vamos encontrar<br>seu imóvel ideal</h2>
+
+  <div class="contato-grid" style="margin-top:56px">
+    <form class="contato-form" id="contact-form" onsubmit="submitForm(event)">
+      <div class="form-row">
+        <input class="form-input" name="nome" placeholder="Seu nome completo *" required>
+        <input class="form-input" name="email" type="email" placeholder="Seu e-mail *" required>
+      </div>
+      <input class="form-input" name="telefone" placeholder="WhatsApp com DDD *" required>
+      <select class="form-input" name="cidade">
+        <option value="">Cidade de interesse</option>
+        <option>Chapecó-SC</option>
+        <option>Balneário Camboriú-SC</option>
+        <option>Itapema-SC</option>
+        <option>Porto Belo-SC</option>
+      </select>
+      <select class="form-input" name="tipo">
+        <option value="">Tipo de imóvel</option>
+        <option>Apartamento</option>
+        <option>Cobertura</option>
+        <option>Casa</option>
+        <option>Empreendimento na planta</option>
+        <option>Investimento</option>
+      </select>
+      <textarea class="form-input" name="mensagem" placeholder="Mensagem ou especificações (optional)" rows="4"></textarea>
+      <button type="submit" class="form-submit">Enviar Mensagem</button>
+      <div class="form-msg" id="form-msg"></div>
+    </form>
+
+    <div class="contato-info">
+      <div class="info-item">
+        <h4>WhatsApp</h4>
+        <p>(49) 98845-4873</p>
+        <a href="https://wa.me/5549988454873?text=Olá! Gostaria de saber mais sobre os imóveis disponíveis." target="_blank" class="wa-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          Chamar no WhatsApp
+        </a>
+      </div>
+      <div class="info-item">
+        <h4>Localização</h4>
+        <p>Chapecó, Santa Catarina<br>Atendemos todo o estado de SC</p>
+      </div>
+      <div class="info-item">
+        <h4>Cidades de Atuação</h4>
+        <p>Chapecó · Balneário Camboriú<br>Itapema · Porto Belo</p>
+      </div>
+      <div class="info-item">
+        <h4>Instagram</h4>
+        <p><a href="https://instagram.com/holyimoveis" target="_blank" style="color:var(--gold)">@holyimoveis</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────────── -->
+<footer>
+  <img src="/img/logo.png" alt="Holy Curadoria de Imóveis">
+  <p>© 2025 Holy Curadoria de Imóveis · CRECI-SC</p>
+  <div class="footer-links">
+    <a href="#empreendimentos">Empreendimentos</a>
+    <a href="#imoveis-lista">Imóveis</a>
+    <a href="#contato">Contato</a>
+  </div>
+</footer>
+
+<script>
+// ── Load imóveis from CRM server ─────────────────────────────────
+async function loadImoveis() {
+  const API = 'http://localhost:3000';
+  try {
+    const r = await fetch(API + '/api/imoveis?status=Disponível');
+    const d = await r.json();
+    if (d.success && d.data && d.data.length > 0) {
+      renderImoveis(d.data);
+    }
+  } catch(e) {
+    // Server offline - show empty state (already shown)
+    console.log('CRM server offline - showing empty state');
+  }
+}
+
+function fmt(v) {
+  return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});
+}
+
+function renderImoveis(imoveis) {
+  const container = document.getElementById('imoveis-container');
+  container.innerHTML = '';
+  imoveis.forEach(im => {
+    const foto = (im.fotos && im.fotos[0]) ? (im.fotos[0].url || im.fotos[0]) : null;
+    const wamsg = encodeURIComponent('Olá! Vi o imóvel "' + im.nome + '" no site e tenho interesse. Podemos conversar?');
+    container.innerHTML += `
+      <div class="imovel-card">
+        ${foto
+          ? `<img src="${foto}" alt="${im.nome}" class="imovel-foto">`
+          : `<div class="imovel-foto" style="display:flex;align-items:center;justify-content:center;background:#e8e4dc;aspect-ratio:16/10">🏠</div>`
+        }
+        <div class="imovel-body">
+          <p class="imovel-local">${im.cidade||''} — ${im.bairro||''}</p>
+          <h3 class="imovel-nome">${im.nome}</h3>
+          <div class="imovel-specs">
+            ${im.area ? `<span>📐 ${im.area}m²</span>` : ''}
+            ${im.quartos ? `<span>🛏️ ${im.quartos} qts</span>` : ''}
+            ${im.vagas ? `<span>🚗 ${im.vagas} vg</span>` : ''}
+          </div>
+          <p class="imovel-valor">${fmt(im.valor)}</p>
+          <a href="https://wa.me/5549988454873?text=${wamsg}" target="_blank" class="imovel-cta">Tenho Interesse</a>
+        </div>
+      </div>`;
+  });
+}
+
+// ── Contact Form ─────────────────────────────────────────────────
+async function submitForm(e) {
+  e.preventDefault();
+  const form = e.target;
+  const btn = form.querySelector('.form-submit');
+  const msg = document.getElementById('form-msg');
+  btn.textContent = 'Enviando...'; btn.disabled = true;
+
+  const data = Object.fromEntries(new FormData(form));
+
+  // Try CRM server first
+  let sent = false;
+  try {
+    const r = await fetch('http://localhost:3000/api/clientes', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        nome: data.nome, email: data.email, celular: data.telefone,
+        origem: 'site', obs: data.mensagem, stage: 'Prospecção'
+      })
+    });
+    if (r.ok) sent = true;
+  } catch(e) {}
+
+  // Fallback: redirect to WhatsApp
+  if (!sent) {
+    const waMsg = `Olá! Me chamo ${data.nome}. ${data.mensagem || 'Tenho interesse em imóveis.'} Cidade: ${data.cidade || 'SC'}. Tel: ${data.telefone}`;
+    window.open('https://wa.me/5549988454873?text=' + encodeURIComponent(waMsg), '_blank');
+  }
+
+  msg.style.display = 'block';
+  msg.style.background = '#f0fff4';
+  msg.style.color = '#2e7d32';
+  msg.style.border = '1px solid #c6f6d5';
+  msg.textContent = '✅ Mensagem enviada! Entraremos em contato em breve.';
+  form.reset();
+  btn.textContent = 'Enviar Mensagem'; btn.disabled = false;
+}
+
+// Load on page start
+window.addEventListener('DOMContentLoaded', loadImoveis);
+</script>
+</body>
+</html>

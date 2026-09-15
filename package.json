@@ -1,0 +1,11 @@
+{
+  "name": "holy-imoveis",
+  "version": "1.0.0",
+  "description": "Holy Curadoria de Imóveis — Site Oficial",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {}
+}
