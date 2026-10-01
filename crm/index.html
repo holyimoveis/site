@@ -20,6 +20,38 @@ input:focus,select:focus,textarea:focus{border-color:#4a5c2f!important;box-shado
 .lf{height:100%;background:#4a5c2f;border-radius:2px;animation:lda 1.5s ease forwards}
 @keyframes lda{0%{width:5%}100%{width:95%}}
 </style>
+<style id="holy-mobile">
+@media (max-width: 820px){
+  /* evita o zoom automático do iPhone ao tocar num campo */
+  input, select, textarea { font-size: 16px !important; }
+  /* formulários e colunas lado a lado viram uma coluna */
+  [style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns: 250px 1fr"] { grid-template-columns: minmax(0, 1fr) !important; }
+  /* cartões de números: duas colunas */
+  [style*="grid-template-columns: 1fr 1fr 1fr 1fr"],
+  [style*="grid-template-columns: repeat(5, 1fr)"],
+  [style*="grid-template-columns: repeat(4, 1fr)"],
+  [style*="grid-template-columns: repeat(3, 1fr)"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  [style*="grid-template-columns: 56px 1fr 1fr"] { grid-template-columns: 56px minmax(0, 1fr) !important; }
+  /* janelas (cadastros) ocupam a tela toda com respiro menor */
+  [style*="margin: 24px auto"] { padding: 18px 16px !important; margin: 0 auto !important; border-radius: 14px !important; }
+  [style*="z-index: 2000"][style*="padding: 16px"] { padding: 8px !important; }
+  /* barras de busca e filtros quebram linha em vez de vazar */
+  div:has(> input[placeholder*="🔍"]) { flex-wrap: wrap !important; }
+  input[placeholder*="🔍"] { flex: 1 1 100% !important; min-width: 0 !important; }
+  /* funil: colunas largas, uma por tela, deslizando para o lado */
+  [style*="flex: 0 0 186px"] { flex: 0 0 82vw !important; scroll-snap-align: start; }
+  div:has(> [style*="flex: 0 0 186px"]) { scroll-snap-type: x mandatory; }
+  /* nada passa da largura da tela */
+  img, video, iframe { max-width: 100%; }
+  #hly-site { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+</style>
+
+<meta name="theme-color" content="#1a1c18">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Holy CRM">
 </head>
 <body>
 <div id="ld">
@@ -19338,7 +19370,11 @@ Regras:
 
 function App() {
     var _a;
-    const [page, setPage] = useState("dashboard");
+    const [page, setPage0] = useState("dashboard");
+    const [isM, setIsM] = useState(() => window.matchMedia("(max-width: 820px)").matches);
+    const [menu, setMenu] = useState(false);
+    useEffect(() => { const mq = window.matchMedia("(max-width: 820px)"); const f = e => { setIsM(e.matches); if (!e.matches) setMenu(false); }; mq.addEventListener("change", f); return () => mq.removeEventListener("change", f); }, []);
+    const setPage = k => { setPage0(k); setMenu(false); };
     const [imoveis, setImoveis] = usePS("imoveis", SEED_IMOVEIS);
     const [clientes, setClientes] = usePS("clientes", SEED_CLIENTES);
     const [timeline, setTimeline] = usePS("timeline", SEED_TIMELINE);
@@ -19374,8 +19410,9 @@ function App() {
       input,select,textarea{outline:none;font-family:inherit}
       input:focus,select:focus,textarea:focus{border-color:${C.olive}!important;box-shadow:0 0 0 2px ${C.olive}18!important}
     `),
-        React.createElement("div", { style: { display: "flex", height: "100vh" } },
-            React.createElement("div", { style: { width: 184, background: C.ink, display: "flex", flexDirection: "column", padding: "20px 0", flexShrink: 0, overflowY: "auto" } },
+        React.createElement("div", { style: { display: "flex", height: "100dvh" } },
+            isM && menu && React.createElement("div", { onClick: () => setMenu(false), style: { position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 2400 } }),
+            React.createElement("div", { style: Object.assign({ width: 184, background: C.ink, display: "flex", flexDirection: "column", padding: "20px 0", flexShrink: 0, overflowY: "auto" }, isM ? { position: "fixed", top: 0, left: 0, bottom: 0, width: 240, zIndex: 2500, transform: menu ? "none" : "translateX(-105%)", transition: "transform .25s ease", boxShadow: menu ? "0 0 40px rgba(0,0,0,.4)" : "none", paddingTop: "calc(20px + env(safe-area-inset-top, 0px))" } : {}) },
                 React.createElement("div", { style: { padding: "0 18px 20px" } },
                     React.createElement("div", { style: { fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 700, color: C.white, lineHeight: 1 } }, "Holy"),
                     React.createElement("div", { style: { fontFamily: "'Cormorant Garamond',serif", fontSize: 10, color: C.oliveLt, letterSpacing: "0.2em", marginTop: 2 } }, "INTELLIGENCE CRM"),
@@ -19393,12 +19430,13 @@ function App() {
                             React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: C.white } }, "Holy Curadoria"),
                             React.createElement("div", { style: { fontSize: 9, color: C.muted } }, "Admin \u00B7 Corretor"))),
                     React.createElement("button", { onClick: resetData, style: { fontSize: 9, color: "rgba(255,255,255,0.2)", background: "none", border: "none", cursor: "pointer", textAlign: "left" } }, "\u21BA Reset dados"))),
-            React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" } },
-                React.createElement("div", { style: { background: C.white, borderBottom: `0.5px solid ${C.border}`, padding: "11px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 } },
-                    React.createElement("div", null,
+            React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 } },
+                React.createElement("div", { style: { background: C.white, borderBottom: `0.5px solid ${C.border}`, padding: isM ? "calc(8px + env(safe-area-inset-top, 0px)) 12px 8px" : "11px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0, gap: 10 } },
+                    isM && React.createElement("button", { onClick: () => setMenu(true), "aria-label": "Abrir menu", style: { background: C.oliveGhost, border: `0.5px solid ${C.olivePale}`, borderRadius: 8, width: 40, height: 40, fontSize: 20, color: C.olive, cursor: "pointer", flexShrink: 0 } }, "\u2630"),
+                    React.createElement("div", { style: { flex: 1, minWidth: 0 } },
                         React.createElement("h1", { style: { fontSize: 16, fontWeight: 700, color: C.ink, fontFamily: "'Cormorant Garamond',serif", margin: 0 } }, (_a = nav.find(n => n.k === page)) === null || _a === void 0 ? void 0 : _a.l),
                         React.createElement("div", { style: { fontSize: 10, color: C.muted } }, new Date().toLocaleDateString("pt-BR", { weekday: "long", year: "numeric", month: "long", day: "numeric" }))),
-                    React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+                    React.createElement("div", { style: { display: isM ? "none" : "flex", gap: 8, alignItems: "center" } },
                         React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5, background: C.oliveGhost, borderRadius: 7, padding: "5px 12px", border: `0.5px solid ${C.olivePale}` } },
                             React.createElement("span", { style: { fontSize: 11, color: C.olive } }, "\u2726"),
                             React.createElement("span", { style: { fontSize: 11, color: C.oliveMid, fontWeight: 600 } }, "IA Ativa")),
@@ -19407,7 +19445,7 @@ function App() {
                             "c \u00B7 ",
                             imoveis.length,
                             "i"))),
-                React.createElement("div", { style: { flex: 1, overflowY: "auto", padding: 22 } },
+                React.createElement("div", { style: { flex: 1, overflowY: "auto", padding: isM ? "14px 12px 80px" : 22 } },
                     page === "dashboard" && React.createElement(Dashboard, { clientes: clientes, imoveis: imoveis, timeline: timeline, setPage: setPage }),
                     page === "clientes" && React.createElement(ClientesPage, { clientes: clientes, imoveis: imoveis, timeline: timeline, onAdd: addCli, onEdit: editCli, onAddTL: addTL }),
                     page === "imoveis" && React.createElement(ImoveisPage, { imoveis: imoveis, clientes: clientes, onAdd: addIm, onEdit: editIm, onDelete: id => setImoveis(p => p.filter(i => i.id !== id)) }),
