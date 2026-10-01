@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   if (cors(req, res)) return;
   const st = {
     banco: 'não conectado',
-    fotos: process.env.BLOB_READ_WRITE_TOKEN ? 'conectado' : 'não conectado',
+    fotos: (process.env.BLOB_STORE_ID || process.env.BLOB_READ_WRITE_TOKEN) ? 'conectado' : 'não conectado',
     senha_crm: (process.env.ADMIN_KEY || '').length >= 12 ? 'configurada' : 'não configurada (mínimo 12 caracteres)',
     ia: process.env.ANTHROPIC_API_KEY ? 'configurada' : 'não configurada',
   };

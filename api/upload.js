@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   if (cors(req, res)) return;
   if (req.method !== 'POST') return err(res, 405, 'Use POST.');
   if (!isAdmin(req)) return err(res, 401, 'Chave de administrador inválida.');
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return err(res, 503, 'Armazenamento de fotos não conectado. Veja o LEIA-ME, passo 4.');
+  if (!process.env.BLOB_STORE_ID && !process.env.BLOB_READ_WRITE_TOKEN) return err(res, 503, 'Armazenamento de fotos não conectado. Veja o LEIA-ME, passo 4.');
   try {
     const b = body(req);
     let data = String(b.data || ''), tipo = String(b.tipo || '');
