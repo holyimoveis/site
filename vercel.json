@@ -1,10 +1,7 @@
 {
-  "version": 2,
-  "routes": [
-    { "src": "/api/imoveis", "dest": "/api/imoveis.js" },
-    { "src": "/api/leads", "dest": "/api/leads.js" },
-    { "src": "/api/status", "dest": "/api/status.js" },
-    { "src": "/img/(.*)", "dest": "/img/$1" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "cleanUrls": true,
+  "headers": [
+    { "source": "/crm/(.*)", "headers": [ { "key": "X-Robots-Tag", "value": "noindex, nofollow" }, { "key": "Cache-Control", "value": "no-cache" } ] },
+    { "source": "/crm", "headers": [ { "key": "X-Robots-Tag", "value": "noindex, nofollow" }, { "key": "Cache-Control", "value": "no-cache" } ] }
   ]
 }
