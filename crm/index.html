@@ -17253,7 +17253,7 @@ window.onerror=function(msg,src,line,col,err){
 // ══════════════════════════════════════════════════════════════════
 // HOLY CLOUD: dados do CRM salvos na nuvem (Vercel), com cópia no aparelho
 // ══════════════════════════════════════════════════════════════════
-var HOLY_KEYS = ['imoveis', 'clientes', 'timeline', 'empreendimentos'];
+var HOLY_KEYS = ['imoveis', 'clientes', 'timeline', 'empreendimentos', 'wa_config'];
 var HolyAuth = {
   get: function () { try { return localStorage.getItem('hly_admin_key') || ''; } catch (e) { return ''; } },
   set: function (k) { try { localStorage.setItem('hly_admin_key', k); } catch (e) {} },
@@ -17361,16 +17361,18 @@ var HolyBadge = (function () {
     if (el || !document.body) return el;
     el = document.createElement('div');
     el.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:3000;display:flex;gap:6px;align-items:center;font:600 11px -apple-system,Segoe UI,sans-serif';
-    el.innerHTML = '<button id="hly-site" style="display:none;border:0;border-radius:20px;padding:6px 12px;background:#2563a8;color:#fff;font:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.15)"></button><span id="hly-st" style="border-radius:20px;padding:6px 12px;background:#fff;border:1px solid #dde0d6;box-shadow:0 4px 14px rgba(0,0,0,.08)"></span>';
+    el.innerHTML = '<button id="hly-wa" style="display:none;border:0;border-radius:20px;padding:6px 12px;background:#c0392b;color:#fff;font:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.15)"></button><button id="hly-site" style="display:none;border:0;border-radius:20px;padding:6px 12px;background:#2563a8;color:#fff;font:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.15)"></button><span id="hly-st" style="border-radius:20px;padding:6px 12px;background:#fff;border:1px solid #dde0d6;box-shadow:0 4px 14px rgba(0,0,0,.08)"></span>';
     document.body.appendChild(el);
     el.querySelector('#hly-site').onclick = HolySite.openPanel;
+    el.querySelector('#hly-wa').onclick = function () { window.dispatchEvent(new CustomEvent('holy-go', { detail: 'conversas' })); };
     el.querySelector('#hly-st').onclick = function () { if (last === 'senha') { HolyAuth.clear(); location.reload(); } };
     return el;
   }
   var last = '';
   function show(s) { last = s; if (!ensure()) return; var t = txt[s] || txt.salvo, sp = el.querySelector('#hly-st'); sp.textContent = t[0]; sp.style.color = t[1]; sp.style.cursor = s === 'senha' ? 'pointer' : 'default'; }
   function site(n) { if (!ensure()) return; var b = el.querySelector('#hly-site'); b.style.display = n ? 'inline-block' : 'none'; b.textContent = '🌐 ' + n + ' interesse' + (n > 1 ? 's' : '') + ' no site'; }
-  return { show: show, site: site };
+  function wa(n) { if (!ensure()) return; var b = el.querySelector('#hly-wa'); b.style.display = n ? 'inline-block' : 'none'; b.textContent = '🔔 ' + n + ' aguardando você'; }
+  return { show: show, site: site, wa: wa };
 })();
 
 // Fotos: reduz no aparelho e envia para o armazenamento (Vercel Blob)
@@ -17447,6 +17449,7 @@ var HolySite = (function () {
       }
       atividade = cliques.concat(atividade.filter(function (a) { return !cliques.some(function (c) { return c.id === a.id; }); })).slice(0, 60);
       HolyBadge.site(atividade.filter(function (a) { return !a.visto; }).length);
+      try { var rc = await holyFetch('/api/conversas'); var dc = await rc.json(); if (dc.success) { var na = dc.conversas.filter(function (c) { return c.aguardando; }).length; if (na > (HolySite._na || 0)) HolyToast('🔔 ' + (na === 1 ? 'Uma conversa do WhatsApp precisa de você' : na + ' conversas do WhatsApp precisam de você')); HolySite._na = na; HolyBadge.wa(na); } } catch (e2) {}
     } catch (e) {}
   }
   function openPanel() {
@@ -17545,7 +17548,7 @@ function holyBoot(render) {
     render();
     HolySite.sync();
     setInterval(function () { HolyStore.pullAll().catch(function () {}); }, 45000);
-    setInterval(HolySite.sync, 120000);
+    setInterval(HolySite.sync, 60000);
     window.addEventListener('focus', function () { HolyStore.pullAll().catch(function () {}); HolySite.sync(); });
     window.addEventListener('online', HolyStore.flush);
     window.addEventListener('beforeunload', function (e) { if (HolyStore.hasPending()) { HolyStore.flush(); e.preventDefault(); e.returnValue = ''; } });
@@ -18669,6 +18672,175 @@ function EmpreendimentosPage() {
                         btnP("Excluir", () => excluir(e), C.danger)))))));
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// CONVERSAS DO WHATSAPP (assistente virtual)
+// ═══════════════════════════════════════════════════════════════════════
+const WA_PADRAO = {
+    ativo: true,
+    nomeAssistente: "Assistente virtual da Holy",
+    tom: "Próximo, educado e direto, como um corretor experiente conversando no WhatsApp. Frases curtas, linguagem simples, sem exagerar nos emojis (no máximo um por mensagem). Trata o cliente pelo primeiro nome quando souber.",
+    infoHoly: "Holy Curadoria Imobiliária: curadoria de imóveis de alto padrão em Santa Catarina, com atuação em Chapecó, Balneário Camboriú, Itapema e Porto Belo. O corretor responsável é o Édipo Junior.",
+    regras: ""
+};
+const waTel = id => { const d = String(id || "").replace(/\D/g, ""); const n = d.startsWith("55") ? d.slice(2) : d; return n.length === 11 ? `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}` : n.length === 10 ? `(${n.slice(0, 2)}) ${n.slice(2, 6)}-${n.slice(6)}` : "+" + d; };
+const waHora = d => { try { const x = new Date(d), h = new Date(); return x.toDateString() === h.toDateString() ? x.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : x.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + x.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } };
+
+function WaBolha({ m }) {
+    const cli = m.papel === "cliente", hum = m.papel === "humano";
+    return React.createElement("div", { style: { display: "flex", justifyContent: cli ? "flex-start" : "flex-end", marginBottom: 6 } },
+        React.createElement("div", { style: { maxWidth: "82%", background: cli ? C.white : hum ? "#dcf3d0" : C.oliveGhost, border: `0.5px solid ${cli ? C.border : hum ? "#bfe3ad" : C.olivePale}`, borderRadius: 12, padding: "8px 11px", fontSize: 13, color: C.ink, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" } },
+            !cli && React.createElement("div", { style: { fontSize: 9, fontWeight: 700, color: hum ? C.success : C.olive, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 2 } }, hum ? "Você" : "Assistente"),
+            m.texto,
+            React.createElement("div", { style: { fontSize: 9, color: C.muted, textAlign: "right", marginTop: 3 } }, waHora(m.criado_em))));
+}
+
+function WaSimulador({ cfg }) {
+    const [hist, setHist] = useState([]);
+    const [txt, setTxt] = useState("");
+    const [carregando, setCarregando] = useState(false);
+    const [info, setInfo] = useState(null);
+    const fimRef = useRef();
+    useEffect(() => { fimRef.current && fimRef.current.scrollIntoView({ block: "end" }); }, [hist, carregando]);
+    async function enviar() {
+        const t = txt.trim(); if (!t || carregando) return;
+        const h = [...hist, { papel: "cliente", texto: t, criado_em: new Date().toISOString() }];
+        setHist(h); setTxt(""); setCarregando(true);
+        try {
+            const r = await holyFetch("/api/conversas", { method: "POST", body: JSON.stringify({ acao: "simular", historico: h, config: cfg }) });
+            const d = await r.json();
+            if (!d.success) throw new Error(d.error);
+            setHist([...h, { papel: "assistente", texto: d.saida.resposta, criado_em: new Date().toISOString() }]);
+            setInfo(d.saida);
+        } catch (e) { setHist([...h, { papel: "assistente", texto: "⚠ " + e.message, criado_em: new Date().toISOString() }]); }
+        setCarregando(false);
+    }
+    return React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 14 } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.ink } }, "🧪 Testar o assistente"),
+            hist.length > 0 && React.createElement("button", { onClick: () => { setHist([]); setInfo(null); }, style: { fontSize: 11, background: "none", border: `0.5px solid ${C.border}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer", color: C.muted } }, "Recomeçar")),
+        React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 10, lineHeight: 1.5 } }, "Escreva como se fosse um cliente. Nada é enviado pelo WhatsApp nem salvo no CRM. Usa as configurações desta tela, mesmo antes de salvar."),
+        React.createElement("div", { style: { background: "#efeae2", borderRadius: 10, padding: 10, height: 320, overflowY: "auto" } },
+            !hist.length && React.createElement("div", { style: { fontSize: 12, color: C.muted, textAlign: "center", marginTop: 120 } }, "Ex.: \"Oi, vi um anúncio de vocês. Tem apartamento em Itapema?\""),
+            hist.map((m, i) => React.createElement(WaBolha, { key: i, m })),
+            carregando && React.createElement("div", { style: { fontSize: 12, color: C.muted, padding: 6 } }, "digitando…"),
+            React.createElement("div", { ref: fimRef })),
+        React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 8 } },
+            React.createElement("input", { value: txt, onChange: e => setTxt(e.target.value), onKeyDown: e => { if (e.key === "Enter") enviar(); }, placeholder: "Mensagem do cliente…", style: { flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 13 } }),
+            React.createElement(PBtn, { onClick: enviar, loading: carregando }, "Enviar")),
+        info && React.createElement("div", { style: { marginTop: 10, fontSize: 11, color: C.inkMid, background: C.oliveGhost, borderRadius: 8, padding: "8px 10px", lineHeight: 1.6 } },
+            React.createElement("b", null, "O que o assistente registraria: "),
+            `temperatura ${info.temperatura} · etapa ${info.etapa_funil}`, info.transferir ? ` · 🔔 passaria para você (${info.motivo_transferencia || "outro"})` : "",
+            React.createElement("br"), info.resumo));
+}
+
+function WaConfig({ cfg, setCfg, salvar, salvo }) {
+    const F = (k, v) => setCfg(Object.assign({}, cfg, { [k]: v }));
+    const [msg, setMsg] = useState("");
+    async function webhook() {
+        setMsg("Configurando…");
+        try { const r = await holyFetch("/api/conversas", { method: "POST", body: JSON.stringify({ acao: "webhook360" }) }); const d = await r.json(); setMsg(d.success ? "✅ Webhook cadastrado na 360dialog: " + d.url : "❌ " + d.error); }
+        catch (e) { setMsg("❌ " + e.message); }
+    }
+    return React.createElement("div", { className: "wa-cfg", style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" } },
+        React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 14, background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 16 } },
+            React.createElement(FI, { label: "Nome do assistente", value: cfg.nomeAssistente, onChange: v => F("nomeAssistente", v) }),
+            React.createElement(FI, { label: "Tom de voz (como você escreve)", rows: 5, value: cfg.tom, onChange: v => F("tom", v) }),
+            React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: -8, lineHeight: 1.5 } }, "Dica: cole aqui 3 ou 4 mensagens reais suas (sem dados de clientes). O assistente imita o jeito de escrever."),
+            React.createElement(FI, { label: "Sobre a Holy (o que ele pode contar)", rows: 6, value: cfg.infoHoly, onChange: v => F("infoHoly", v) }),
+            React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: -8, lineHeight: 1.5 } }, "Inclua horários de atendimento, como funcionam as visitas, regiões e diferenciais. O que não estiver aqui, ele diz que vai confirmar com você."),
+            React.createElement(FI, { label: "Regras extras (uma por linha)", rows: 4, value: cfg.regras, onChange: v => F("regras", v), placeholder: "Ex.: Não informar valor de comissão\nVisitas só com agendamento" }),
+            React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
+                React.createElement(PBtn, { onClick: salvar }, "💾 Salvar configurações"),
+                salvo && React.createElement("span", { style: { fontSize: 12, color: C.success } }, "✓ Salvo"),
+                React.createElement(PBtn, { variant: "ghost", sm: true, onClick: webhook }, "Conectar webhook (360dialog)")),
+            msg && React.createElement("div", { style: { fontSize: 11, color: C.inkMid } }, msg)),
+        React.createElement(WaSimulador, { cfg }));
+}
+
+function ConversasPage() {
+    const [cfgSalva, setCfgSalva] = usePS("wa_config", WA_PADRAO);
+    const [cfg, setCfg] = useState(() => Object.assign({}, WA_PADRAO, cfgSalva || {}));
+    const [salvo, setSalvo] = useState(false);
+    const [aba, setAba] = useState("conversas");
+    const [dados, setDados] = useState(null);
+    const [sel, setSel] = useState(null);
+    const [chat, setChat] = useState(null);
+    const [txt, setTxt] = useState("");
+    const [env, setEnv] = useState(false);
+    const [erro, setErro] = useState("");
+    const fimRef = useRef();
+    const isM = window.matchMedia("(max-width: 820px)").matches;
+    async function carregar() {
+        try { const r = await holyFetch("/api/conversas"); const d = await r.json(); if (d.success) setDados(d); else setErro(d.error); } catch (e) { setErro("Sem conexão."); }
+    }
+    async function abrir(id) {
+        try { const r = await holyFetch("/api/conversas?wa_id=" + encodeURIComponent(id)); const d = await r.json(); if (d.success) setChat(d); } catch (e) {}
+    }
+    useEffect(() => { carregar(); const t = setInterval(carregar, 15000); return () => clearInterval(t); }, []);
+    useEffect(() => { if (!sel) return; abrir(sel); const t = setInterval(() => abrir(sel), 8000); return () => clearInterval(t); }, [sel]);
+    useEffect(() => { fimRef.current && fimRef.current.scrollIntoView({ block: "end" }); }, [chat && chat.mensagens && chat.mensagens.length]);
+    useEffect(() => { if (sel && chat && chat.conversa && chat.conversa.aguardando) holyFetch("/api/conversas", { method: "PATCH", body: JSON.stringify({ wa_id: sel, pausado: true, lido: true }) }); }, [sel, chat && chat.conversa && chat.conversa.aguardando]);
+    async function pausar(p) {
+        await holyFetch("/api/conversas", { method: "PATCH", body: JSON.stringify({ wa_id: sel, pausado: p }) });
+        abrir(sel); carregar();
+    }
+    async function enviar() {
+        const t = txt.trim(); if (!t) return; setEnv(true); setErro("");
+        try { const r = await holyFetch("/api/conversas", { method: "POST", body: JSON.stringify({ wa_id: sel, texto: t }) }); const d = await r.json(); if (!d.success) throw new Error(d.error); setTxt(""); abrir(sel); carregar(); }
+        catch (e) { setErro(e.message); }
+        setEnv(false);
+    }
+    function salvarCfg() { setCfgSalva(cfg); setSalvo(true); setTimeout(() => setSalvo(false), 2500); }
+    function alternarGeral() { const n = Object.assign({}, cfg, { ativo: !(cfg.ativo !== false) }); setCfg(n); setCfgSalva(n); }
+    const conversas = (dados && dados.conversas) || [];
+    const aguardando = conversas.filter(c => c.aguardando).length;
+    const ativo = cfg.ativo !== false;
+    const topo = React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between", marginBottom: 14 } },
+        React.createElement("div", { style: { display: "flex", gap: 6 } },
+            ["conversas", "config"].map(k => React.createElement("button", { key: k, onClick: () => setAba(k), style: { padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${aba === k ? C.olive : C.border}`, background: aba === k ? C.olive : C.white, color: aba === k ? "#fff" : C.inkMid } },
+                k === "conversas" ? `💬 Conversas${aguardando ? " (" + aguardando + ")" : ""}` : "⚙ Configurar e testar"))),
+        React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
+            dados && React.createElement(Chip, { label: dados.whatsapp ? "WhatsApp conectado" : "WhatsApp ainda não conectado", color: dados.whatsapp ? C.success : C.warn }),
+            React.createElement("button", { onClick: alternarGeral, style: { padding: "7px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", border: "none", background: ativo ? C.success : C.muted, color: "#fff" } }, ativo ? "● Assistente ligado" : "○ Assistente desligado")));
+    if (aba === "config") return React.createElement("div", null, topo, React.createElement(WaConfig, { cfg, setCfg, salvar: salvarCfg, salvo }));
+    const lista = React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: "hidden", alignSelf: "start" } },
+        !conversas.length && React.createElement("div", { style: { padding: 24, fontSize: 12, color: C.muted, lineHeight: 1.6, textAlign: "center" } },
+            dados && !dados.whatsapp ? "O WhatsApp ainda não está conectado. Enquanto isso, use \"Configurar e testar\" para ajustar o tom do assistente." : "Nenhuma conversa ainda."),
+        conversas.map(c => React.createElement("div", { key: c.wa_id, onClick: () => setSel(c.wa_id), style: { padding: "11px 14px", borderBottom: `0.5px solid ${C.border}`, cursor: "pointer", background: sel === c.wa_id ? C.oliveGhost : c.aguardando ? "#fff8e6" : C.white } },
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 8 } },
+                React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.nome || waTel(c.wa_id)),
+                React.createElement("div", { style: { fontSize: 10, color: C.muted, flexShrink: 0 } }, waHora(c.ultima_msg))),
+            React.createElement("div", { style: { fontSize: 11, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", margin: "2px 0 4px" } },
+                (c.ultimo_papel === "assistente" ? "Assistente: " : c.ultimo_papel === "humano" ? "Você: " : "") + (c.ultimo_texto || "")),
+            React.createElement("div", { style: { display: "flex", gap: 4, flexWrap: "wrap" } },
+                c.aguardando && React.createElement(Chip, { label: "🔔 Aguardando você", color: C.danger }),
+                c.pausado && !c.aguardando && React.createElement(Chip, { label: "Você está atendendo", color: C.blue }),
+                !c.pausado && React.createElement(Chip, { label: "Assistente atendendo", color: C.success })))));
+    const conv = chat && chat.conversa;
+    const painel = sel && React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, display: "flex", flexDirection: "column", minHeight: 480, overflow: "hidden" } },
+        React.createElement("div", { style: { padding: "10px 14px", borderBottom: `0.5px solid ${C.border}`, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
+            isM && React.createElement("button", { onClick: () => { setSel(null); setChat(null); }, style: { border: "none", background: "none", fontSize: 18, cursor: "pointer", color: C.olive } }, "←"),
+            React.createElement("div", { style: { flex: 1, minWidth: 120 } },
+                React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: C.ink } }, (conv && conv.nome) || waTel(sel)),
+                React.createElement("div", { style: { fontSize: 11, color: C.muted } }, waTel(sel))),
+            conv && (conv.pausado
+                ? React.createElement(PBtn, { sm: true, onClick: () => pausar(false) }, "▶ Devolver ao assistente")
+                : React.createElement(PBtn, { sm: true, variant: "ghost", onClick: () => pausar(true) }, "⏸ Assumir conversa")),
+            React.createElement("a", { href: "https://wa.me/" + sel, target: "_blank", rel: "noopener", style: { fontSize: 11, fontWeight: 700, color: C.success, border: `0.5px solid ${C.success}40`, borderRadius: 8, padding: "6px 10px" } }, "Abrir no WhatsApp")),
+        conv && conv.pausado && conv.motivo && React.createElement("div", { style: { padding: "8px 14px", fontSize: 12, background: conv.aguardando ? "#fff1d6" : C.oliveGhost, color: C.inkMid } }, (conv.aguardando ? "🔔 " : "⏸ ") + conv.motivo + ". O assistente está pausado nesta conversa."),
+        React.createElement("div", { style: { flex: 1, background: "#efeae2", padding: 12, overflowY: "auto", maxHeight: isM ? "60vh" : 520 } },
+            ((chat && chat.mensagens) || []).map(m => React.createElement(WaBolha, { key: m.id, m })),
+            React.createElement("div", { ref: fimRef })),
+        erro && React.createElement("div", { style: { padding: "6px 14px", fontSize: 11, color: C.danger } }, erro),
+        React.createElement("div", { style: { display: "flex", gap: 8, padding: 10, borderTop: `0.5px solid ${C.border}` } },
+            React.createElement("input", { value: txt, onChange: e => setTxt(e.target.value), onKeyDown: e => { if (e.key === "Enter") enviar(); }, placeholder: "Responder como você (pausa o assistente)…", style: { flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 13 } }),
+            React.createElement(PBtn, { onClick: enviar, loading: env }, "Enviar")));
+    return React.createElement("div", null, topo,
+        isM ? (sel ? painel : lista)
+            : React.createElement("div", { style: { display: "grid", gridTemplateColumns: "320px minmax(0,1fr)", gap: 14 } }, lista,
+                painel || React.createElement("div", { style: { background: C.white, border: `0.5px dashed ${C.border}`, borderRadius: 12, padding: 40, textAlign: "center", color: C.muted, fontSize: 13 } }, "Escolha uma conversa à esquerda.")));
+}
+
 function ImoveisPage({ imoveis, clientes, onAdd, onEdit, onDelete }) {
     const [selIm, setSelIm] = useState(null);
     const [editIm, setEditIm] = useState(null);
@@ -19375,6 +19547,7 @@ function App() {
     const [menu, setMenu] = useState(false);
     useEffect(() => { const mq = window.matchMedia("(max-width: 820px)"); const f = e => { setIsM(e.matches); if (!e.matches) setMenu(false); }; mq.addEventListener("change", f); return () => mq.removeEventListener("change", f); }, []);
     const setPage = k => { setPage0(k); setMenu(false); };
+    useEffect(() => { const f = e => setPage(e.detail); window.addEventListener("holy-go", f); return () => window.removeEventListener("holy-go", f); }, []);
     const [imoveis, setImoveis] = usePS("imoveis", SEED_IMOVEIS);
     const [clientes, setClientes] = usePS("clientes", SEED_CLIENTES);
     const [timeline, setTimeline] = usePS("timeline", SEED_TIMELINE);
@@ -19391,6 +19564,7 @@ function App() {
     const nav = [
         { k: "dashboard", i: "⌂", l: "Dashboard" },
         { k: "clientes", i: "◎", l: "Clientes" },
+        { k: "conversas", i: "💬", l: "Conversas" },
         { k: "imoveis", i: "▦", l: "Imóveis" },
         { k: "empreendimentos", i: "▤", l: "Empreendimentos" },
         { k: "kanban", i: "≡", l: "Funil" },
@@ -19450,6 +19624,7 @@ function App() {
                     page === "clientes" && React.createElement(ClientesPage, { clientes: clientes, imoveis: imoveis, timeline: timeline, onAdd: addCli, onEdit: editCli, onAddTL: addTL }),
                     page === "imoveis" && React.createElement(ImoveisPage, { imoveis: imoveis, clientes: clientes, onAdd: addIm, onEdit: editIm, onDelete: id => setImoveis(p => p.filter(i => i.id !== id)) }),
                     page === "empreendimentos" && React.createElement(EmpreendimentosPage, null),
+                    page === "conversas" && React.createElement(ConversasPage, null),
                     page === "kanban" && React.createElement(React.Fragment, null,
                         React.createElement(SecT, null, "Funil Kanban"),
                         React.createElement(KanbanPage, { clientes: clientes })),

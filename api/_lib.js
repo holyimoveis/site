@@ -41,6 +41,25 @@ export function ensureSchema() {
           criado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
           atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now())`);
       await sql.query(`CREATE INDEX IF NOT EXISTS leads_criado_idx ON leads (criado_em DESC)`);
+      // WhatsApp: conversas e mensagens do assistente
+      await sql.query(`CREATE TABLE IF NOT EXISTS wa_conversas (
+          wa_id TEXT PRIMARY KEY,
+          nome TEXT,
+          cliente_id TEXT,
+          pausado BOOLEAN NOT NULL DEFAULT false,
+          motivo TEXT,
+          aguardando BOOLEAN NOT NULL DEFAULT false,
+          ultima_msg TIMESTAMPTZ NOT NULL DEFAULT now(),
+          ultima_cliente TIMESTAMPTZ,
+          criado_em TIMESTAMPTZ NOT NULL DEFAULT now())`);
+      await sql.query(`CREATE TABLE IF NOT EXISTS wa_mensagens (
+          id BIGSERIAL PRIMARY KEY,
+          wa_id TEXT NOT NULL,
+          wamid TEXT UNIQUE,
+          papel TEXT NOT NULL,
+          texto TEXT NOT NULL,
+          criado_em TIMESTAMPTZ NOT NULL DEFAULT now())`);
+      await sql.query(`CREATE INDEX IF NOT EXISTS wa_msg_idx ON wa_mensagens (wa_id, id DESC)`);
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -90,3 +109,25 @@ export function ipHash(req) {
   return crypto.createHash('sha256').update(ip + (process.env.ADMIN_KEY || 'holy')).digest('hex').slice(0, 24);
 }
 export const str = (v, max) => (v == null ? null : String(v).trim().slice(0, max) || null);
+
+// Atualiza um documento do CRM pelo servidor (ex.: o assistente do WhatsApp cadastrando clientes),
+// com controle de versão: se o CRM salvar ao mesmo tempo, tenta de novo sobre a versão nova.
+export async function atualizarDoc(chave, fn, padrao = []) {
+  for (let tentativa = 0; tentativa < 5; tentativa++) {
+    const r = await sql.query('SELECT valor, versao FROM crm_docs WHERE chave = $1', [chave]);
+    const atual = r[0] ? r[0].valor : padrao;
+    const versao = r[0] ? r[0].versao : 0;
+    const novo = await fn(JSON.parse(JSON.stringify(atual)));
+    if (novo === undefined) return atual;
+    const json = JSON.stringify(novo);
+    let ok;
+    if (!versao) {
+      ok = await sql.query(`INSERT INTO crm_docs (chave, valor, versao) VALUES ($1, $2::jsonb, 1) ON CONFLICT (chave) DO NOTHING RETURNING versao`, [chave, json]);
+    } else {
+      await sql.query('INSERT INTO crm_historico (chave, valor, versao) VALUES ($1, $2::jsonb, $3)', [chave, JSON.stringify(atual), versao]);
+      ok = await sql.query(`UPDATE crm_docs SET valor = $2::jsonb, versao = versao + 1, atualizado_em = now() WHERE chave = $1 AND versao = $3 RETURNING versao`, [chave, json, versao]);
+    }
+    if (ok.length) return novo;
+  }
+  throw new Error('Não foi possível salvar ' + chave + ' (muitas alterações simultâneas).');
+}
