@@ -17221,7 +17221,7 @@ window.onerror=function(msg,src,line,col,err){
 // ══════════════════════════════════════════════════════════════════
 // HOLY CLOUD: dados do CRM salvos na nuvem (Vercel), com cópia no aparelho
 // ══════════════════════════════════════════════════════════════════
-var HOLY_KEYS = ['imoveis', 'clientes', 'timeline'];
+var HOLY_KEYS = ['imoveis', 'clientes', 'timeline', 'empreendimentos'];
 var HolyAuth = {
   get: function () { try { return localStorage.getItem('hly_admin_key') || ''; } catch (e) { return ''; } },
   set: function (k) { try { localStorage.setItem('hly_admin_key', k); } catch (e) {} },
@@ -17464,9 +17464,9 @@ async function holyImportar(obj, onProg) {
       }
     }
   }
-  var dados = { imoveis: ims, clientes: pega('clientes'), timeline: pega('timeline') };
+  var dados = { imoveis: ims, clientes: pega('clientes'), timeline: pega('timeline'), empreendimentos: pega('empreendimentos') };
   HOLY_KEYS.forEach(function (k) {
-    if (!dados[k].length) return;
+    if (!dados[k] || !dados[k].length) return;
     HolyStore.update(k, function (atual) {
       atual = (atual || []).slice(); var ids = {}; atual.forEach(function (x) { if (x && x.id != null) ids[x.id] = 1; });
       dados[k].forEach(function (x) { if (x && x.id != null && !ids[x.id]) { atual.push(x); total[k]++; } });
@@ -18480,6 +18480,163 @@ function ClienteDetail({ cliente, imoveis, timeline, onEdit, onAddInt, onClose }
 // ═══════════════════════════════════════════════════════════════════════
 // PAGES
 // ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// EMPREENDIMENTOS (aparecem no carrossel do site)
+// ═══════════════════════════════════════════════════════════════════════
+const EMP_STATUS = ["Lançamento", "Em obras", "Pronto", "Em breve"];
+const EMP_STC = { "Lançamento": C.gold, "Em obras": C.olive, "Pronto": C.success, "Em breve": C.muted };
+const EMP_EMPTY = { nome: "", cidade: "Chapecó", estado: "SC", status: "Lançamento", tipoLabel: "", preco: "Sob consulta", descricao: "",
+    destaques: [], diferenciais: [], lazer: [], fotos: [], lazerFotos: [], plantas: [], endereco: "", coords: "", aprox: true,
+    proximidades: "", ficha: "", video: "", publicarSite: true };
+const empLinhas = v => Array.isArray(v) ? v.join("\n") : String(v || "");
+const empDeLinhas = s => String(s || "").split("\n").map(x => x.trim()).filter(Boolean);
+const empDest2txt = a => (Array.isArray(a) ? a : []).map(d => d.n + " | " + (d.l || "")).join("\n");
+const empTxt2dest = s => empDeLinhas(s).map(l => { const p = l.split("|"); return { n: p[0].trim(), l: (p.slice(1).join("|") || "").trim() }; }).filter(d => d.n);
+const empCapa = e => { const f = (e.fotos || []).find(x => x.principal) || (e.fotos || [])[0]; return f ? f.url : ""; };
+
+function EmprForm({ initial, onSave, onClose }) {
+    const [f, setF] = useState(() => Object.assign({}, EMP_EMPTY, initial || {}));
+    const [tab, setTab] = useState("basico");
+    const [txt, setTxt] = useState(() => ({ destaques: empDest2txt((initial || {}).destaques), diferenciais: empLinhas((initial || {}).diferenciais), lazer: empLinhas((initial || {}).lazer) }));
+    const F = (k, v) => setF(p => Object.assign({}, p, { [k]: v }));
+    const T = (k, v) => setTxt(p => Object.assign({}, p, { [k]: v }));
+    const ajuda = t => React.createElement("div", { style: { fontSize: 11, color: C.muted, lineHeight: 1.5, marginTop: -6 } }, t);
+    const grid = (...k) => React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } }, ...k);
+    const col = (...k) => React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 14 } }, ...k);
+    function salvar() {
+        if (!f.nome.trim()) { alert("Informe o nome do empreendimento."); setTab("basico"); return; }
+        const out = Object.assign({}, f, { nome: f.nome.trim(), destaques: empTxt2dest(txt.destaques), diferenciais: empDeLinhas(txt.diferenciais), lazer: empDeLinhas(txt.lazer) });
+        if (!out.id) out.id = "emp" + uid();
+        onSave(out);
+    }
+    const tabs = [{ k: "basico", l: "📋 Básico" }, { k: "fotos", l: "📷 Fotos" }, { k: "plantas", l: "📐 Plantas" }, { k: "lazer", l: "🏊 Lazer" }, { k: "detalhes", l: "✦ Destaques e ficha" }, { k: "local", l: "📍 Local e vídeo" }];
+    return React.createElement(Modal, { onClose, width: 760 },
+        React.createElement(MHead, { title: initial && initial.id ? "Editar empreendimento" : "Cadastrar empreendimento", sub: "Aparece no carrossel e na página premium do site", onClose }),
+        React.createElement(TBar, { tabs, active: tab, onChange: setTab }),
+        tab === "basico" && col(
+            React.createElement(FI, { label: "Nome do empreendimento", req: true, value: f.nome, onChange: v => F("nome", v), placeholder: "Ex.: Moov Residence" }),
+            grid(React.createElement(FI, { label: "Cidade", value: f.cidade, onChange: v => F("cidade", v), placeholder: "Ex.: Itapema" }),
+                React.createElement(FS, { label: "Status", value: f.status, onChange: v => F("status", v), options: EMP_STATUS })),
+            grid(React.createElement(FI, { label: "Tipo (linha dourada do card)", value: f.tipoLabel, onChange: v => F("tipoLabel", v), placeholder: "Ex.: Apartamentos de 2 e 3 dormitórios" }),
+                React.createElement(FI, { label: "Valores", value: f.preco, onChange: v => F("preco", v), placeholder: "Sob consulta / A partir de R$ ..." })),
+            React.createElement(FI, { label: "Descrição", rows: 6, value: f.descricao, onChange: v => F("descricao", v), placeholder: "Primeiro parágrafo: resumo curto. Pule linha para cada novo parágrafo." }),
+            ajuda("O primeiro parágrafo aparece no destaque da página; os demais vêm logo abaixo."),
+            React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: C.olive, cursor: "pointer", padding: "12px 14px", background: C.oliveGhost, border: `0.5px solid ${C.olivePale}`, borderRadius: 10 } },
+                React.createElement("input", { type: "checkbox", checked: f.publicarSite !== false, onChange: e => F("publicarSite", e.target.checked), style: { accentColor: C.olive, width: 16, height: 16 } }),
+                "🌐 Mostrar no site")),
+        tab === "fotos" && col(
+            ajuda("A foto marcada como CAPA aparece no card do carrossel e no topo da página. Use as setas para ordenar."),
+            React.createElement(PhotoGallery, { fotos: f.fotos || [], onChange: v => F("fotos", v) })),
+        tab === "plantas" && col(
+            ajuda("Envie as imagens das plantas. Depois dê um nome a cada uma (ex.: Tipo A, 2 dormitórios) e, se quiser, a metragem."),
+            React.createElement(PhotoGallery, { fotos: f.plantas || [], onChange: v => F("plantas", v.map(p => Object.assign({ nome: p.nome || (p.name || "Planta").replace(/\.[^.]+$/, ""), sub: p.sub || "" }, p))) }),
+            (f.plantas || []).map((p, i) => React.createElement("div", { key: p.id || i, style: { display: "grid", gridTemplateColumns: "56px 1fr 1fr", gap: 10, alignItems: "end" } },
+                React.createElement("img", { src: p.url, alt: "", style: { width: 56, height: 44, objectFit: "cover", borderRadius: 6, border: `0.5px solid ${C.border}` } }),
+                React.createElement(FI, { label: "Nome da planta", value: p.nome, onChange: v => F("plantas", f.plantas.map(x => x === p ? Object.assign({}, x, { nome: v }) : x)) }),
+                React.createElement(FI, { label: "Detalhe (metragem, dorms)", value: p.sub, onChange: v => F("plantas", f.plantas.map(x => x === p ? Object.assign({}, x, { sub: v }) : x)) })))),
+        tab === "lazer" && col(
+            React.createElement(FI, { label: "Itens de lazer (um por linha)", rows: 6, value: txt.lazer, onChange: v => T("lazer", v), placeholder: "Piscina\nAcademia\nSalão de festas" }),
+            React.createElement("div", { style: { fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 500 } }, "Fotos do lazer"),
+            React.createElement(PhotoGallery, { fotos: f.lazerFotos || [], onChange: v => F("lazerFotos", v) })),
+        tab === "detalhes" && col(
+            React.createElement(FI, { label: "Números de destaque (número | legenda)", rows: 4, value: txt.destaques, onChange: v => T("destaques", v), placeholder: "25 | andares\n64–77m² | privativos\n2–3 | dorms" }),
+            ajuda("Aparecem em destaque no topo da página. Use até 4 linhas."),
+            React.createElement(FI, { label: "Diferenciais (um por linha)", rows: 4, value: txt.diferenciais, onChange: v => T("diferenciais", v), placeholder: "Rooftop\nCoworking\nMarket" }),
+            React.createElement(FI, { label: "Ficha técnica (campo | valor)", rows: 6, value: f.ficha, onChange: v => F("ficha", v), placeholder: "Andares | 25\nUnidades por andar | 5\nPrevisão de entrega | Dez/2028" })),
+        tab === "local" && col(
+            React.createElement(FI, { label: "Endereço exibido", value: f.endereco, onChange: v => F("endereco", v), placeholder: "Ex.: Meia Praia, Itapema - SC" }),
+            React.createElement(FI, { label: "Coordenadas do mapa", value: f.coords, onChange: v => F("coords", v), placeholder: "-27.1004, -52.6152" }),
+            ajuda("No Google Maps, clique com o botão direito no local do prédio e clique nos números que aparecem no topo do menu: eles são copiados. Cole aqui."),
+            React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.inkMid, cursor: "pointer" } },
+                React.createElement("input", { type: "checkbox", checked: f.aprox !== false, onChange: e => F("aprox", e.target.checked), style: { accentColor: C.olive } }),
+                "Mostrar como localização aproximada (círculo em vez de ponto exato)"),
+            React.createElement(FI, { label: "Distâncias (lugar | distância)", rows: 4, value: f.proximidades, onChange: v => F("proximidades", v), placeholder: "Praia | 300 m\nSupermercado | 5 min\nAeroporto | 20 min" }),
+            React.createElement(FI, { label: "Vídeo (link do YouTube ou .mp4)", value: f.video, onChange: v => F("video", v), placeholder: "https://www.youtube.com/watch?v=..." })),
+        React.createElement("div", { style: { display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22, paddingTop: 16, borderTop: `0.5px solid ${C.border}` } },
+            React.createElement(PBtn, { variant: "ghost", onClick: onClose }, "Cancelar"),
+            React.createElement(PBtn, { onClick: salvar }, "💾 Salvar empreendimento")));
+}
+
+function EmpreendimentosPage() {
+    const [lista, setLista] = usePS("empreendimentos", []);
+    const [edit, setEdit] = useState(null);
+    const [imp, setImp] = useState("");
+    const ord = [...lista].sort((a, b) => (+a.ordem || 0) - (+b.ordem || 0));
+    const renumera = arr => arr.map((e, i) => Object.assign({}, e, { ordem: i }));
+    function salvar(e) {
+        setLista(p => p.some(x => x.id === e.id) ? p.map(x => x.id === e.id ? e : x) : renumera([...[...p].sort((a, b) => (+a.ordem || 0) - (+b.ordem || 0)), Object.assign({}, e, { ordem: p.length })]));
+        setEdit(null);
+    }
+    function mover(id, d) {
+        const a = [...ord]; const i = a.findIndex(x => x.id === id), j = i + d;
+        if (j < 0 || j >= a.length) return;
+        [a[i], a[j]] = [a[j], a[i]]; setLista(renumera(a));
+    }
+    function alternar(id) { setLista(p => p.map(x => x.id === id ? Object.assign({}, x, { publicarSite: x.publicarSite === false }) : x)); }
+    function excluir(e) {
+        if (!confirm(`Excluir "${e.nome}"? Ele sai do site e do CRM. Se quiser só tirar do site, use "Ocultar".`)) return;
+        setLista(p => renumera([...p].filter(x => x.id !== e.id).sort((a, b) => (+a.ordem || 0) - (+b.ordem || 0))));
+    }
+    async function importar() {
+        if (!confirm("Trazer Moov, Sky, Luxury e Privilège do site para o CRM? As fotos serão enviadas para a nuvem; leva cerca de 1 minuto.")) return;
+        try {
+            setImp("Baixando os dados do site…");
+            const dados = await (await fetch("/crm/empreendimentos-iniciais.json", { cache: "no-store" })).json();
+            const atuais = HolyStore.get("empreendimentos", []); const ja = new Set(atuais.map(e => e.id));
+            const novos = dados.filter(e => !ja.has(e.id));
+            let total = 0, feitas = 0;
+            novos.forEach(e => ["fotos", "lazerFotos", "plantas"].forEach(k => total += (e[k] || []).length));
+            for (const e of novos) {
+                for (const k of ["fotos", "lazerFotos", "plantas"]) {
+                    for (const foto of (e[k] || [])) {
+                        feitas++; setImp(`Enviando fotos para a nuvem: ${feitas} de ${total} (${e.nome})…`);
+                        if (String(foto.url).indexOf("data:") === 0) {
+                            const blob = await (await fetch(foto.url)).blob();
+                            const red = await holyReduzir(new File([blob], foto.name || "foto.jpg", { type: blob.type || "image/jpeg" }));
+                            foto.url = await holyEnviarDataUrl(red, foto.name, "empreendimentos/" + e.id);
+                        }
+                    }
+                }
+            }
+            HolyStore.update("empreendimentos", p => renumera([...[...p].sort((a, b) => (+a.ordem || 0) - (+b.ordem || 0)), ...novos.map(e => Object.assign({ destaques: [], diferenciais: [], lazer: [] }, e))]));
+            HolyStore.flush();
+            setImp(novos.length ? `✅ ${novos.length} empreendimento(s) importado(s). Confira no site em até 1 minuto.` : "Todos já estavam no CRM.");
+        } catch (er) { setImp("❌ Não consegui importar: " + er.message + ". Tente de novo; o que já foi enviado não se perde."); }
+    }
+    const nSite = lista.filter(e => e.publicarSite !== false).length;
+    const btnP = (t, onClick, cor, titulo) => React.createElement("button", { onClick, title: titulo || t, style: { padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", background: C.white, color: cor || C.inkMid, border: `0.5px solid ${C.border}` } }, t);
+    return React.createElement("div", null,
+        edit && React.createElement(EmprForm, { initial: edit === "novo" ? null : edit, onSave: salvar, onClose: () => setEdit(null) }),
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 } },
+            React.createElement("div", { style: { fontSize: 12, color: C.muted } }, `${lista.length} empreendimento(s) · ${nSite} no site · a ordem abaixo é a ordem do carrossel`),
+            React.createElement("div", { style: { display: "flex", gap: 8 } },
+                React.createElement(PBtn, { variant: "ghost", sm: true, onClick: importar }, "⬇ Trazer os atuais do site"),
+                React.createElement(PBtn, { sm: true, onClick: () => setEdit("novo") }, "+ Cadastrar empreendimento"))),
+        imp && React.createElement("div", { style: { fontSize: 12, color: C.inkMid, background: C.oliveGhost, border: `0.5px solid ${C.olivePale}`, padding: "10px 14px", borderRadius: 8, marginBottom: 14 } }, imp),
+        !lista.length && React.createElement("div", { style: { textAlign: "center", padding: "48px 20px", background: C.white, border: `0.5px dashed ${C.border}`, borderRadius: 12, color: C.muted, fontSize: 13, lineHeight: 1.7 } },
+            React.createElement("div", { style: { fontSize: 32, marginBottom: 8 } }, "🏢"),
+            "Nenhum empreendimento no CRM ainda.", React.createElement("br"),
+            "Enquanto a lista estiver vazia, o site mostra os 4 que já estão nele.", React.createElement("br"),
+            "Clique em ", React.createElement("b", null, "⬇ Trazer os atuais do site"), " para gerenciar tudo por aqui."),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 14 } },
+            ord.map((e, i) => React.createElement("div", { key: e.id, style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: "hidden", opacity: e.publicarSite === false ? 0.6 : 1 } },
+                React.createElement("div", { onClick: () => setEdit(e), style: { height: 150, background: empCapa(e) ? `url(${empCapa(e)}) center/cover` : C.ink, cursor: "pointer", position: "relative" } },
+                    React.createElement("span", { style: { position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 4 } }, "#" + (i + 1)),
+                    !empCapa(e) && React.createElement("div", { style: { color: C.oliveLt, fontSize: 12, display: "flex", height: "100%", alignItems: "center", justifyContent: "center" } }, "Sem foto")),
+                React.createElement("div", { style: { padding: 14 } },
+                    React.createElement("div", { style: { display: "flex", gap: 5, marginBottom: 6, flexWrap: "wrap" } },
+                        React.createElement(Chip, { label: e.status, color: EMP_STC[e.status] || C.muted }),
+                        React.createElement(Chip, { label: e.publicarSite === false ? "Oculto" : "🌐 No site", color: e.publicarSite === false ? C.muted : C.blue })),
+                    React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, e.nome),
+                    React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 12 } }, [e.cidade, e.tipoLabel].filter(Boolean).join(" · ")),
+                    React.createElement("div", { style: { display: "flex", gap: 5, flexWrap: "wrap" } },
+                        btnP("◀", () => mover(e.id, -1), null, "Mover para antes"),
+                        btnP("▶", () => mover(e.id, 1), null, "Mover para depois"),
+                        btnP("Editar", () => setEdit(e), C.olive),
+                        btnP(e.publicarSite === false ? "Mostrar" : "Ocultar", () => alternar(e.id), C.blue),
+                        btnP("Excluir", () => excluir(e), C.danger)))))));
+}
+
 function ImoveisPage({ imoveis, clientes, onAdd, onEdit, onDelete }) {
     const [selIm, setSelIm] = useState(null);
     const [editIm, setEditIm] = useState(null);
@@ -18908,7 +19065,7 @@ function ConfigPage() {
         btn('Sair deste aparelho', sair))),
     React.createElement('div', { style: box('#2563a8') },
       h('🌐 Como publicar um imóvel no site'),
-      p('Abra o imóvel, marque "Publicar no site" na aba Básico e salve. Ele aparece no site em até 1 minuto enquanto o status for Disponível. Ao mudar para Vendido, Reservado ou Locado, ele sai sozinho. Rua, número, CEP e dados do proprietário nunca são enviados ao site.')),
+      p('Empreendimentos: use a página Empreendimentos do menu (cadastrar, ocultar, ordenar, excluir). Imóveis: abra o imóvel, marque "Publicar no site" na aba Básico e salve. Ele aparece no site em até 1 minuto enquanto o status for Disponível. Ao mudar para Vendido, Reservado ou Locado, ele sai sozinho. Rua, número, CEP e dados do proprietário nunca são enviados ao site.')),
     React.createElement('div', { style: box('#b8993a') },
       h('📦 Backup e importação'),
       p('Baixe uma cópia de segurança de tempos em tempos. Para trazer os dados do CRM antigo (computador), use o arquivo gerado pelo exportar.html.'),
@@ -19199,6 +19356,7 @@ function App() {
         { k: "dashboard", i: "⌂", l: "Dashboard" },
         { k: "clientes", i: "◎", l: "Clientes" },
         { k: "imoveis", i: "▦", l: "Imóveis" },
+        { k: "empreendimentos", i: "▤", l: "Empreendimentos" },
         { k: "kanban", i: "≡", l: "Funil" },
         { k: "matching", i: "⚡", l: "Smart Match" },
         { k: "ia", i: "✦", l: "Consultor IA" },
@@ -19253,6 +19411,7 @@ function App() {
                     page === "dashboard" && React.createElement(Dashboard, { clientes: clientes, imoveis: imoveis, timeline: timeline, setPage: setPage }),
                     page === "clientes" && React.createElement(ClientesPage, { clientes: clientes, imoveis: imoveis, timeline: timeline, onAdd: addCli, onEdit: editCli, onAddTL: addTL }),
                     page === "imoveis" && React.createElement(ImoveisPage, { imoveis: imoveis, clientes: clientes, onAdd: addIm, onEdit: editIm, onDelete: id => setImoveis(p => p.filter(i => i.id !== id)) }),
+                    page === "empreendimentos" && React.createElement(EmpreendimentosPage, null),
                     page === "kanban" && React.createElement(React.Fragment, null,
                         React.createElement(SecT, null, "Funil Kanban"),
                         React.createElement(KanbanPage, { clientes: clientes })),

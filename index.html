@@ -812,6 +812,7 @@ function buildHero(){
   media.innerHTML=HERO.map(function(s,i){return'<img class="hs-img'+(i===0?' on':'')+'" src="'+s.img()+'" alt="" style="object-position:'+(s.pos||'center')+'"'+(i>1?' loading="lazy"':'')+'>';}).join('');
   texts.innerHTML=HERO.map(function(s,i){var h=i===0?'h1':'h2';return'<div class="hs-text'+(i===0?' on':'')+'"'+(i?' aria-hidden="true"':'')+'><p class="hero-kicker">'+s.k+'</p><'+h+' class="hero-title">'+s.t+'</'+h+'><p class="hero-sub">'+s.s+'</p><button class="hs-cta" onclick="HERO['+i+'].go()"'+(i?' tabindex="-1"':'')+'>'+s.cta+'</button></div>';}).join('');
   chs.innerHTML=HERO.map(function(s,i){return'<button class="hs-ch'+(i===0?' on':'')+'" onclick="goHero('+i+')" aria-label="Slide '+(i+1)+': '+s.lbl+'"><span class="hs-bar"><i></i></span><span class="hs-lbl">'+s.lbl+'</span></button>';}).join('');
+  if(buildHero._b)return;buildHero._b=1;
   var hero=document.querySelector('.hero'),content=document.getElementById('hero-content');
   content.addEventListener('mouseenter',function(){_hsHover=true;});content.addEventListener('mouseleave',function(){_hsHover=false;});
   document.getElementById('srch').addEventListener('focus',function(){_hsHover=true;});document.getElementById('srch').addEventListener('blur',function(){_hsHover=false;});
@@ -910,9 +911,23 @@ function apiEmpr(x){
     fotos:x.fotos||[],lazerFotos:x.lazerFotos||[],
     dados:{tipo:x.tipoLabel||'Empreendimento',andares:fv('andares'),area:fv('área privativa'),dorms:fv('dormitórios'),piscina:tem(/piscina/),rooftop:tem(/rooftop/),academia:tem(/academia/),spa:tem(/spa|sauna/),kids:tem(/kids|brinquedoteca|playground/),cowork:tem(/cowork/),status:x.status||'—',difs:x.diferenciais||[]}};
 }
+function syncEmprSite(){
+  // Banner: slides 2 e 3 passam a mostrar os dois primeiros empreendimentos com foto
+  var comFoto=EMPR.filter(function(e){return e.fotos&&e.fotos.length;}).slice(0,2);
+  comFoto.forEach(function(em,i){
+    var x=EMPR_EXTRA[em.id]||{};
+    HERO[i+1]={lbl:em.nome,k:em.status+(em.cidade&&em.cidade!=='SC'?' em '+em.cidade:''),t:em.nome,
+      s:String(em.desc||'').split(/(?<=\.)\s/)[0].slice(0,160),cta:'Conhecer o '+em.nome.split(' ')[0],
+      go:(function(id){return function(){openEmprModal(id);};})(em.id),img:(function(u){return function(){return u;};})(em.fotos[0]),pos:'center 40%'};
+  });
+  if(comFoto.length){var cur=_hs;buildHero();goHero(cur);}
+  // Formulário de contato: lista de empreendimentos atualizada
+  var sel=document.querySelector('select[name="interesse"]');
+  if(sel){sel.innerHTML='<option value="">Tenho interesse em...</option>'+EMPR.map(function(e){return'<option>'+e.nome+'</option>';}).join('')+'<option>Imóvel de terceiros</option><option>Quero vender meu imóvel</option>';}
+}
 async function loadEmpr(){
   try{var r=await fetch('/api/empreendimentos');var d=await r.json();
-    if(d.success&&d.data&&d.data.length){EMPR=d.data.map(apiEmpr);buildCarousel();}}catch(e){}
+    if(d.success&&d.data&&d.data.length){EMPR=d.data.map(apiEmpr);buildCarousel();syncEmprSite();}}catch(e){}
 }
 // Registra no CRM cada clique nos botões de WhatsApp (de qual página/imóvel e qual botão)
 function trackLead(extra){
