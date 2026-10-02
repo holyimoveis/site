@@ -18738,7 +18738,7 @@ function WaConfig({ cfg, setCfg, salvar, salvo }) {
     const [msg, setMsg] = useState("");
     async function webhook() {
         setMsg("Configurando…");
-        try { const r = await holyFetch("/api/conversas", { method: "POST", body: JSON.stringify({ acao: "webhook360" }) }); const d = await r.json(); setMsg(d.success ? "✅ Webhook cadastrado na 360dialog: " + d.url : "❌ " + d.error); }
+        try { const r = await holyFetch("/api/conversas", { method: "POST", body: JSON.stringify({ acao: "webhook" }) }); const d = await r.json(); setMsg(d.success ? "✅ WhatsApp conectado" + (d.provedor ? " via " + d.provedor : "") + ". As mensagens agora chegam em: " + d.url : "❌ " + d.error); }
         catch (e) { setMsg("❌ " + e.message); }
     }
     return React.createElement("div", { className: "wa-cfg", style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" } },
@@ -18752,7 +18752,7 @@ function WaConfig({ cfg, setCfg, salvar, salvo }) {
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
                 React.createElement(PBtn, { onClick: salvar }, "💾 Salvar configurações"),
                 salvo && React.createElement("span", { style: { fontSize: 12, color: C.success } }, "✓ Salvo"),
-                React.createElement(PBtn, { variant: "ghost", sm: true, onClick: webhook }, "Conectar webhook (360dialog)")),
+                React.createElement(PBtn, { variant: "ghost", sm: true, onClick: webhook }, "🔌 Conectar WhatsApp")),
             msg && React.createElement("div", { style: { fontSize: 11, color: C.inkMid } }, msg)),
         React.createElement(WaSimulador, { cfg }));
 }
@@ -18800,7 +18800,7 @@ function ConversasPage() {
             ["conversas", "config"].map(k => React.createElement("button", { key: k, onClick: () => setAba(k), style: { padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${aba === k ? C.olive : C.border}`, background: aba === k ? C.olive : C.white, color: aba === k ? "#fff" : C.inkMid } },
                 k === "conversas" ? `💬 Conversas${aguardando ? " (" + aguardando + ")" : ""}` : "⚙ Configurar e testar"))),
         React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
-            dados && React.createElement(Chip, { label: dados.whatsapp ? "WhatsApp conectado" : "WhatsApp ainda não conectado", color: dados.whatsapp ? C.success : C.warn }),
+            dados && React.createElement(Chip, { label: dados.whatsapp ? "WhatsApp conectado" + (dados.provedor ? " (" + dados.provedor + ")" : "") : "WhatsApp ainda não conectado", color: dados.whatsapp ? C.success : C.warn }),
             React.createElement("button", { onClick: alternarGeral, style: { padding: "7px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", border: "none", background: ativo ? C.success : C.muted, color: "#fff" } }, ativo ? "● Assistente ligado" : "○ Assistente desligado")));
     if (aba === "config") return React.createElement("div", null, topo, React.createElement(WaConfig, { cfg, setCfg, salvar: salvarCfg, salvo }));
     const lista = React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: "hidden", alignSelf: "start" } },

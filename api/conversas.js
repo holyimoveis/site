@@ -1,6 +1,6 @@
 // Conversas do WhatsApp para o CRM (só com X-Admin-Key)
 import { sql, ensureSchema, cors, isAdmin, body, ok, err, fail } from './_lib.js';
-import { enviarTexto, salvarMensagem, whatsappConfigurado, lerConfig, pensar, catalogo, montarHistorico } from './_wa.js';
+import { enviarTexto, salvarMensagem, whatsappConfigurado, provedor, conectarWebhookKapso, lerConfig, pensar, catalogo, montarHistorico } from './_wa.js';
 export const maxDuration = 60;
 
 export default async function handler(req, res) {
@@ -20,7 +20,7 @@ export default async function handler(req, res) {
           (SELECT papel FROM wa_mensagens m WHERE m.wa_id = c.wa_id ORDER BY id DESC LIMIT 1) AS ultimo_papel
           FROM wa_conversas c ORDER BY ultima_msg DESC LIMIT 300`);
       const cfg = await lerConfig();
-      return ok(res, { conversas: lista, whatsapp: whatsappConfigurado(), assistente_ativo: cfg.ativo !== false,
+      return ok(res, { conversas: lista, whatsapp: whatsappConfigurado(), provedor: provedor(), assistente_ativo: cfg.ativo !== false,
         webhook: process.env.WHATSAPP_VERIFY_TOKEN ? 'configurado' : 'falta WHATSAPP_VERIFY_TOKEN' });
     }
     const b = body(req);
@@ -41,6 +41,14 @@ export default async function handler(req, res) {
         const out = await pensar(cfg, await catalogo(site), montarHistorico(hist));
         return ok(res, { saida: out });
       }
+      // Conectar o webhook (Kapso ou 360dialog, conforme a chave cadastrada)
+      if (b.acao === 'webhook' && process.env.KAPSO_API_KEY) {
+        if ((process.env.WHATSAPP_VERIFY_TOKEN || '').length < 12) return err(res, 400, 'Falta WHATSAPP_VERIFY_TOKEN (mínimo 12 letras e números) na Vercel.');
+        const url = 'https://' + (req.headers['x-forwarded-host'] || req.headers.host) + '/api/whatsapp';
+        try { const id = await conectarWebhookKapso(url, process.env.WHATSAPP_VERIFY_TOKEN); return ok(res, { url, numero: id, provedor: 'Kapso' }); }
+        catch (e) { return err(res, 502, e.message); }
+      }
+      if (b.acao === 'webhook') b.acao = 'webhook360';
       // Configurar o webhook no parceiro 360dialog
       if (b.acao === 'webhook360') {
         if (!process.env.WHATSAPP_D360_KEY) return err(res, 400, 'Falta WHATSAPP_D360_KEY na Vercel.');

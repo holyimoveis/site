@@ -21,6 +21,14 @@ function assinaturaOk(req, bruto) {
   const esperado = 'sha256=' + crypto.createHmac('sha256', segredo).update(bruto, 'utf8').digest('hex');
   return esperado.length === sig.length && crypto.timingSafeEqual(Buffer.from(esperado), Buffer.from(sig));
 }
+// Kapso assina cada entrega: HMAC-SHA256 do corpo, em hex, no cabeçalho X-Webhook-Signature
+function kapsoOk(req, bruto) {
+  const segredo = process.env.WHATSAPP_VERIFY_TOKEN || '';
+  const sig = String(req.headers['x-webhook-signature'] || '');
+  if (segredo.length < 12 || !sig) return false;
+  const esperado = crypto.createHmac('sha256', segredo).update(bruto, 'utf8').digest('hex');
+  return esperado.length === sig.length && crypto.timingSafeEqual(Buffer.from(esperado), Buffer.from(sig));
+}
 function chaveOk(req) {
   const t = process.env.WHATSAPP_VERIFY_TOKEN || '';
   const k = String((req.query || {}).k || '');
@@ -55,7 +63,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const bruto = await corpoBruto(req);
-  if (!assinaturaOk(req, bruto) && !chaveOk(req)) return res.status(401).json({ ok: false });
+  if (!kapsoOk(req, bruto) && !assinaturaOk(req, bruto) && !chaveOk(req)) return res.status(401).json({ ok: false });
   let body; try { body = JSON.parse(bruto || '{}'); } catch { return res.status(400).json({ ok: false }); }
 
   const site = process.env.SITE_URL || ('https://' + (req.headers['x-forwarded-host'] || req.headers.host));
@@ -70,11 +78,12 @@ export default async function handler(req, res) {
           const perfil = {}; (v.contacts || []).forEach((c) => { perfil[c.wa_id] = c.profile && c.profile.name; });
           for (const m of v.messages) {
             const texto = textoDe(m);
-            if (!texto) continue;
-            const id = await salvarMensagem(m.from, 'cliente', texto, m.id, perfil[m.from]);
+            const de = m.from || m.from_user_id;
+            if (!texto || !de) continue;
+            const id = await salvarMensagem(de, 'cliente', texto, m.id, perfil[de] || m.username);
             if (id) {
               tarefas.push(marcarLida(m.id));
-              tarefas.push(processarConversa(m.from, site, perfil[m.from]));
+              tarefas.push(processarConversa(de, site, perfil[de] || m.username));
             }
           }
         }

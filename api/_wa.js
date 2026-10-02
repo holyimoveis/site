@@ -7,10 +7,9 @@ import { paraSite as emprSite } from './empreendimentos.js';
 const ETAPAS = ['Prospecção', 'Qualificação', 'Proposta', 'Negociação', 'Pós-venda'];
 const TEMP = { frio: 'cold', morno: 'warm', quente: 'hot' };
 const MOTIVOS = {
-  pediu_visita: 'Pediu para agendar visita',
-  pediu_humano: 'Pediu para falar com uma pessoa',
-  negociacao: 'Quer negociar ou fazer proposta',
-  lead_quente: 'Lead quente: orçamento e prazo definidos',
+  pediu_visita: 'Quer agendar uma visita',
+  pediu_humano: 'Pediu para falar com você',
+  duvida_pontual: 'Tem uma dúvida que só você pode responder',
   outro: 'Precisa de você',
 };
 
@@ -23,7 +22,26 @@ export const PADRAO_CONFIG = {
 };
 
 // ── Envio ──────────────────────────────────────────────────────────────
-function destino() {
+// Kapso (plano gratuito com Coexistência) → 360dialog → Meta direto
+const KAPSO_META = 'https://api.kapso.ai/meta/whatsapp/v24.0';
+const KAPSO_PLAT = 'https://api.kapso.ai/platform/v1';
+let _kapsoPhone = null;
+export async function kapsoNumero() {
+  if (process.env.KAPSO_PHONE_NUMBER_ID) return process.env.KAPSO_PHONE_NUMBER_ID;
+  if (_kapsoPhone) return _kapsoPhone;
+  const r = await fetch(KAPSO_PLAT + '/whatsapp/phone_numbers', { headers: { 'X-API-Key': process.env.KAPSO_API_KEY } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('Kapso recusou a chave: ' + (j.error || r.status));
+  const lista = Array.isArray(j.data) ? j.data : [];
+  const n = lista.find((x) => String(x.status || '').toUpperCase() === 'CONNECTED') || lista[0];
+  if (!n) throw new Error('Nenhum número conectado na Kapso ainda.');
+  _kapsoPhone = String(n.phone_number_id || n.id);
+  return _kapsoPhone;
+}
+async function destino() {
+  if (process.env.KAPSO_API_KEY) {
+    return { url: `${KAPSO_META}/${await kapsoNumero()}/messages`, headers: { 'X-API-Key': process.env.KAPSO_API_KEY } };
+  }
   if (process.env.WHATSAPP_D360_KEY) {
     return { url: 'https://waba-v2.360dialog.io/messages', headers: { 'D360-API-KEY': process.env.WHATSAPP_D360_KEY } };
   }
@@ -33,10 +51,31 @@ function destino() {
   }
   return null;
 }
-export const whatsappConfigurado = () => !!destino();
+export const whatsappConfigurado = () => !!(process.env.KAPSO_API_KEY || process.env.WHATSAPP_D360_KEY || (process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID));
+export const provedor = () => process.env.KAPSO_API_KEY ? 'Kapso' : process.env.WHATSAPP_D360_KEY ? '360dialog' : process.env.WHATSAPP_TOKEN ? 'Meta' : null;
+
+// Cadastra (ou atualiza) o webhook na Kapso, no formato da Meta
+export async function conectarWebhookKapso(url, segredo) {
+  const id = await kapsoNumero();
+  const h = { 'X-API-Key': process.env.KAPSO_API_KEY, 'Content-Type': 'application/json' };
+  const base = `${KAPSO_PLAT}/whatsapp/phone_numbers/${id}/webhooks`;
+  const corpo = JSON.stringify({ whatsapp_webhook: { kind: 'meta', url, secret_key: segredo, active: true } });
+  const lst = await fetch(base, { headers: h }).then((r) => r.json()).catch(() => ({}));
+  const atual = (Array.isArray(lst.data) ? lst.data : []).find((w) => w.kind === 'meta');
+  let r;
+  if (atual) {
+    r = await fetch(`${base}/${atual.id}`, { method: 'PATCH', headers: h, body: corpo });
+    if (!r.ok) { await fetch(`${base}/${atual.id}`, { method: 'DELETE', headers: h }); r = await fetch(base, { method: 'POST', headers: h, body: corpo }); }
+  } else {
+    r = await fetch(base, { method: 'POST', headers: h, body: corpo });
+  }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('Kapso recusou o webhook: ' + (j.error || JSON.stringify(j).slice(0, 200)));
+  return id;
+}
 
 async function postar(payload) {
-  const d = destino();
+  const d = await destino();
   if (!d) throw new Error('WhatsApp não configurado (faltam as chaves na Vercel).');
   const r = await fetch(d.url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...d.headers }, body: JSON.stringify({ messaging_product: 'whatsapp', ...payload }) });
   const j = await r.json().catch(() => ({}));
@@ -108,7 +147,9 @@ const FERRAMENTA = {
       perfil: {
         type: 'object',
         properties: {
-          objetivo: { type: 'string', description: 'morar, investir, temporada, vender etc.' },
+          objetivo: { type: 'string', description: 'morar, revenda, long stay (locação anual) ou short stay (temporada)' },
+          desejos: { type: 'string', description: 'o que o cliente valoriza: vista, lazer, bairro, metragem, andar etc.' },
+          objecoes: { type: 'string', description: 'receios ou impedimentos citados: preço, prazo de entrega, localização etc.' },
           cidades: { type: 'string' }, tipo_imovel: { type: 'string' }, faixa_valor: { type: 'string' },
           quartos: { type: 'string' }, prazo: { type: 'string' }, pagamento: { type: 'string', description: 'à vista, financiamento, permuta…' },
           interesse_em: { type: 'string', description: 'imóveis/empreendimentos do catálogo que despertaram interesse' },
@@ -140,7 +181,13 @@ ${cfg.infoHoly}
 Se o cliente perguntar algo sobre a Holy que não esteja escrito aqui, diga que vai confirmar com o Édipo. Não invente.
 
 OBJETIVO
-Entender o que o cliente procura e apresentar opções reais do catálogo. Qualifique com naturalidade, UMA pergunta por mensagem, sem parecer formulário: objetivo (morar, investir, temporada), cidade, tipo de imóvel, faixa de valor, quartos, prazo e forma de pagamento.
+Conduza o atendimento o máximo possível sozinho, como um bom corretor: entenda o cliente a fundo, tire as dúvidas com base no catálogo e leve a conversa até a visita.
+Descubra com naturalidade, UMA pergunta por mensagem, sem parecer formulário:
+- o objetivo: morar, revenda (investir para revender), long stay (alugar por temporadas longas/anual) ou short stay (aluguel de temporada);
+- os desejos: o que ele valoriza (vista, lazer, bairro, metragem, andar, vagas);
+- as objeções: o que o preocupa (valor, prazo de entrega, localização, condições) e responda com argumentos verdadeiros do catálogo;
+- a forma de pagamento: à vista, financiamento, parcelamento direto, permuta;
+- também cidade, faixa de valor, quartos e prazo, quando fizer sentido.
 Quando houver opções compatíveis, apresente no máximo 3, com 1 linha cada e o link da página. Se nada combinar, diga que a Holy faz curadoria sob medida e que o Édipo pode buscar opções fora do site.
 
 CATÁLOGO (só existe o que está abaixo; nunca invente imóveis, valores, metragens, prazos ou condições)
@@ -149,16 +196,16 @@ ${cat}
 REGRAS
 - Não prometa aprovação de financiamento, descontos, condições de pagamento ou datas que não estejam no catálogo.
 - Nunca informe endereço exato, número do apartamento, nem dados de proprietários. Fale de bairro e cidade.
-- Para negociação de valor, proposta ou condição especial: não negocie; transfira para o Édipo.
+- Você não negocia valores nem condições. Se o cliente quiser fazer proposta, pedir desconto ou condição especial, isso é uma dúvida que só o Édipo responde (duvida_pontual).
 - Assuntos sem relação com imóveis e com a Holy: responda com gentileza que você ajuda apenas com imóveis da Holy.
 - Se o cliente mandar áudio, foto ou arquivo, diga que por aqui você só consegue ler texto e peça para ele escrever; se for importante, ofereça passar para o Édipo.
 ${cfg.regras ? '- ' + String(cfg.regras).split('\n').filter(Boolean).join('\n- ') : ''}
 
-QUANDO PASSAR PARA O ÉDIPO (transferir = true)
+QUANDO PASSAR PARA O ÉDIPO (transferir = true) — SOMENTE nestes casos
 - pediu_visita: quer agendar ou fazer uma visita.
 - pediu_humano: pediu para falar com uma pessoa, com o corretor ou com o Édipo.
-- negociacao: quer negociar valor, fazer proposta, permuta ou condição especial.
-- lead_quente: já informou faixa de valor E prazo, e demonstrou interesse claro em comprar.
+- duvida_pontual: fez uma pergunta específica que o catálogo e as informações da Holy não respondem (ex.: proposta de valor, condição especial, documentação de um imóvel, disponibilidade de unidade específica).
+Em qualquer outra situação, continue conduzindo você mesmo, mesmo que o cliente esteja muito interessado.
 Ao transferir, avise com naturalidade que o Édipo vai continuar o atendimento por aqui mesmo, em breve. Não faça mais perguntas nessa mensagem.
 
 FORMATO
@@ -212,7 +259,7 @@ const agoraHM = () => new Date().toLocaleTimeString('pt-BR', { timeZone: 'Americ
 async function sincronizarCRM(waId, conv, out, nomePerfil) {
   const tel = telefoneBR(waId), fim8 = String(waId).replace(/\D/g, '').slice(-8);
   const p = out.perfil || {};
-  const perfilTxt = [['Objetivo', p.objetivo], ['Cidades', p.cidades], ['Tipo', p.tipo_imovel], ['Faixa de valor', p.faixa_valor], ['Quartos', p.quartos], ['Prazo', p.prazo], ['Pagamento', p.pagamento], ['Interesse', p.interesse_em]]
+  const perfilTxt = [['Objetivo', p.objetivo], ['Desejos', p.desejos], ['Objeções', p.objecoes], ['Cidades', p.cidades], ['Tipo', p.tipo_imovel], ['Faixa de valor', p.faixa_valor], ['Quartos', p.quartos], ['Prazo', p.prazo], ['Pagamento', p.pagamento], ['Interesse', p.interesse_em]]
     .filter((x) => x[1]).map((x) => x[0] + ': ' + x[1]).join(' · ');
   const bloco = '[WhatsApp] ' + (out.resumo || '') + (perfilTxt ? '\n' + perfilTxt : '');
   let clienteId = conv.cliente_id, novo = false, nomeFinal = '';
