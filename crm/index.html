@@ -18684,7 +18684,8 @@ const WA_PADRAO = {
     regras: "",
     horaInicio: 8,
     horaFim: 20,
-    retorno: "em até 1 hora",
+    retorno: "",
+    semHorario: true,
     avisoNumero: ""
 };
 const waTel = id => { const d = String(id || "").replace(/\D/g, ""); const n = d.startsWith("55") ? d.slice(2) : d; return n.length === 11 ? `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}` : n.length === 10 ? `(${n.slice(0, 2)}) ${n.slice(2, 6)}-${n.slice(6)}` : "+" + d; };
@@ -18765,7 +18766,10 @@ function WaConfig({ cfg, setCfg, salvar, salvo }) {
             React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
                 React.createElement(FI, { label: "Nome da assistente", value: cfg.nomeAssistente, onChange: v => F("nomeAssistente", v) }),
                 React.createElement(FI, { label: "Como ela se apresenta", value: cfg.apresentacao, onChange: v => F("apresentacao", v) })),
-            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 } },
+            React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.inkMid, cursor: "pointer" } },
+                React.createElement("input", { type: "checkbox", checked: cfg.semHorario !== false, onChange: e => F("semHorario", e.target.checked), style: { accentColor: C.olive } }),
+                "Não prometer horário nem prazo de retorno (a Helena só diz que você continua o atendimento)"),
+            cfg.semHorario === false && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 } },
                 React.createElement(FI, { label: "Você atende a partir de (h)", type: "number", value: cfg.horaInicio, onChange: v => F("horaInicio", +v || 0) }),
                 React.createElement(FI, { label: "Até (h)", type: "number", value: cfg.horaFim, onChange: v => F("horaFim", +v || 0) }),
                 React.createElement(FI, { label: "Prazo de retorno", value: cfg.retorno, onChange: v => F("retorno", v) })),

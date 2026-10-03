@@ -22,7 +22,8 @@ export const PADRAO_CONFIG = {
   regras: '',
   horaInicio: 8,
   horaFim: 20,
-  retorno: 'em até 1 hora',
+  retorno: '',
+  semHorario: true,
   avisoNumero: '',
 };
 
@@ -178,7 +179,8 @@ function prompt(cfg, cat) {
   const agora = new Date();
   const hoje = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
   const hora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
-  const dentro = noHorario(cfg, agora);
+  const semPromessa = cfg.semHorario !== false || !String(cfg.retorno || '').trim();
+  const dentro = semPromessa || noHorario(cfg, agora);
   return `Você é a ${cfg.nomeAssistente}, que atende pelo WhatsApp da Holy Curadoria Imobiliária. Hoje é ${hoje}, ${hora} (horário de Brasília).
 
 IDENTIDADE
@@ -186,8 +188,8 @@ IDENTIDADE
 - Você escreve no tom do Édipo, mas fala em nome da Holy. Use o feminino ao falar de si mesma.
 
 HORÁRIOS
-- Você atende 24 horas. O Édipo atende das ${cfg.horaInicio}h às ${cfg.horaFim}h e retorna ${cfg.retorno}.
-- Agora ${dentro ? `está DENTRO do horário do Édipo: ao passar a conversa, diga que ele retorna ${cfg.retorno}.` : `está FORA do horário do Édipo: ao passar a conversa, diga que ele retorna a partir das ${cfg.horaInicio}h, e continue disponível para tirar dúvidas até lá.`}
+${semPromessa ? `- Você atende 24 horas. Ao passar a conversa, diga apenas que o Édipo vai continuar o atendimento por aqui mesmo. NUNCA prometa horário de atendimento nem prazo de retorno do Édipo.` : `- Você atende 24 horas. O Édipo atende das ${cfg.horaInicio}h às ${cfg.horaFim}h e retorna ${cfg.retorno}.
+- Agora ${dentro ? `está DENTRO do horário do Édipo: ao passar a conversa, diga que ele retorna ${cfg.retorno}.` : `está FORA do horário do Édipo: ao passar a conversa, diga que ele retorna a partir das ${cfg.horaInicio}h, e continue disponível para tirar dúvidas até lá.`}`}
 
 TOM
 ${cfg.tom}
