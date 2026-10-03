@@ -1058,8 +1058,8 @@ function normEmpr(em){
 }
 function normIm(im){
   var f=(im.fotos||[]).map(function(p){return p.url||p;});
-  var ficha=im.ficha||[['Código',im.ref||im.id],['Tipo',im.tipo],['Finalidade',im.finalidade],['Área privativa',im.area?im.area+' m²':''],['Dormitórios',im.quartos],['Suítes',im.suites],['Vagas',im.vagas],['Andar',im.andar],['Condomínio',im.condominio?brl(im.condominio)+'/mês':''],['IPTU',im.iptu?brl(im.iptu)+'/ano':'']].filter(function(r){return r[1]!==undefined&&r[1]!==null&&r[1]!=='';});
-  var st=[];if(im.area)st.push({n:im.area+' m²',l:'área privativa'});if(im.quartos)st.push({n:im.quartos,l:'dormitórios'});if(im.suites)st.push({n:im.suites,l:'suítes'});if(im.vagas)st.push({n:im.vagas,l:'vagas'});
+  var ficha=im.ficha||[['Código',im.ref||im.id],['Tipo',im.tipo],['Finalidade',im.finalidade],['Área total',im.area?im.area+' m²':''],['Área privativa',im.areaPrivativa?im.areaPrivativa+' m²':''],['Dormitórios',im.quartos],['Suítes',im.suites],['Banheiros',im.banheiros],['Lavabos',im.lavabos],['Vagas',im.vagas],['Andar',im.andar],['Condomínio',im.condominio?brl(im.condominio)+'/mês':''],['IPTU',im.iptu?brl(im.iptu)+'/ano':'']].filter(function(r){return r[1]!==undefined&&r[1]!==null&&r[1]!=='';});
+  var st=[];if(im.area)st.push({n:im.area+' m²',l:'área total'});if(im.areaPrivativa&&im.areaPrivativa!==im.area)st.push({n:im.areaPrivativa+' m²',l:'área privativa'});if(im.quartos)st.push({n:im.quartos,l:'dormitórios'});if(im.suites)st.push({n:im.suites,l:'suítes'});if(im.vagas)st.push({n:im.vagas,l:'vagas'});
   return{kind:'im',id:im.id,favId:'im_'+im.id,slug:'imovel-'+im.id,nome:im.nome,status:im.status||'Disponível',statusBg:'#2d3a1f',
     tipo:im.tipo||'Imóvel',local:[im.bairro,im.cidade].filter(Boolean).join(', ')+(im.estado?', '+im.estado:''),coords:im.coords,aprox:true,
     precoLbl:im.finalidade==='Locação'?'Aluguel':'Valor de venda',preco:brl(im.valor),
@@ -1193,7 +1193,7 @@ function toggleComp(id,tipo,nome){
   var idx=compList.findIndex(function(c){return c.id===id;});
   if(idx>=0){compList.splice(idx,1);showToast('Removido da comparação');}
   else if(compList.length>=3){showToast('Máximo 3 itens para comparar');return;}
-  else{var data=tipo==='empr'?EMPR.find(function(e){return e.id===id;}):(function(){var im=_all.find(function(x){return'im_'+x.id===id;});if(!im)return null;var lz=(im.lazer||[]).join(' ').toLowerCase();return{dados:{tipo:im.tipo||'—',andares:im.andar||'—',area:im.area?im.area+' m²':'—',dorms:String(im.quartos||'—'),valor:brl(im.valor),piscina:/piscina/.test(lz)?'Sim':'Não',rooftop:/rooftop/.test(lz)?'Sim':'Não',academia:/academia/.test(lz)?'Sim':'Não',spa:/spa|sauna/.test(lz)?'Sim':'Não',kids:/brinquedoteca|playground|kids/.test(lz)?'Sim':'Não',cowork:/cowork/.test(lz)?'Sim':'Não',status:im.status||'Disponível'}};})();compList.push({id:id,tipo:tipo,nome:nome,dados:data?data.dados:{}});showToast('✓ '+nome+' adicionado');}
+  else{var data=tipo==='empr'?EMPR.find(function(e){return e.id===id;}):(function(){var im=_all.find(function(x){return'im_'+x.id===id;});if(!im)return null;var lz=(im.lazer||[]).join(' ').toLowerCase();return{dados:{tipo:im.tipo||'—',andares:im.andar||'—',area:im.area?im.area+' m² total'+(im.areaPrivativa&&im.areaPrivativa!==im.area?' / '+im.areaPrivativa+' m² priv.':''):'—',dorms:String(im.quartos||'—'),valor:brl(im.valor),piscina:/piscina/.test(lz)?'Sim':'Não',rooftop:/rooftop/.test(lz)?'Sim':'Não',academia:/academia/.test(lz)?'Sim':'Não',spa:/spa|sauna/.test(lz)?'Sim':'Não',kids:/brinquedoteca|playground|kids/.test(lz)?'Sim':'Não',cowork:/cowork/.test(lz)?'Sim':'Não',status:im.status||'Disponível'}};})();compList.push({id:id,tipo:tipo,nome:nome,dados:data?data.dados:{}});showToast('✓ '+nome+' adicionado');}
   updCompBar();
   document.querySelectorAll('[id^="cmp-"],[id^="cim-"]').forEach(function(btn){
     var bid=btn.id.replace('cmp-','').replace('cim-','');
@@ -1284,7 +1284,7 @@ function renderIm(list){
       +'</div>'
       +'<div class="im-body"><div class="im-local">'+[im.bairro,im.cidade].filter(Boolean).join(', ')+'</div>'
       +'<div class="im-nome">'+im.nome+'</div>'
-      +'<div class="im-specs">'+(im.area?'<span>📐 '+im.area+' m²</span>':'')+(im.quartos?'<span>🛏️ '+im.quartos+' dorm.</span>':'')+(im.suites?'<span>🛁 '+im.suites+' suítes</span>':'')+(im.vagas?'<span>🚗 '+im.vagas+' vagas</span>':'')+'</div>'
+      +'<div class="im-specs">'+(im.area?'<span>📐 '+im.area+' m² total</span>':'')+(im.areaPrivativa&&im.areaPrivativa!==im.area?'<span>🏠 '+im.areaPrivativa+' m² priv.</span>':'')+(im.quartos?'<span>🛏️ '+im.quartos+' dorm.</span>':'')+(im.suites?'<span>🛁 '+im.suites+' suítes</span>':'')+(im.vagas?'<span>🚗 '+im.vagas+' vagas</span>':'')+'</div>'
       +'<div class="im-valor">'+brl(im.valor)+'</div>'
       +'<div class="im-btns">'
       +'<button class="btn-im-v" onclick="openImById(\''+id+'\')">Ver imóvel</button>'

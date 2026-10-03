@@ -17754,7 +17754,9 @@ const BAIRROS_SC = (cidade) => CIDADES_SC[cidade] || ["Centro", "Outros"];
 const STATUS_IMOVEL = ["Disponível", "Reservado", "Negociação", "Vendido", "Locado", "Captação"];
 const ORIGENS = ["Instagram", "WhatsApp", "Indicação", "Landing Page", "Site", "Facebook", "Portais", "Ligação", "Evento", "Outros"];
 const FINALIDADES = ["Moradia", "Investimento", "Locação", "Misto"];
-const DIFS_OPT = ["Piscina", "Academia", "Churrasqueira", "Terraço", "Varanda gourmet", "Jardim", "Quadra", "Playground", "Sauna", "Spa", "Adega", "Home theater", "Vista panorâmica", "Portaria 24h", "Segurança privada", "Campo de futebol", "Concierge", "Pet friendly", "Mobiliado", "Condomínio fechado", "Depósito", "Lavabo social"];
+const DIFS_OPT = ["Lavabo social", "Suíte master com closet", "Closet", "Banheira", "Home office", "Varanda gourmet", "Sacada com churrasqueira", "Churrasqueira", "Terraço", "Jardim", "Garden", "Piscina", "Piscina aquecida", "Hidromassagem/Jacuzzi", "Sauna", "Adega", "Home theater", "Lareira", "Cozinha integrada", "Cozinha gourmet", "Lavanderia separada", "Dependência de serviço", "Depósito", "Pé-direito duplo", "Mobiliado", "Semimobiliado", "Decorado", "Ar-condicionado", "Infra para ar-condicionado", "Aquecimento a gás", "Piso aquecido", "Automação residencial", "Fechadura digital", "Energia solar", "Vista mar", "Vista panorâmica", "Frente mar", "Andar alto", "Cobertura", "Pet friendly", "Condomínio fechado"];
+const LAZER_OPT = ["Salão de festas", "Espaço gourmet", "Churrasqueira coletiva", "Academia", "Pilates/Yoga", "Sauna seca", "Sauna úmida", "Spa", "Sala de massagem", "Piscina adulto", "Piscina infantil", "Piscina aquecida", "Piscina coberta", "Piscina com borda infinita", "Raia de natação", "Hidromassagem/Jacuzzi", "Solarium", "Rooftop", "Deck molhado", "Home market", "Coworking", "Sala de reunião", "Cinema", "Brinquedoteca", "Playground", "Espaço teen", "Salão de jogos", "Pub/Bar", "Adega coletiva", "Espaço zen", "Quadra", "Quadra de beach tennis", "Quadra de tênis", "Quadra de squash", "Campo de futebol", "Pista de caminhada", "Bicicletário", "Pet place", "Pet wash", "Lavanderia coletiva", "Espaço beleza", "Car wash", "Carregador para carro elétrico", "Gerador", "Portaria 24h", "Portaria remota", "Segurança privada", "Concierge", "Serviço de praia", "Box de praia", "Depósito/Hobby box", "Hall decorado", "Elevador social e de serviço"];
+const LAZER_MIGRA = ["Academia", "Quadra", "Playground", "Spa", "Portaria 24h", "Segurança privada", "Campo de futebol", "Concierge"];
 const TIPOS_INT = ["Ligação", "WhatsApp", "E-mail", "Visita", "Proposta", "Reunião", "Escritura", "Nota interna"];
 // ═══════════════════════════════════════════════════════════════════════
 // SEED DATA
@@ -17820,7 +17822,7 @@ function matchScore(cli, im) {
     if (im.quartos >= (int.quartosPref || 0)) {
         sc += 5;
     }
-    const dm = (int.diferenciais || []).filter(d => { var _a; return (_a = im.diferenciais) === null || _a === void 0 ? void 0 : _a.includes(d); });
+    const dm = (int.diferenciais || []).filter(d => (im.diferenciais || []).concat(im.lazer || []).includes(d));
     if (dm.length >= 2) {
         sc += 5;
         rs.push(`${dm.length} diferenciais`);
@@ -17975,10 +17977,19 @@ function PhotoGallery({ fotos = [], onChange, readOnly = false }) {
 // ═══════════════════════════════════════════════════════════════════════
 // IMOVEL FORM
 // ═══════════════════════════════════════════════════════════════════════
-const IM_EMPTY = { nome: "", tipo: "Apartamento", cidade: "Chapecó-SC", bairro: "Centro", rua: "", numero: "", cep: "", area: "", areaUtil: "", quartos: "", suites: "", banheiros: "", vagas: "", valor: "", iptu: "", condominio: "", status: "Disponível", finalidade: "Moradia", anoConstrucao: "", andares: "", orientacao: "", diferenciais: [], descricao: "", proprietario: "", proprietarioTel: "", proprietarioEmail: "", proprietarioCpf: "", proprietarioNascimento: "", exclusividade: false, fotos: [] };
+const IM_EMPTY = { nome: "", tipo: "Apartamento", cidade: "Chapecó-SC", bairro: "Centro", rua: "", numero: "", cep: "", area: "", areaPrivativa: "", areaUtil: "", quadra: "", lote: "", matricula: "", quartos: "", suites: "", banheiros: "", lavabos: "", vagas: "", lazer: [], valor: "", iptu: "", condominio: "", status: "Disponível", finalidade: "Moradia", anoConstrucao: "", andares: "", orientacao: "", diferenciais: [], descricao: "", proprietario: "", proprietarioTel: "", proprietarioEmail: "", proprietarioCpf: "", proprietarioNascimento: "", exclusividade: false, fotos: [] };
 function ImovelForm({ initial, onSave, onClose }) {
     const [tab, setTab] = useState("basico");
-    const [f, setF] = useState(Object.assign(Object.assign({}, IM_EMPTY), initial));
+    const [f, setF] = useState(() => {
+        const o = Object.assign(Object.assign({}, IM_EMPTY), initial);
+        // migração: "área útil" vira "área privativa"; itens de condomínio vão para Lazer; "Lavabo social" vira contagem
+        if (!o.areaPrivativa && o.areaUtil) o.areaPrivativa = o.areaUtil;
+        const difs = o.diferenciais || [];
+        o.lazer = Array.from(new Set([...(o.lazer || []), ...difs.filter(d => LAZER_MIGRA.includes(d))]));
+        o.diferenciais = difs.filter(d => !LAZER_MIGRA.includes(d));
+        if (!o.lavabos && o.diferenciais.includes("Lavabo social")) o.lavabos = 1;
+        return o;
+    });
     const [aiTxt, setAiTxt] = useState("");
     const [aiL, setAiL] = useState(false);
     const F = (k, v) => setF(p => (Object.assign(Object.assign({}, p), { [k]: v })));
@@ -18000,7 +18011,7 @@ function ImovelForm({ initial, onSave, onClose }) {
             alert("Nome, tipo e bairro são obrigatórios.");
             return;
         }
-        onSave(Object.assign(Object.assign({}, f), { id: f.id || "im" + uid(), area: +f.area || 0, areaUtil: +f.areaUtil || 0, quartos: +f.quartos || 0, suites: +f.suites || 0, banheiros: +f.banheiros || 0, vagas: +f.vagas || 0, valor: +f.valor || 0, iptu: +f.iptu || 0, condominio: +f.condominio || 0, anoConstrucao: +f.anoConstrucao || 0, descricao: aiTxt || f.descricao, createdAt: f.createdAt || today() }));
+        onSave(Object.assign(Object.assign({}, f), { id: f.id || "im" + uid(), area: +f.area || 0, areaPrivativa: +f.areaPrivativa || 0, areaUtil: +f.areaPrivativa || 0, lavabos: +f.lavabos || 0, quartos: +f.quartos || 0, suites: +f.suites || 0, banheiros: +f.banheiros || 0, vagas: +f.vagas || 0, valor: +f.valor || 0, iptu: +f.iptu || 0, condominio: +f.condominio || 0, anoConstrucao: +f.anoConstrucao || 0, descricao: aiTxt || f.descricao, createdAt: f.createdAt || today() }));
         onClose();
     }
     const tabs = [{ k: "basico", l: "📋 Básico" }, { k: "areas", l: "📐 Áreas" }, { k: "valores", l: "💰 Valores" }, { k: "fotos", l: "📷 Fotos" }, { k: "difs", l: "✦ Diferenciais" }, { k: "prop", l: "👤 Proprietário" }];
@@ -18027,25 +18038,35 @@ function ImovelForm({ initial, onSave, onClose }) {
                     "\uD83C\uDF10 Publicar no site"),
                 React.createElement("input", { value: f.seloSite || "", onChange: e => F("seloSite", e.target.value), placeholder: "Selo na foto (ex.: Frente mar)", maxLength: 24, style: { flex: 1, minWidth: 180, padding: "8px 10px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 12 } }),
                 React.createElement("div", { style: { width: "100%", fontSize: 11, color: C.muted } }, "Fica no site enquanto o status for Dispon\u00EDvel. Rua, n\u00FAmero, CEP e dados do propriet\u00E1rio nunca v\u00E3o para o site."))),
-        tab === "areas" && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 } },
-            React.createElement(FI, { label: "\u00C1rea Total (m\u00B2)", value: f.area, onChange: v => F("area", v), type: "number", req: true }),
-            React.createElement(FI, { label: "\u00C1rea \u00DAtil (m\u00B2)", value: f.areaUtil, onChange: v => F("areaUtil", v), type: "number" }),
-            React.createElement(FI, { label: "Quartos", value: f.quartos, onChange: v => F("quartos", v), type: "number", req: true }),
-            React.createElement(FI, { label: "Su\u00EDtes", value: f.suites, onChange: v => F("suites", v), type: "number" }),
-            React.createElement(FI, { label: "Banheiros", value: f.banheiros, onChange: v => F("banheiros", v), type: "number" }),
-            React.createElement(FI, { label: "Vagas de Garagem", value: f.vagas, onChange: v => F("vagas", v), type: "number" })),
+        tab === "areas" && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } },
+                React.createElement(FI, { label: "\u00C1rea total (m\u00B2)", value: f.area, onChange: v => F("area", v), type: "number", req: true, placeholder: "Terreno da casa ou \u00E1rea total do apto" }),
+                React.createElement(FI, { label: "\u00C1rea privativa (m\u00B2)", value: f.areaPrivativa, onChange: v => F("areaPrivativa", v), type: "number", placeholder: "\u00C1rea constru\u00EDda / privativa" })),
+            React.createElement("div", { style: { fontSize: 11, color: C.muted, lineHeight: 1.5, marginTop: -8 } }, "\u00C1rea total: sempre a maior \u2014 o terreno, no caso de casas e lotes, ou a \u00E1rea total do apartamento. \u00C1rea privativa: a \u00E1rea constru\u00EDda de uso exclusivo da unidade. As duas aparecem no site."),
+            +f.areaPrivativa > 0 && +f.area > 0 && +f.areaPrivativa > +f.area && React.createElement("div", { style: { fontSize: 12, color: C.danger, background: "#fdecea", padding: "8px 12px", borderRadius: 8 } }, "\u26A0 A \u00E1rea privativa est\u00E1 maior que a \u00E1rea total. Confira os valores."),
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 } },
+                React.createElement(FI, { label: "Quartos", value: f.quartos, onChange: v => F("quartos", v), type: "number", req: true }),
+                React.createElement(FI, { label: "Su\u00EDtes", value: f.suites, onChange: v => F("suites", v), type: "number" }),
+                React.createElement(FI, { label: "Vagas de garagem", value: f.vagas, onChange: v => F("vagas", v), type: "number" }),
+                React.createElement(FI, { label: "Banheiros sociais", value: f.banheiros, onChange: v => F("banheiros", v), type: "number" }),
+                React.createElement(FI, { label: "Lavabos", value: f.lavabos, onChange: v => F("lavabos", v), type: "number" })),
+            React.createElement("div", { style: { fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginTop: 4 } }, "\uD83D\uDD12 Registro do im\u00F3vel (n\u00E3o aparece no site)"),
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 } },
+                React.createElement(FI, { label: "Quadra", value: f.quadra, onChange: v => F("quadra", v) }),
+                React.createElement(FI, { label: "Lote", value: f.lote, onChange: v => F("lote", v) }),
+                React.createElement(FI, { label: "Matr\u00EDcula", value: f.matricula, onChange: v => F("matricula", v), placeholder: "N\u00BA e cart\u00F3rio" }))),
         tab === "valores" && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 } },
             React.createElement(FI, { label: "Valor de Venda (R$)", value: f.valor, onChange: v => F("valor", v), type: "number", req: true, placeholder: "Ex: 4200000" }),
             React.createElement(FI, { label: "IPTU Anual (R$)", value: f.iptu, onChange: v => F("iptu", v), type: "number", placeholder: "Ex: 18000" }),
             React.createElement(FI, { label: "Condom\u00EDnio/M\u00EAs (R$)", value: f.condominio, onChange: v => F("condominio", v), type: "number", placeholder: "Ex: 4200" }),
             React.createElement("div", null),
-            f.valor && +f.area > 0 && React.createElement("div", { style: { gridColumn: "1/-1", padding: "12px 16px", background: C.oliveGhost, borderRadius: 10, fontSize: 12, color: C.inkMid } },
+            f.valor && (+f.areaPrivativa > 0 || +f.area > 0) && React.createElement("div", { style: { gridColumn: "1/-1", padding: "12px 16px", background: C.oliveGhost, borderRadius: 10, fontSize: 12, color: C.inkMid } },
                 React.createElement("div", { style: { display: "flex", gap: 24, flexWrap: "wrap" } },
                     React.createElement("span", null,
                         "\uD83D\uDCB0 ",
                         React.createElement("strong", null,
-                            fmt(Math.round(+f.valor / +f.area)),
-                            "/m\u00B2")),
+                            fmt(Math.round(+f.valor / (+f.areaPrivativa || +f.area))),
+                            +f.areaPrivativa > 0 ? "/m\u00B2 privativo" : "/m\u00B2")),
                     f.iptu && React.createElement("span", null,
                         "\uD83D\uDCC5 IPTU/m\u00EAs: ",
                         React.createElement("strong", null, fmt(Math.round(+f.iptu / 12)))),
@@ -18057,8 +18078,11 @@ function ImovelForm({ initial, onSave, onClose }) {
             React.createElement(PhotoGallery, { fotos: f.fotos || [], onChange: fotos => F("fotos", fotos) })),
         tab === "difs" && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
             React.createElement("div", null,
-                React.createElement("label", { style: { fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 500, display: "block", marginBottom: 8 } }, "Infraestrutura & Diferenciais"),
+                React.createElement("label", { style: { fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 500, display: "block", marginBottom: 8 } }, "Itens e diferenciais do im\u00F3vel"),
                 React.createElement(MCk, { options: DIFS_OPT, selected: f.diferenciais || [], onChange: v => F("diferenciais", v), cols: 3 })),
+            React.createElement("div", null,
+                React.createElement("label", { style: { fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 500, display: "block", marginBottom: 8 } }, "Lazer e servi\u00E7os do condom\u00EDnio"),
+                React.createElement(MCk, { options: LAZER_OPT, selected: f.lazer || [], onChange: v => F("lazer", v), cols: 3 })),
             React.createElement(FI, { label: "Descri\u00E7\u00E3o / Observa\u00E7\u00F5es", value: f.descricao, onChange: v => F("descricao", v), rows: 4, placeholder: "Destaques do im\u00F3vel\u2026" }),
             React.createElement("button", { onClick: genDesc, disabled: aiL, style: { fontSize: 12, color: C.olive, background: "none", border: `0.5px solid ${C.olivePale}`, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontWeight: 500, alignSelf: "flex-start" } }, aiL ? "🧠 Gerando…" : "✦ Gerar descrição com IA"),
             aiTxt && React.createElement(AIBox, { text: aiTxt })),
@@ -18141,9 +18165,11 @@ ${fotosSrc.length > 1 ? `<div class="thumb-row">${fotosSrc.slice(1, 4).map(f => 
 <div class="sub">${imovel.bairro} · ${imovel.tipo}${imovel.andares ? " · " + imovel.andares : ""}</div>
 <div class="specs">
 <div><div class="sl">Área Total</div><div class="sv">${imovel.area}m²</div></div>
+${+(imovel.areaPrivativa || imovel.areaUtil) ? `<div><div class="sl">Área Privativa</div><div class="sv">${imovel.areaPrivativa || imovel.areaUtil}m²</div></div>` : ""}
 <div><div class="sl">Quartos</div><div class="sv">${imovel.quartos}</div></div>
 <div><div class="sl">Suítes</div><div class="sv">${imovel.suites || "—"}</div></div>
 <div><div class="sl">Banheiros</div><div class="sv">${imovel.banheiros || "—"}</div></div>
+${+imovel.lavabos ? `<div><div class="sl">Lavabos</div><div class="sv">${imovel.lavabos}</div></div>` : ""}
 <div><div class="sl">Vagas</div><div class="sv">${imovel.vagas}</div></div>
 </div>
 <div class="txt">${(aiCopy || imovel.descricao || "").replace(/\n/g, "<br>")}</div>
@@ -18183,7 +18209,7 @@ ${imovel.exclusividade ? `<div style="font-size:10px;padding:5px 12px;background
                     " fotos \u2014 visualize na galeria"),
                 React.createElement(PhotoGallery, { fotos: imovel.fotos, onChange: () => { }, readOnly: true }))
             : React.createElement("div", { style: { background: `linear-gradient(135deg,${C.oliveGhost},${C.olivePale})`, height: 140, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 56, marginBottom: 16 } }, "\uD83C\uDFDB\uFE0F"),
-        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8, marginBottom: 14 } }, [["Área", `${imovel.area}m²`], ["Quartos", imovel.quartos], ["Suítes", imovel.suites || "—"], ["Banheiros", imovel.banheiros || "—"], ["Vagas", imovel.vagas]].map(([l, v]) => (React.createElement("div", { key: l, style: { background: C.oliveGhost, borderRadius: 8, padding: "9px 12px" } },
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(110px,1fr))", gap: 8, marginBottom: 14 } }, [["Área total", `${imovel.area}m²`], ["Área privativa", +(imovel.areaPrivativa || imovel.areaUtil) ? `${imovel.areaPrivativa || imovel.areaUtil}m²` : "—"], ["Quartos", imovel.quartos], ["Suítes", imovel.suites || "—"], ["Banheiros", imovel.banheiros || "—"], ["Lavabos", imovel.lavabos || "—"], ["Vagas", imovel.vagas]].map(([l, v]) => (React.createElement("div", { key: l, style: { background: C.oliveGhost, borderRadius: 8, padding: "9px 12px" } },
             React.createElement("div", { style: { fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em" } }, l),
             React.createElement("div", { style: { fontSize: 16, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: C.ink, marginTop: 2 } }, v))))),
         React.createElement("div", { style: { background: C.olive, borderRadius: 10, padding: "12px 18px", marginBottom: 14, display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" } },
@@ -18202,6 +18228,9 @@ ${imovel.exclusividade ? `<div style="font-size:10px;padding:5px 12px;background
         ((_d = imovel.diferenciais) === null || _d === void 0 ? void 0 : _d.length) > 0 && React.createElement("div", { style: { marginBottom: 12 } },
             React.createElement("div", { style: { fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontWeight: 500 } }, "Diferenciais"),
             React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4 } }, imovel.diferenciais.map(d => React.createElement(Chip, { key: d, label: d, color: C.olive })))),
+        (imovel.lazer || []).length > 0 && React.createElement("div", { style: { marginBottom: 12 } },
+            React.createElement("div", { style: { fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 500, marginBottom: 6 } }, "Lazer do condom\u00EDnio"),
+            React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4 } }, imovel.lazer.map(d => React.createElement(Chip, { key: d, label: d, color: C.blue })))),
         imovel.descricao && React.createElement("div", { style: { fontSize: 13, color: C.inkMid, lineHeight: 1.7, marginBottom: 12, padding: "11px 14px", background: C.oliveGhost, borderRadius: 8 } }, imovel.descricao),
         imovel.proprietario && React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 14 } },
             "\uD83D\uDC64 ",
@@ -18253,7 +18282,7 @@ function InteresseForm({ initial, onSave, onClose }) {
                 React.createElement(FI, { label: "Vagas M\u00EDn", value: f.vagasPref, onChange: v => F("vagasPref", v), type: "number", placeholder: "Ex: 2" })),
             React.createElement("div", null,
                 React.createElement("label", { style: { fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 500, display: "block", marginBottom: 6 } }, "Diferenciais Desejados"),
-                React.createElement(MCk, { options: DIFS_OPT, selected: f.diferenciais || [], onChange: v => F("diferenciais", v), cols: 3 })),
+                React.createElement(MCk, { options: [...DIFS_OPT, ...LAZER_OPT.filter(x => !DIFS_OPT.includes(x))], selected: f.diferenciais || [], onChange: v => F("diferenciais", v), cols: 3 })),
             React.createElement(FI, { label: "Observa\u00E7\u00F5es / Exig\u00EAncias", value: f.observacoes, onChange: v => F("observacoes", v), rows: 3, placeholder: "Exig\u00EAncias espec\u00EDficas\u2026" })),
         React.createElement("div", { style: { marginTop: 18, display: "flex", gap: 10, justifyContent: "flex-end", borderTop: `0.5px solid ${C.border}`, paddingTop: 14 } },
             React.createElement(PBtn, { onClick: onClose, variant: "ghost", color: C.muted }, "Cancelar"),

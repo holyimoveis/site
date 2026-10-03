@@ -134,9 +134,9 @@ export async function catalogo(site) {
     + (e.ficha.length ? ' | ' + e.ficha.map((f) => f[0] + ': ' + f[1]).join('; ') : '')
     + ` | Página: ${site}/#empreendimento-${e.id}`));
   ims.forEach((i) => linhas.push(`- [IMÓVEL ${i.ref || i.id}] ${i.nome} | ${i.tipo} | ${[i.bairro, i.cidade].filter(Boolean).join(', ')}`
-    + (i.area ? ` | ${i.area} m²` : '') + (i.quartos ? ` | ${i.quartos} dorm.` : '') + (i.suites ? ` | ${i.suites} suítes` : '') + (i.vagas ? ` | ${i.vagas} vagas` : '')
+    + (i.area ? ` | área total ${i.area} m²` : '') + (i.areaPrivativa && i.areaPrivativa !== i.area ? ` | área privativa ${i.areaPrivativa} m²` : '') + (i.quartos ? ` | ${i.quartos} dorm.` : '') + (i.suites ? ` | ${i.suites} suítes` : '') + (i.vagas ? ` | ${i.vagas} vagas` : '')
     + ` | ${i.finalidade === 'Locação' ? 'Aluguel' : 'Venda'}: ${brl(i.valor)}`
-    + (i.diferenciais.length ? ' | ' + i.diferenciais.slice(0, 6).join(', ') : '')
+    + (i.lavabos ? ` | ${i.lavabos} lavabo(s)` : '') + (i.diferenciais.length ? ' | ' + i.diferenciais.slice(0, 8).join(', ') : '') + (i.lazer && i.lazer.length ? ' | Lazer: ' + i.lazer.slice(0, 10).join(', ') : '')
     + ` | Página: ${site}/#imovel-${i.id}`));
   return linhas.join('\n').slice(0, 24000) || '(nenhum imóvel ou empreendimento publicado no momento)';
 }
