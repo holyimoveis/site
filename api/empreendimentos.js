@@ -39,6 +39,9 @@ export function paraSite(e) {
   return {
     id: String(e.id),
     nome: String(e.nome || 'Empreendimento'),
+    complexo: String(e.complexo || '').trim(),
+    principal: !!e.principal,
+    soNoComplexo: !!e.complexo && !e.principal && !!e.soNoComplexo,
     cidade: String(e.cidade || '').replace(/-SC$/i, '').trim() || 'SC',
     estado: e.estado || 'SC',
     status: e.status || 'Lançamento',

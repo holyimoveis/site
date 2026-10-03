@@ -463,6 +463,19 @@ button.empr-cover{display:block;width:100%;border:0;padding:0;background:none;cu
   .hs-img.on{animation:none}.hs-img,.hs-text,.hs-text.on,.dt,.dt.open{transition:none}
   .empr-track{scroll-behavior:auto}
 }
+.empr-cx{color:var(--gold);font-weight:600}
+.dt-cx{background:var(--cream);border:1px solid var(--cream-dk);border-radius:20px;padding:4px 11px;font-family:inherit;font-size:12px;font-weight:600;color:var(--olive);cursor:pointer}
+.dt-fam-sub{font-size:15px;color:var(--ink-mid);margin:-8px 0 18px}
+.dt-fam{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.dt-fam-card{display:flex;flex-direction:column;text-align:left;background:#fff;border:1px solid var(--cream-dk);border-radius:12px;overflow:hidden;padding:0;cursor:pointer;font-family:inherit;transition:border-color .2s,transform .2s}
+.dt-fam-card:hover{border-color:var(--gold);transform:translateY(-2px)}
+.dt-fam-img{position:relative;height:140px;background:linear-gradient(160deg,#131a0c,#2d3a1f)}
+.dt-fam-img img{width:100%;height:100%;object-fit:cover}
+.dt-fam-img .dt-pill{position:absolute;left:10px;top:10px}
+.dt-fam-body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:4px}
+.dt-fam-body b{font-family:'Playfair Display',serif;font-size:17px;color:var(--ink)}
+.dt-fam-body span{font-size:12px;color:var(--muted);line-height:1.4}
+.dt-fam-body em{font-style:normal;font-size:13px;font-weight:600;color:var(--olive);margin-top:4px}
 /* MATÉRIAS */
 .blog-card{cursor:pointer;background:#fff}
 .blog-card:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
@@ -925,14 +938,14 @@ function shareArticle(id){
 
 // ===== INTEGRAÇÃO COM O CRM =====
 // Empreendimentos cadastrados no CRM substituem os do arquivo (que ficam como reserva)
-var ST_BG={'lançamento':'#b8993a','pronto':'#2e7d32','pronto para morar':'#2e7d32','em obras':'#4a5c2f','em breve':'#555'};
+var ST_BG={'pré-lançamento':'#2563a8','lançamento':'#b8993a','pronto':'#2e7d32','pronto para morar':'#2e7d32','em obras':'#4a5c2f','em breve':'#555'};
 function apiEmpr(x){
   var paras=String(x.descricao||'').split('\n').map(function(p){return p.trim();}).filter(Boolean);
   var ficha=x.ficha||[],fv=function(k){var r=ficha.find(function(f){return String(f[0]).toLowerCase()===k;});return r?String(r[1]):'—';};
   var lz=(x.lazer||[]).join(' ').toLowerCase(),tem=function(re){return re.test(lz)?'Sim':'Não';};
   EMPR_EXTRA[x.id]={tipoLabel:x.tipoLabel,endereco:x.endereco,coords:x.coords,aprox:x.aprox!==false,preco:x.preco,video:x.video||'',
     descExtra:paras.slice(1),lazer:x.lazer||[],plantas:x.plantas||[],proximidades:x.proximidades||[],ficha:ficha};
-  return{id:x.id,nome:x.nome,cidade:x.cidade||'SC',estado:x.estado||'SC',tag:'',status:x.status||'Lançamento',
+  return{id:x.id,nome:x.nome,complexo:x.complexo||'',principal:!!x.principal,soNoComplexo:!!x.soNoComplexo,cidade:x.cidade||'SC',estado:x.estado||'SC',tag:'',status:x.status||'Lançamento',
     statusBg:ST_BG[String(x.status||'').toLowerCase()]||'#4a5c2f',desc:paras[0]||'',stats:x.destaques||[],
     fotos:x.fotos||[],lazerFotos:x.lazerFotos||[],
     dados:{tipo:x.tipoLabel||'Empreendimento',andares:fv('andares'),area:fv('área privativa'),dorms:fv('dormitórios'),piscina:tem(/piscina/),rooftop:tem(/rooftop/),academia:tem(/academia/),spa:tem(/spa|sauna/),kids:tem(/kids|brinquedoteca|playground/),cowork:tem(/cowork/),status:x.status||'—',difs:x.diferenciais||[]}};
@@ -988,7 +1001,7 @@ function jq(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\
 function buildCarousel(){
   var track=document.getElementById('empr-track');
   var logo=(document.querySelector('.nav-logo img')||{}).src||'';
-  track.innerHTML=EMPR.map(function(em){
+  track.innerHTML=emprCarrossel().map(function(em){
     var x=EMPR_EXTRA[em.id]||{};
     var cover=em.fotos&&em.fotos.length?'<img src="'+em.fotos[0]+'" alt="'+em.nome+'" loading="lazy" draggable="false">':'<div class="empr-cover-ph"><img src="'+logo+'" alt=""><span>Em breve</span></div>';
     return'<article class="empr-slide">'
@@ -997,7 +1010,7 @@ function buildCarousel(){
       +'<div class="empr-info">'
       +'<div class="empr-tag">'+(x.tipoLabel||em.dados.tipo)+'</div>'
       +'<div class="empr-name">'+em.nome+'</div>'
-      +'<div class="empr-city">'+(em.cidade===em.estado?'Santa Catarina':em.cidade+', '+em.estado)+'</div>'
+      +'<div class="empr-city">'+(em.cidade===em.estado?'Santa Catarina':em.cidade+', '+em.estado)+(em.complexo&&!em.principal?' · <span class="empr-cx">'+em.complexo+'</span>':'')+'</div>'
       +'<div class="empr-bottom">'
       +'<button class="btn-ver-empr" onclick="openEmprModal(\''+em.id+'\')">Ver empreendimento</button>'
       +'<button class="btn-comp-sm" id="cmp-'+em.id+'" onclick="toggleComp(\''+em.id+'\',\'empr\',\''+jq(em.nome)+'\')">⇄ Comparar</button>'
@@ -1016,6 +1029,7 @@ function buildCarousel(){
   }
   buildDots();updC();
 }
+function emprCarrossel(){return EMPR.filter(function(e){return !e.soNoComplexo;});}
 function cStep(){var s=document.querySelector('#empr-track .empr-slide');return s?s.getBoundingClientRect().width+20:1;}
 function cMax(){var t=document.getElementById('empr-track');return Math.max(0,t.scrollWidth-t.clientWidth);}
 function cPages(){return Math.round(cMax()/cStep())+1;}
@@ -1031,8 +1045,8 @@ function updC(){
   ['c-next','ce-next'].forEach(function(id){var b=document.getElementById(id);if(b)b.disabled=atEnd;});
   document.querySelector('.empr-carousel').classList.toggle('can-next',!atEnd);
   document.querySelectorAll('.c-dot').forEach(function(d,i){d.classList.toggle('on',i===idx);});
-  var vis=Math.max(1,EMPR.length-cPages()+1),cnt=document.getElementById('c-count');
-  if(cnt)cnt.textContent=Math.min(EMPR.length,idx+vis)+' de '+EMPR.length;
+  var tot=emprCarrossel().length,vis=Math.max(1,tot-cPages()+1),cnt=document.getElementById('c-count');
+  if(cnt)cnt.textContent=Math.min(tot,idx+vis)+' de '+tot;
 }
 function moveC(dir){var t=document.getElementById('empr-track');t.scrollTo({left:Math.round(t.scrollLeft/cStep()+dir)*cStep(),behavior:'smooth'});}
 window.addEventListener('resize',function(){buildDots();updC();});
@@ -1048,7 +1062,7 @@ function normEmpr(em){
   var x=EMPR_EXTRA[em.id]||{},lz=[];
   if(em.skyLazer){var re=/src="([^"]+)"/g,m;while((m=re.exec(em.skyLazer)))lz.push(m[1]);}
   if(em.lazerFotos)lz=lz.concat(em.lazerFotos);
-  return{kind:'empr',id:em.id,favId:'empr_'+em.id,slug:'empreendimento-'+em.id,nome:em.nome,status:em.status,statusBg:em.statusBg,
+  return{kind:'empr',id:em.id,complexo:em.complexo||'',principal:!!em.principal,favId:'empr_'+em.id,slug:'empreendimento-'+em.id,nome:em.nome,status:em.status,statusBg:em.statusBg,
     tipo:x.tipoLabel||em.dados.tipo,local:x.endereco||(em.cidade+', '+em.estado),coords:x.coords,aprox:x.aprox,
     precoLbl:'Valores',preco:x.preco||'Sob consulta',precoSub:'Tabela e condições enviadas pelo consultor',
     desc:[em.desc].concat(x.descExtra||[]),stats:(em.stats||[]).filter(function(s){return s.n!=='—'&&s.n!=='Em';}),difs:(em.dados&&em.dados.difs)||[],
@@ -1072,7 +1086,13 @@ function dtHTML(d){
   var f=d.fotos,n=f.length,wa=waLink(d.waMsg);
   var logo=(document.querySelector('.nav-logo img')||{}).src||'';
   var hasLazer=d.lazer.length||d.lazerFotos.length;
-  var tabs=[['dt-sobre','Visão geral'],n?['dt-fotos','Fotos ('+n+')']:null,['dt-video','Vídeo'],['dt-plantas','Plantas'],hasLazer?['dt-lazer','Lazer']:null,['dt-local','Localização'],d.ficha.length?['dt-ficha','Ficha técnica']:null].filter(Boolean);
+  var fam=(d.kind==='empr'&&d.complexo)?EMPR.filter(function(e){return e.complexo===d.complexo&&e.id!==d.id;}).sort(function(a,b){return (b.principal?1:0)-(a.principal?1:0);}):[];
+  var famHTML=fam.length?'<section class="dt-sec" id="dt-complexo"><h2>'+(d.principal?'Produtos do '+d.complexo:'Conheça o '+d.complexo)+'</h2>'
+    +(d.principal?'':'<p class="dt-fam-sub">'+d.nome+' faz parte do '+d.complexo+'. Conheça também:</p>')
+    +'<div class="dt-fam">'+fam.map(function(e){var x=EMPR_EXTRA[e.id]||{};return '<button class="dt-fam-card" onclick="openEmprModal(\''+e.id+'\')">'
+      +'<div class="dt-fam-img">'+(e.fotos&&e.fotos[0]?'<img src="'+e.fotos[0]+'" alt="" loading="lazy">':'')+'<span class="dt-pill" style="background:'+e.statusBg+'">'+(e.principal?'Visão geral':e.status)+'</span></div>'
+      +'<div class="dt-fam-body"><b>'+e.nome+'</b><span>'+(x.tipoLabel||'')+'</span>'+(x.preco&&!e.principal?'<em>'+x.preco+'</em>':'')+'</div></button>';}).join('')+'</div></section>':'';
+  var tabs=[['dt-sobre','Visão geral'],fam.length?['dt-complexo',d.principal?'Produtos':'O complexo']:null,n?['dt-fotos','Fotos ('+n+')']:null,['dt-video','Vídeo'],['dt-plantas','Plantas'],hasLazer?['dt-lazer','Lazer']:null,['dt-local','Localização'],d.ficha.length?['dt-ficha','Ficha técnica']:null].filter(Boolean);
   var gal=n?'<section class="dt-gal'+(n<5?' one':'')+'"><button class="dt-g-main" onclick="openLB(0)" aria-label="Ampliar foto"><img src="'+f[0]+'" alt="'+d.nome+'"></button>'
       +(n>=5?f.slice(1,5).map(function(s,i){return'<button onclick="openLB('+(i+1)+')" aria-label="Ampliar foto"><img src="'+s+'" alt="" loading="lazy"></button>';}).join(''):'')
       +'<div class="dt-g-acts"><button onclick="openLB(0)">Ver as '+n+' fotos</button><button onclick="dtGo(\'dt-video\')">▶ Vídeo</button><button onclick="dtGo(\'dt-plantas\')">Plantas</button><button onclick="dtGo(\'dt-local\')">Mapa</button></div></section>'
@@ -1104,13 +1124,13 @@ function dtHTML(d){
   return'<header class="dt-bar"><button class="dt-back" onclick="closeDetail()">← Voltar</button><div class="dt-bar-name">'+d.nome+'</div>'
     +'<div class="dt-bar-act"><button class="dt-hide-m" onclick="shareDetail()">↗ Compartilhar</button><a class="dt-bar-wa" href="'+wa+'" target="_blank" rel="noopener">WhatsApp</a></div></header>'
     +'<div class="dt-wrap">'+gal
-    +'<div class="dt-head"><div class="dt-meta"><span class="dt-pill" style="background:'+d.statusBg+'">'+d.status+'</span><span>'+d.tipo+'</span></div><h1>'+d.nome+'</h1><p class="dt-loc">'+d.local+'</p></div></div>'
+    +'<div class="dt-head"><div class="dt-meta"><span class="dt-pill" style="background:'+d.statusBg+'">'+d.status+'</span><span>'+d.tipo+'</span>'+(d.complexo&&!d.principal&&fam.length?'<button class="dt-cx" onclick="dtGo(\'dt-complexo\')">🏘️ '+d.complexo+'</button>':'')+'</div><h1>'+d.nome+'</h1><p class="dt-loc">'+d.local+'</p></div></div>'
     +'<div class="dt-tabs" role="navigation" aria-label="Seções"><div class="dt-wrap">'+tabs.map(function(t,i){return'<button data-t="'+t[0]+'" class="'+(i===0?'on':'')+'" onclick="dtGo(\''+t[0]+'\')">'+t[1]+'</button>';}).join('')+'</div></div>'
     +'<div class="dt-wrap dt-layout"><main>'
     +'<section class="dt-sec" id="dt-sobre"><h2>Visão geral</h2>'+(d.stats.length?'<div class="dt-stats">'+d.stats.map(function(s){return'<div><b>'+s.n+'</b><span>'+s.l+'</span></div>';}).join('')+'</div>':'')
     +'<div class="dt-desc">'+d.desc.map(function(p){return'<p>'+p+'</p>';}).join('')+'</div>'
     +(d.difs.length?'<ul class="dt-difs">'+d.difs.map(function(x){return'<li>'+x+'</li>';}).join('')+'</ul>':'')+'</section>'
-    +(n?'<section class="dt-sec" id="dt-fotos"><h2>Fotos</h2><div class="dt-photos">'+f.map(function(s,i){return'<button onclick="openLB('+i+')" aria-label="Ampliar foto '+(i+1)+'"><img src="'+s+'" alt="'+d.nome+' foto '+(i+1)+'" loading="lazy"></button>';}).join('')+'</div></section>':'')
+    +famHTML+(n?'<section class="dt-sec" id="dt-fotos"><h2>Fotos</h2><div class="dt-photos">'+f.map(function(s,i){return'<button onclick="openLB('+i+')" aria-label="Ampliar foto '+(i+1)+'"><img src="'+s+'" alt="'+d.nome+' foto '+(i+1)+'" loading="lazy"></button>';}).join('')+'</div></section>':'')
     +'<section class="dt-sec" id="dt-video"><h2>Vídeo</h2>'+video+'</section>'
     +'<section class="dt-sec" id="dt-plantas"><h2>Plantas</h2>'+plantas+'</section>'
     +lazer+local+ficha

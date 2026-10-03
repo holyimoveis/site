@@ -18547,9 +18547,9 @@ function ClienteDetail({ cliente, imoveis, timeline, onEdit, onAddInt, onClose }
 // ═══════════════════════════════════════════════════════════════════════
 // EMPREENDIMENTOS (aparecem no carrossel do site)
 // ═══════════════════════════════════════════════════════════════════════
-const EMP_STATUS = ["Lançamento", "Em obras", "Pronto", "Em breve"];
-const EMP_STC = { "Lançamento": C.gold, "Em obras": C.olive, "Pronto": C.success, "Em breve": C.muted };
-const EMP_EMPTY = { nome: "", cidade: "Chapecó", estado: "SC", status: "Lançamento", tipoLabel: "", preco: "Sob consulta", descricao: "",
+const EMP_STATUS = ["Pré-lançamento", "Lançamento", "Em obras", "Pronto", "Em breve"];
+const EMP_STC = { "Pré-lançamento": C.blue, "Lançamento": C.gold, "Em obras": C.olive, "Pronto": C.success, "Em breve": C.muted };
+const EMP_EMPTY = { nome: "", complexo: "", principal: false, soNoComplexo: false, cidade: "Chapecó", estado: "SC", status: "Lançamento", tipoLabel: "", preco: "Sob consulta", descricao: "",
     destaques: [], diferenciais: [], lazer: [], fotos: [], lazerFotos: [], plantas: [], endereco: "", coords: "", aprox: true,
     proximidades: "", ficha: "", video: "", publicarSite: true };
 const empLinhas = v => Array.isArray(v) ? v.join("\n") : String(v || "");
@@ -18585,6 +18585,17 @@ function EmprForm({ initial, onSave, onClose }) {
                 React.createElement(FI, { label: "Valores", value: f.preco, onChange: v => F("preco", v), placeholder: "Sob consulta / A partir de R$ ..." })),
             React.createElement(FI, { label: "Descrição", rows: 6, value: f.descricao, onChange: v => F("descricao", v), placeholder: "Primeiro parágrafo: resumo curto. Pule linha para cada novo parágrafo." }),
             ajuda("O primeiro parágrafo aparece no destaque da página; os demais vêm logo abaixo."),
+            React.createElement("div", { style: { padding: "12px 14px", background: C.cream, border: `0.5px solid ${C.border}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 10 } },
+                React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: C.ink } }, "🏘️ Faz parte de um complexo?"),
+                React.createElement("input", { list: "emp-complexos", value: f.complexo || "", onChange: e => F("complexo", e.target.value), placeholder: "Ex.: ALL Resort Club Residence (deixe vazio se for independente)", style: { padding: "9px 11px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 13 } }),
+                React.createElement("datalist", { id: "emp-complexos" }, Array.from(new Set(HolyStore.get("empreendimentos", []).map(x => x.complexo).filter(Boolean))).map(c => React.createElement("option", { key: c, value: c }))),
+                f.complexo && React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.inkMid, cursor: "pointer" } },
+                    React.createElement("input", { type: "checkbox", checked: !!f.principal, onChange: e => F("principal", e.target.checked), style: { accentColor: C.olive } }),
+                    "Esta é a página principal do complexo (apresenta o conceito e lista os produtos)"),
+                f.complexo && !f.principal && React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.inkMid, cursor: "pointer" } },
+                    React.createElement("input", { type: "checkbox", checked: !!f.soNoComplexo, onChange: e => F("soNoComplexo", e.target.checked), style: { accentColor: C.olive } }),
+                    "Mostrar só dentro da página do complexo (não aparece no carrossel)"),
+                ajuda("Empreendimentos com o mesmo nome de complexo ficam ligados no site: cada página mostra os demais produtos do complexo.")),
             React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700, color: C.olive, cursor: "pointer", padding: "12px 14px", background: C.oliveGhost, border: `0.5px solid ${C.olivePale}`, borderRadius: 10 } },
                 React.createElement("input", { type: "checkbox", checked: f.publicarSite !== false, onChange: e => F("publicarSite", e.target.checked), style: { accentColor: C.olive, width: 16, height: 16 } }),
                 "🌐 Mostrar no site")),
@@ -18641,11 +18652,19 @@ function EmpreendimentosPage() {
         if (!confirm(`Excluir "${e.nome}"? Ele sai do site e do CRM. Se quiser só tirar do site, use "Ocultar".`)) return;
         setLista(p => renumera([...p].filter(x => x.id !== e.id).sort((a, b) => (+a.ordem || 0) - (+b.ordem || 0))));
     }
+    const pacoteRef = useRef();
+    async function importarArquivo(ev) {
+        const fl = ev.target.files && ev.target.files[0]; ev.target.value = ""; if (!fl) return;
+        try { setImp("Lendo o pacote…"); const d = JSON.parse(await fl.text()); await importarDados(Array.isArray(d) ? d : (d.empreendimentos || [])); }
+        catch (er) { setImp("❌ Arquivo inválido: " + er.message); }
+    }
     async function importar() {
         if (!confirm("Trazer Moov, Sky, Luxury e Privilège do site para o CRM? As fotos serão enviadas para a nuvem; leva cerca de 1 minuto.")) return;
+        try { setImp("Baixando os dados do site…"); await importarDados(await (await fetch("/crm/empreendimentos-iniciais.json", { cache: "no-store" })).json()); }
+        catch (er) { setImp("❌ Não consegui importar: " + er.message); }
+    }
+    async function importarDados(dados) {
         try {
-            setImp("Baixando os dados do site…");
-            const dados = await (await fetch("/crm/empreendimentos-iniciais.json", { cache: "no-store" })).json();
             const atuais = HolyStore.get("empreendimentos", []); const ja = new Set(atuais.map(e => e.id));
             const novos = dados.filter(e => !ja.has(e.id));
             let total = 0, feitas = 0;
@@ -18675,6 +18694,8 @@ function EmpreendimentosPage() {
             React.createElement("div", { style: { fontSize: 12, color: C.muted } }, `${lista.length} empreendimento(s) · ${nSite} no site · a ordem abaixo é a ordem do carrossel`),
             React.createElement("div", { style: { display: "flex", gap: 8 } },
                 React.createElement(PBtn, { variant: "ghost", sm: true, onClick: importar }, "⬇ Trazer os atuais do site"),
+                React.createElement(PBtn, { variant: "ghost", sm: true, onClick: () => pacoteRef.current && pacoteRef.current.click() }, "📦 Importar pacote (.json)"),
+                React.createElement("input", { ref: pacoteRef, type: "file", accept: ".json,application/json", style: { display: "none" }, onChange: importarArquivo }),
                 React.createElement(PBtn, { sm: true, onClick: () => setEdit("novo") }, "+ Cadastrar empreendimento"))),
         imp && React.createElement("div", { style: { fontSize: 12, color: C.inkMid, background: C.oliveGhost, border: `0.5px solid ${C.olivePale}`, padding: "10px 14px", borderRadius: 8, marginBottom: 14 } }, imp),
         !lista.length && React.createElement("div", { style: { textAlign: "center", padding: "48px 20px", background: C.white, border: `0.5px dashed ${C.border}`, borderRadius: 12, color: C.muted, fontSize: 13, lineHeight: 1.7 } },
@@ -18692,7 +18713,8 @@ function EmpreendimentosPage() {
                         React.createElement(Chip, { label: e.status, color: EMP_STC[e.status] || C.muted }),
                         React.createElement(Chip, { label: e.publicarSite === false ? "Oculto" : "🌐 No site", color: e.publicarSite === false ? C.muted : C.blue })),
                     React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, e.nome),
-                    React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 12 } }, [e.cidade, e.tipoLabel].filter(Boolean).join(" · ")),
+                    React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: e.complexo ? 4 : 12 } }, [e.cidade, e.tipoLabel].filter(Boolean).join(" · ")),
+                    e.complexo && React.createElement("div", { style: { fontSize: 10, color: C.gold, fontWeight: 700, marginBottom: 12 } }, "🏘️ " + e.complexo + (e.principal ? " · página principal" : "")),
                     React.createElement("div", { style: { display: "flex", gap: 5, flexWrap: "wrap" } },
                         btnP("◀", () => mover(e.id, -1), null, "Mover para antes"),
                         btnP("▶", () => mover(e.id, 1), null, "Mover para depois"),
