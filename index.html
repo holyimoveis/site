@@ -818,12 +818,14 @@ var DEMO_IMOVEIS=[
 // ===== BANNER (5 slides) =====
 function heroGo(sel){var el=document.querySelector(sel);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
 function heroLitoral(){var b=document.querySelector('.filter-btn[onclick*="litoral"]');if(b)b.click();}
+var BANNER={};
+async function loadSiteCfg(){try{var r=await fetch('/api/site');var d=await r.json();if(d.success&&d.banners){BANNER=d.banners;var cur=_hs;buildHero();goHero(cur);}}catch(e){}}
 var HERO=[
-  {lbl:'Costa Esmeralda',k:'Litoral norte de Santa Catarina',t:'Viva a Costa Esmeralda',s:'Itapema, Porto Belo e Bombinhas: imóveis frente e quadra mar selecionados pela Holy.',cta:'Ver imóveis no litoral',go:heroLitoral,img:function(){return U(PX.praia1,2200);}},
+  {lbl:'Costa Esmeralda',k:'Litoral norte de Santa Catarina',t:'Viva a Costa Esmeralda',s:'Itapema, Porto Belo e Bombinhas: imóveis frente e quadra mar selecionados pela Holy.',cta:'Ver imóveis no litoral',go:heroLitoral,img:function(){return BANNER.litoral||U(PX.praia1,2200);}},
   {lbl:'Moov Residence',k:'Lançamento em Chapecó',t:'Moov Residence',s:'25 andares, apartamentos de 2 e 3 dormitórios e lazer completo com piscina, academia e coworking.',cta:'Conhecer o Moov',go:function(){openEmprModal('moov');},img:function(){return EMPR[0].fotos[0];},pos:'center 35%'},
   {lbl:'Sky Residence',k:'Lançamento em Chapecó',t:'Sky Residence',s:'A torre mais alta de Chapecó, com rooftop, piscina de borda infinita e spa.',cta:'Conhecer o Sky',go:function(){openEmprModal('sky');},img:function(){return EMPR[1].fotos[0];},pos:'center 40%'},
-  {lbl:'A Holy',k:'Holy Curadoria Imobiliária',t:'Curadoria, não catálogo',s:'Cada imóvel passa pela nossa seleção antes de chegar até você. Atendimento próximo, do primeiro contato à escritura.',cta:'Conheça a Holy',go:function(){heroGo('#institucional');},img:function(){var i=document.querySelector('.inst-img-wrap img');return i?i.src:'';}},
-  {lbl:'Venda seu imóvel',k:'Para proprietários',t:'Venda seu imóvel com a Holy',s:'Avaliação de mercado, fotos profissionais e divulgação para uma base de compradores qualificados.',cta:'Avaliar meu imóvel',go:function(){window.open('https://wa.me/5549988454873?text='+encodeURIComponent('Olá! Quero avaliar meu imóvel para venda com a Holy.'),'_blank');},img:function(){return U(PX.living2,2200);}}
+  {lbl:'A Holy',k:'Holy Curadoria Imobiliária',t:'Curadoria, não catálogo',s:'Cada imóvel passa pela nossa seleção antes de chegar até você. Atendimento próximo, do primeiro contato à escritura.',cta:'Conheça a Holy',go:function(){heroGo('#institucional');},img:function(){return BANNER.holy||'https://images.unsplash.com/photo-1760204741315-abfc98ce3bf5?auto=format&fit=crop&w=2200&q=78';},pos:'center 55%'},
+  {lbl:'Venda seu imóvel',k:'Para proprietários',t:'Venda seu imóvel com a Holy',s:'Avaliação de mercado, fotos profissionais e divulgação para uma base de compradores qualificados.',cta:'Avaliar meu imóvel',go:function(){window.open('https://wa.me/5549988454873?text='+encodeURIComponent('Olá! Quero avaliar meu imóvel para venda com a Holy.'),'_blank');},img:function(){return BANNER.venda||U(PX.living2,2200);}}
 ];
 var _hs=0,_hsEl=0,_hsLast=0,_hsHover=false,HS_DUR=6500,_hsRM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function buildHero(){
@@ -945,7 +947,7 @@ function apiEmpr(x){
   var lz=(x.lazer||[]).join(' ').toLowerCase(),tem=function(re){return re.test(lz)?'Sim':'Não';};
   EMPR_EXTRA[x.id]={tipoLabel:x.tipoLabel,endereco:x.endereco,coords:x.coords,aprox:x.aprox!==false,preco:x.preco,video:x.video||'',
     descExtra:paras.slice(1),lazer:x.lazer||[],plantas:x.plantas||[],proximidades:x.proximidades||[],ficha:ficha};
-  return{id:x.id,nome:x.nome,complexo:x.complexo||'',principal:!!x.principal,soNoComplexo:!!x.soNoComplexo,cidade:x.cidade||'SC',estado:x.estado||'SC',tag:'',status:x.status||'Lançamento',
+  return{id:x.id,banner:x.banner||'',nome:x.nome,complexo:x.complexo||'',principal:!!x.principal,soNoComplexo:!!x.soNoComplexo,cidade:x.cidade||'SC',estado:x.estado||'SC',tag:'',status:x.status||'Lançamento',
     statusBg:ST_BG[String(x.status||'').toLowerCase()]||'#4a5c2f',desc:paras[0]||'',stats:x.destaques||[],
     fotos:x.fotos||[],lazerFotos:x.lazerFotos||[],
     dados:{tipo:x.tipoLabel||'Empreendimento',andares:fv('andares'),area:fv('área privativa'),dorms:fv('dormitórios'),piscina:tem(/piscina/),rooftop:tem(/rooftop/),academia:tem(/academia/),spa:tem(/spa|sauna/),kids:tem(/kids|brinquedoteca|playground/),cowork:tem(/cowork/),status:x.status||'—',difs:x.diferenciais||[]}};
@@ -957,7 +959,7 @@ function syncEmprSite(){
     var x=EMPR_EXTRA[em.id]||{};
     HERO[i+1]={lbl:em.nome,k:em.status+(em.cidade&&em.cidade!=='SC'?' em '+em.cidade:''),t:em.nome,
       s:String(em.desc||'').split(/(?<=\.)\s/)[0].slice(0,160),cta:'Conhecer o '+em.nome.split(' ')[0],
-      go:(function(id){return function(){openEmprModal(id);};})(em.id),img:(function(u){return function(){return u;};})(em.fotos[0]),pos:'center 40%'};
+      go:(function(id){return function(){openEmprModal(id);};})(em.id),img:(function(u){return function(){return u;};})(em.banner||em.fotos[0]),pos:'center 45%'};
   });
   if(comFoto.length){var cur=_hs;buildHero();goHero(cur);}
   // Formulário de contato: lista de empreendimentos atualizada
@@ -1368,7 +1370,7 @@ async function sendForm(e){
 }
 // INIT
 window.addEventListener('DOMContentLoaded',function(){
-  buildHero();buildBlog();buildCarousel();Promise.all([loadEmpr(),loadImoveis()]).then(openFromHash);initMap();updFavBtns();updWLBadge();rndrWL();
+  buildHero();loadSiteCfg();buildBlog();buildCarousel();Promise.all([loadEmpr(),loadImoveis()]).then(openFromHash);initMap();updFavBtns();updWLBadge();rndrWL();
   document.getElementById('srch').addEventListener('keydown',function(e){if(e.key==='Enter')srchIm(this.value);});
 });
 </script>

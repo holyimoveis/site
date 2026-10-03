@@ -41,6 +41,7 @@ export function paraSite(e) {
     nome: String(e.nome || 'Empreendimento'),
     complexo: String(e.complexo || '').trim(),
     principal: !!e.principal,
+    banner: https(e.banner) ? e.banner : '',
     soNoComplexo: !!e.complexo && !e.principal && !!e.soNoComplexo,
     cidade: String(e.cidade || '').replace(/-SC$/i, '').trim() || 'SC',
     estado: e.estado || 'SC',

@@ -17253,7 +17253,7 @@ window.onerror=function(msg,src,line,col,err){
 // ══════════════════════════════════════════════════════════════════
 // HOLY CLOUD: dados do CRM salvos na nuvem (Vercel), com cópia no aparelho
 // ══════════════════════════════════════════════════════════════════
-var HOLY_KEYS = ['imoveis', 'clientes', 'timeline', 'empreendimentos', 'wa_config'];
+var HOLY_KEYS = ['imoveis', 'clientes', 'timeline', 'empreendimentos', 'wa_config', 'site_config'];
 var HolyAuth = {
   get: function () { try { return localStorage.getItem('hly_admin_key') || ''; } catch (e) { return ''; } },
   set: function (k) { try { localStorage.setItem('hly_admin_key', k); } catch (e) {} },
@@ -18600,6 +18600,20 @@ function EmprForm({ initial, onSave, onClose }) {
                 React.createElement("input", { type: "checkbox", checked: f.publicarSite !== false, onChange: e => F("publicarSite", e.target.checked), style: { accentColor: C.olive, width: 16, height: 16 } }),
                 "🌐 Mostrar no site")),
         tab === "fotos" && col(
+            (() => {
+                const irmaos = f.complexo ? HolyStore.get("empreendimentos", []).filter(x => x.complexo === f.complexo && x.id !== f.id) : [];
+                const vistos = new Set(); const cand = [];
+                [[f.nome, (f.fotos || []).concat(f.lazerFotos || [])], ...irmaos.map(x => [x.nome, x.fotos || []])].forEach(([dono, lst]) => lst.forEach(ft => { if (ft && ft.url && /^https:/.test(ft.url) && !vistos.has(ft.url)) { vistos.add(ft.url); cand.push({ url: ft.url, dono }); } }));
+                if (!cand.length) return null;
+                return React.createElement("div", { style: { padding: "12px 14px", background: C.cream, border: `0.5px solid ${C.border}`, borderRadius: 10 } },
+                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" } },
+                        React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: C.ink } }, "🖼️ Foto do banner da página inicial"),
+                        f.banner && React.createElement("button", { onClick: () => F("banner", ""), style: { fontSize: 11, background: "none", border: `0.5px solid ${C.border}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer", color: C.muted } }, "Usar a capa (padrão)")),
+                    ajuda("Se este empreendimento aparecer no banner do site, esta é a imagem usada. Clique para escolher." + (irmaos.length ? " Inclui as fotos dos outros produtos do complexo." : "")),
+                    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(96px,1fr))", gap: 6, marginTop: 10, maxHeight: 260, overflowY: "auto" } },
+                        cand.map(c => React.createElement("button", { key: c.url, title: c.dono, onClick: () => F("banner", c.url), style: { padding: 0, border: f.banner === c.url ? `3px solid ${C.gold}` : `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", cursor: "pointer", height: 68, background: "#eee" } },
+                            React.createElement("img", { src: c.url, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } })))));
+            })(),
             ajuda("A foto marcada como CAPA aparece no card do carrossel e no topo da página. Use as setas para ordenar."),
             React.createElement(PhotoGallery, { fotos: f.fotos || [], onChange: v => F("fotos", v) })),
         tab === "plantas" && col(
@@ -19342,7 +19356,31 @@ function ConfigPage() {
     e.target.value = '';
   }
   function sair() { if (confirm('Sair do CRM neste aparelho? Seus dados continuam salvos na nuvem.')) { HolyStore.flush(); HolyAuth.clear(); setTimeout(() => location.reload(), 600); } }
+  const [siteCfg, setSiteCfg] = usePS('site_config', {});
+  const [upB, setUpB] = useState('');
+  const banners = (siteCfg && siteCfg.banners) || {};
+  const setBanner = (k, v) => setSiteCfg(Object.assign({}, siteCfg || {}, { banners: Object.assign({}, banners, { [k]: v }) }));
+  async function enviarBanner(k, ev) {
+    const fl = ev.target.files && ev.target.files[0]; ev.target.value = ''; if (!fl) return;
+    setUpB(k);
+    try { const u = await holyUploadFoto(fl); if (/^https:/.test(u)) setBanner(k, u); } finally { setUpB(''); }
+  }
+  const slot = (k, titulo, padrao) => React.createElement('div', { style: { border: '0.5px solid #dde0d6', borderRadius: 10, overflow: 'hidden', background: '#fff' } },
+    React.createElement('div', { style: { height: 110, background: `#2d3a1f url(${banners[k] || padrao}) center/cover` } }),
+    React.createElement('div', { style: { padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 } },
+      React.createElement('div', { style: { fontSize: 12, fontWeight: 700 } }, titulo),
+      React.createElement('div', { style: { fontSize: 10, color: '#7a7d72' } }, banners[k] ? 'Foto sua' : 'Foto padrão'),
+      React.createElement('label', { style: { fontSize: 11, fontWeight: 700, color: '#4a5c2f', cursor: 'pointer' } }, upB === k ? 'Enviando…' : '⬆ Trocar foto',
+        React.createElement('input', { type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: ev => enviarBanner(k, ev) })),
+      banners[k] && React.createElement('button', { onClick: () => setBanner(k, ''), style: { fontSize: 11, background: 'none', border: 'none', color: '#7a7d72', cursor: 'pointer', padding: 0, textAlign: 'left' } }, 'Voltar à padrão')));
   return React.createElement('div', { style: { maxWidth: 620, display: 'flex', flexDirection: 'column', gap: 16 } },
+    React.createElement('div', { style: box('#b8993a') },
+      h('🖼️ Banner da página inicial'),
+      p('Troque as fotos dos slides fixos do banner. Os slides de empreendimentos usam a foto escolhida em cada empreendimento (Editar > Fotos). Use fotos na horizontal, com boa resolução.'),
+      React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginTop: 12 } },
+        slot('litoral', 'Costa Esmeralda', 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=70'),
+        slot('holy', 'A Holy', 'https://images.unsplash.com/photo-1760204741315-abfc98ce3bf5?auto=format&fit=crop&w=600&q=70'),
+        slot('venda', 'Venda seu imóvel', 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=600&q=70'))),
     React.createElement('div', { style: box('#4a5c2f') },
       h('☁ Conexão com a nuvem'),
       p('Seus dados ficam salvos na nuvem e aparecem em qualquer computador ou celular onde você entrar com a senha do CRM.'),
