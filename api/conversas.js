@@ -1,6 +1,6 @@
 // Conversas do WhatsApp para o CRM (só com X-Admin-Key)
 import { sql, ensureSchema, cors, isAdmin, body, ok, err, fail } from './_lib.js';
-import { enviarTexto, salvarMensagem, whatsappConfigurado, provedor, conectarWebhookKapso, lerConfig, pensar, catalogo, montarHistorico } from './_wa.js';
+import { enviarTexto, salvarMensagem, whatsappConfigurado, provedor, conectarWebhookKapso, lerConfig, pensar, catalogo, montarHistorico, avisarEdipo, criarModeloAviso } from './_wa.js';
 export const maxDuration = 60;
 
 export default async function handler(req, res) {
@@ -40,6 +40,17 @@ export default async function handler(req, res) {
         const site = process.env.SITE_URL || ('https://' + (req.headers['x-forwarded-host'] || req.headers.host));
         const out = await pensar(cfg, await catalogo(site), montarHistorico(hist));
         return ok(res, { saida: out });
+      }
+      // Modelo de aviso (Meta) e teste do aviso no WhatsApp pessoal
+      if (b.acao === 'modeloAviso') {
+        try { return ok(res, await criarModeloAviso()); } catch (e) { return err(res, 400, e.message); }
+      }
+      if (b.acao === 'testarAviso') {
+        if (!whatsappConfigurado()) return err(res, 400, 'O WhatsApp da Holy ainda não está conectado.');
+        try {
+          const r = await avisarEdipo(Object.assign(await lerConfig(), b.config || {}), { nome: 'Cliente de teste', telefone: '(49) 99999-0000', motivo: 'Teste do aviso', resumo: 'Este é um teste do aviso da Helena.' });
+          return r.enviado ? ok(res, r) : err(res, 400, r.motivo);
+        } catch (e) { return err(res, 502, e.message); }
       }
       // Conectar o webhook (Kapso ou 360dialog, conforme a chave cadastrada)
       if (b.acao === 'webhook' && process.env.KAPSO_API_KEY) {

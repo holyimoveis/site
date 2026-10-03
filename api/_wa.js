@@ -15,10 +15,15 @@ const MOTIVOS = {
 
 export const PADRAO_CONFIG = {
   ativo: true,
-  nomeAssistente: 'Assistente virtual da Holy',
-  tom: 'Próximo, educado e direto, como um corretor experiente conversando no WhatsApp. Frases curtas, linguagem simples, sem exagerar nos emojis (no máximo um por mensagem). Trata o cliente pelo primeiro nome quando souber.',
-  infoHoly: 'Holy Curadoria Imobiliária: curadoria de imóveis de alto padrão em Santa Catarina, com atuação em Chapecó, Balneário Camboriú, Itapema e Porto Belo. O corretor responsável é o Édipo Junior.',
+  nomeAssistente: 'Helena',
+  apresentacao: 'Helena, assistente virtual da Holy',
+  tom: 'Informal, porém elegante: próxima e calorosa, como uma consultora experiente de imóveis de alto padrão conversando no WhatsApp. Frases curtas, português correto, sem gírias (nunca use "top"), no máximo um emoji por mensagem. Trata o cliente pelo primeiro nome quando souber.',
+  infoHoly: 'Holy Curadoria Imobiliária: curadoria de imóveis de alto padrão em Santa Catarina, com atuação em Chapecó, Balneário Camboriú, Itapema e Porto Belo. O corretor responsável é o Édipo Junior, com 16 anos de trajetória no mercado imobiliário.',
   regras: '',
+  horaInicio: 8,
+  horaFim: 20,
+  retorno: 'em até 1 hora',
+  avisoNumero: '',
 };
 
 // ── Envio ──────────────────────────────────────────────────────────────
@@ -165,13 +170,24 @@ const FERRAMENTA = {
   },
 };
 
+export function noHorario(cfg, d = new Date()) {
+  const h = +d.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false }) % 24;
+  return h >= +cfg.horaInicio && h < +cfg.horaFim;
+}
 function prompt(cfg, cat) {
-  const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
-  return `Você é o ${cfg.nomeAssistente}, que atende pelo WhatsApp da Holy Curadoria Imobiliária. Hoje é ${hoje}.
+  const agora = new Date();
+  const hoje = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+  const hora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+  const dentro = noHorario(cfg, agora);
+  return `Você é a ${cfg.nomeAssistente}, que atende pelo WhatsApp da Holy Curadoria Imobiliária. Hoje é ${hoje}, ${hora} (horário de Brasília).
 
 IDENTIDADE
-- Você é um assistente virtual. Diga isso de forma natural na primeira resposta da conversa e sempre que perguntarem. Nunca afirme ser o Édipo ou uma pessoa.
-- Você escreve no tom do Édipo, mas fala em nome da Holy.
+- Você é a ${cfg.apresentacao || cfg.nomeAssistente}. Apresente-se assim, de forma natural, na primeira resposta da conversa, e confirme que é uma assistente virtual sempre que perguntarem. Nunca afirme ser o Édipo ou uma pessoa.
+- Você escreve no tom do Édipo, mas fala em nome da Holy. Use o feminino ao falar de si mesma.
+
+HORÁRIOS
+- Você atende 24 horas. O Édipo atende das ${cfg.horaInicio}h às ${cfg.horaFim}h e retorna ${cfg.retorno}.
+- Agora ${dentro ? `está DENTRO do horário do Édipo: ao passar a conversa, diga que ele retorna ${cfg.retorno}.` : `está FORA do horário do Édipo: ao passar a conversa, diga que ele retorna a partir das ${cfg.horaInicio}h, e continue disponível para tirar dúvidas até lá.`}
 
 TOM
 ${cfg.tom}
@@ -206,7 +222,7 @@ QUANDO PASSAR PARA O ÉDIPO (transferir = true) — SOMENTE nestes casos
 - pediu_humano: pediu para falar com uma pessoa, com o corretor ou com o Édipo.
 - duvida_pontual: fez uma pergunta específica que o catálogo e as informações da Holy não respondem (ex.: proposta de valor, condição especial, documentação de um imóvel, disponibilidade de unidade específica).
 Em qualquer outra situação, continue conduzindo você mesmo, mesmo que o cliente esteja muito interessado.
-Ao transferir, avise com naturalidade que o Édipo vai continuar o atendimento por aqui mesmo, em breve. Não faça mais perguntas nessa mensagem.
+Ao transferir, avise com naturalidade que o Édipo vai continuar o atendimento por aqui mesmo, respeitando o que está em HORÁRIOS. Não faça mais perguntas nessa mensagem.
 
 FORMATO
 Mensagens curtas de WhatsApp (até 4 ou 5 linhas). Sem títulos, tabelas ou markdown; pode usar *negrito* do WhatsApp com moderação. Links sempre completos.
@@ -328,6 +344,47 @@ export async function processarConversa(waId, site, nomePerfil) {
   if (out.transferir) {
     await sql.query('UPDATE wa_conversas SET pausado = true, aguardando = true, motivo = $2 WHERE wa_id = $1',
       [waId, MOTIVOS[out.motivo_transferencia] || MOTIVOS.outro]);
+    try { await avisarEdipo(cfg, { nome: out.nome_cliente || nomePerfil || '', telefone: telefoneBR(waId), motivo: MOTIVOS[out.motivo_transferencia] || MOTIVOS.outro, resumo: out.resumo || '' }); }
+    catch (e) { console.error('Aviso ao Édipo falhou', e); }
   }
   try { await sincronizarCRM(waId, conv, out, nomePerfil); } catch (e) { console.error('CRM falhou', e); }
+}
+
+// ── Aviso no WhatsApp pessoal do Édipo ────────────────────────────────
+// Mensagem livre só é entregue se esse número tiver escrito para a Holy nas últimas 24h;
+// fora disso a Meta exige um modelo aprovado (aviso_lead).
+export const MODELO_AVISO = 'aviso_lead';
+const limpar = (t, n) => String(t || '-').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, n) || '-';
+export async function avisarEdipo(cfg, d) {
+  const para = String(process.env.WHATSAPP_AVISO_PARA || cfg.avisoNumero || '').replace(/\D/g, '');
+  if (para.length < 12) return { enviado: false, motivo: 'Número para avisos não configurado.' };
+  const p = [limpar(d.nome || 'Cliente', 60), limpar(d.telefone, 30), limpar(d.motivo, 80), limpar(d.resumo, 300)];
+  try {
+    await postar({ to: para, type: 'template', template: { name: MODELO_AVISO, language: { code: 'pt_BR' }, components: [{ type: 'body', parameters: p.map((t) => ({ type: 'text', text: t })) }] } });
+    return { enviado: true, via: 'modelo' };
+  } catch (e) {
+    // modelo ainda não aprovado: tenta mensagem livre (funciona dentro da janela de 24h)
+    await postar({ to: para, type: 'text', text: { body: `🔔 Novo atendimento passado pela Helena\n\nCliente: ${p[0]}\nWhatsApp: ${p[1]}\nMotivo: ${p[2]}\nResumo: ${p[3]}\n\nResponda pelo WhatsApp da Holy.` } });
+    return { enviado: true, via: 'texto', aviso: 'Modelo ainda não aprovado; enviado como mensagem comum.' };
+  }
+}
+export async function criarModeloAviso() {
+  if (!process.env.KAPSO_API_KEY) throw new Error('A criação automática do modelo funciona com a Kapso. Falta KAPSO_API_KEY.');
+  const r0 = await fetch(KAPSO_PLAT + '/whatsapp/phone_numbers', { headers: { 'X-API-Key': process.env.KAPSO_API_KEY } });
+  const j0 = await r0.json().catch(() => ({}));
+  const num = (Array.isArray(j0.data) ? j0.data : []).find((x) => String(x.status || '').toUpperCase() === 'CONNECTED') || (j0.data || [])[0];
+  if (!num || !num.business_account_id) throw new Error('Nenhum número conectado na Kapso ainda. Crie o modelo depois da conexão.');
+  const waba = num.business_account_id;
+  const h = { 'X-API-Key': process.env.KAPSO_API_KEY, 'Content-Type': 'application/json' };
+  const lst = await fetch(`${KAPSO_META}/${waba}/message_templates?name=${MODELO_AVISO}`, { headers: h }).then((r) => r.json()).catch(() => ({}));
+  const ja = (Array.isArray(lst.data) ? lst.data : []).find((t) => t.name === MODELO_AVISO);
+  if (ja) return { status: ja.status, existente: true };
+  const r = await fetch(`${KAPSO_META}/${waba}/message_templates`, { method: 'POST', headers: h, body: JSON.stringify({
+    name: MODELO_AVISO, category: 'UTILITY', language: 'pt_BR',
+    components: [{ type: 'BODY', text: 'Novo atendimento passado pela Helena: {{1}}, WhatsApp {{2}}. Motivo: {{3}}. Resumo: {{4}}. Responda pelo WhatsApp da Holy.',
+      example: { body_text: [['Maria Silva', '(49) 99999-0000', 'Quer agendar uma visita', 'Busca apartamento de 3 suítes em Itapema para morar']] } }],
+  }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('A Meta recusou o modelo: ' + ((j.error && (j.error.message || j.error)) || JSON.stringify(j).slice(0, 200)));
+  return { status: j.status || 'PENDING', existente: false };
 }

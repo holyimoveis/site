@@ -18677,10 +18677,15 @@ function EmpreendimentosPage() {
 // ═══════════════════════════════════════════════════════════════════════
 const WA_PADRAO = {
     ativo: true,
-    nomeAssistente: "Assistente virtual da Holy",
-    tom: "Próximo, educado e direto, como um corretor experiente conversando no WhatsApp. Frases curtas, linguagem simples, sem exagerar nos emojis (no máximo um por mensagem). Trata o cliente pelo primeiro nome quando souber.",
-    infoHoly: "Holy Curadoria Imobiliária: curadoria de imóveis de alto padrão em Santa Catarina, com atuação em Chapecó, Balneário Camboriú, Itapema e Porto Belo. O corretor responsável é o Édipo Junior.",
-    regras: ""
+    nomeAssistente: "Helena",
+    apresentacao: "Helena, assistente virtual da Holy",
+    tom: "Informal, porém elegante: próxima e calorosa, como uma consultora experiente de imóveis de alto padrão conversando no WhatsApp. Frases curtas, português correto, sem gírias (nunca use \"top\"), no máximo um emoji por mensagem. Trata o cliente pelo primeiro nome quando souber.",
+    infoHoly: "Holy Curadoria Imobiliária: curadoria de imóveis de alto padrão em Santa Catarina, com atuação em Chapecó, Balneário Camboriú, Itapema e Porto Belo. O corretor responsável é o Édipo Junior, com 16 anos de trajetória no mercado imobiliário.",
+    regras: "",
+    horaInicio: 8,
+    horaFim: 20,
+    retorno: "em até 1 hora",
+    avisoNumero: ""
 };
 const waTel = id => { const d = String(id || "").replace(/\D/g, ""); const n = d.startsWith("55") ? d.slice(2) : d; return n.length === 11 ? `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}` : n.length === 10 ? `(${n.slice(0, 2)}) ${n.slice(2, 6)}-${n.slice(6)}` : "+" + d; };
 const waHora = d => { try { const x = new Date(d), h = new Date(); return x.toDateString() === h.toDateString() ? x.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : x.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + x.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } };
@@ -18736,6 +18741,20 @@ function WaSimulador({ cfg }) {
 function WaConfig({ cfg, setCfg, salvar, salvo }) {
     const F = (k, v) => setCfg(Object.assign({}, cfg, { [k]: v }));
     const [msg, setMsg] = useState("");
+    function numAviso() { const d = String(cfg.avisoNumero || "").replace(/\D/g, ""); return d ? (d.startsWith("55") ? d : "55" + d) : ""; }
+    async function modeloAviso() {
+        setMsg("Enviando o modelo para aprovação da Meta…");
+        try { const r = await holyFetch("/api/conversas", { method: "POST", body: JSON.stringify({ acao: "modeloAviso" }) }); const d = await r.json();
+            setMsg(d.success ? (d.existente ? "O modelo já existe. Status na Meta: " : "✅ Modelo enviado. Status na Meta: ") + d.status + (d.status === "APPROVED" ? " (aprovado)" : " (a Meta costuma analisar em minutos ou poucas horas)") : "❌ " + d.error); }
+        catch (e) { setMsg("❌ " + e.message); }
+    }
+    async function testarAviso() {
+        if (!numAviso()) { setMsg("Preencha seu WhatsApp pessoal primeiro."); return; }
+        setMsg("Enviando aviso de teste…");
+        try { const r = await holyFetch("/api/conversas", { method: "POST", body: JSON.stringify({ acao: "testarAviso", config: { avisoNumero: numAviso() } }) }); const d = await r.json();
+            setMsg(d.success ? "✅ Aviso enviado" + (d.via === "texto" ? " (como mensagem comum; o modelo ainda não está aprovado)" : "") + ". Confira seu WhatsApp pessoal." : "❌ " + d.error); }
+        catch (e) { setMsg("❌ " + e.message); }
+    }
     async function webhook() {
         setMsg("Configurando…");
         try { const r = await holyFetch("/api/conversas", { method: "POST", body: JSON.stringify({ acao: "webhook" }) }); const d = await r.json(); setMsg(d.success ? "✅ WhatsApp conectado" + (d.provedor ? " via " + d.provedor : "") + ". As mensagens agora chegam em: " + d.url : "❌ " + d.error); }
@@ -18743,12 +18762,25 @@ function WaConfig({ cfg, setCfg, salvar, salvo }) {
     }
     return React.createElement("div", { className: "wa-cfg", style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" } },
         React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 14, background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 16 } },
-            React.createElement(FI, { label: "Nome do assistente", value: cfg.nomeAssistente, onChange: v => F("nomeAssistente", v) }),
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+                React.createElement(FI, { label: "Nome da assistente", value: cfg.nomeAssistente, onChange: v => F("nomeAssistente", v) }),
+                React.createElement(FI, { label: "Como ela se apresenta", value: cfg.apresentacao, onChange: v => F("apresentacao", v) })),
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 } },
+                React.createElement(FI, { label: "Você atende a partir de (h)", type: "number", value: cfg.horaInicio, onChange: v => F("horaInicio", +v || 0) }),
+                React.createElement(FI, { label: "Até (h)", type: "number", value: cfg.horaFim, onChange: v => F("horaFim", +v || 0) }),
+                React.createElement(FI, { label: "Prazo de retorno", value: cfg.retorno, onChange: v => F("retorno", v) })),
             React.createElement(FI, { label: "Tom de voz (como você escreve)", rows: 5, value: cfg.tom, onChange: v => F("tom", v) }),
             React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: -8, lineHeight: 1.5 } }, "Dica: cole aqui 3 ou 4 mensagens reais suas (sem dados de clientes). O assistente imita o jeito de escrever."),
             React.createElement(FI, { label: "Sobre a Holy (o que ele pode contar)", rows: 6, value: cfg.infoHoly, onChange: v => F("infoHoly", v) }),
             React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: -8, lineHeight: 1.5 } }, "Inclua horários de atendimento, como funcionam as visitas, regiões e diferenciais. O que não estiver aqui, ele diz que vai confirmar com você."),
             React.createElement(FI, { label: "Regras extras (uma por linha)", rows: 4, value: cfg.regras, onChange: v => F("regras", v), placeholder: "Ex.: Não informar valor de comissão\nVisitas só com agendamento" }),
+            React.createElement("div", { style: { padding: "12px 14px", background: C.oliveGhost, border: `0.5px solid ${C.olivePale}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 10 } },
+                React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: C.olive } }, "🔔 Aviso no seu WhatsApp pessoal"),
+                React.createElement(FI, { label: "Seu WhatsApp pessoal (com DDD)", value: cfg.avisoNumero, onChange: v => F("avisoNumero", v), placeholder: "(49) 9XXXX-XXXX" }),
+                React.createElement("div", { style: { fontSize: 11, color: C.muted, lineHeight: 1.5 } }, "Quando a Helena passar uma conversa para você, chega um aviso nesse número. A Meta exige um modelo de mensagem aprovado: crie uma vez depois que o número da Holy estiver conectado."),
+                React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+                    React.createElement(PBtn, { variant: "ghost", sm: true, onClick: modeloAviso }, "📋 Criar modelo de aviso"),
+                    React.createElement(PBtn, { variant: "ghost", sm: true, onClick: testarAviso }, "📨 Enviar aviso de teste"))),
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
                 React.createElement(PBtn, { onClick: salvar }, "💾 Salvar configurações"),
                 salvo && React.createElement("span", { style: { fontSize: 12, color: C.success } }, "✓ Salvo"),
@@ -18790,7 +18822,7 @@ function ConversasPage() {
         catch (e) { setErro(e.message); }
         setEnv(false);
     }
-    function salvarCfg() { setCfgSalva(cfg); setSalvo(true); setTimeout(() => setSalvo(false), 2500); }
+    function salvarCfg() { const d = String(cfg.avisoNumero || "").replace(/\D/g, ""); const c = Object.assign({}, cfg, { avisoNumero: d ? (d.startsWith("55") ? d : "55" + d) : "" }); setCfg(c); setCfgSalva(c); setSalvo(true); setTimeout(() => setSalvo(false), 2500); }
     function alternarGeral() { const n = Object.assign({}, cfg, { ativo: !(cfg.ativo !== false) }); setCfg(n); setCfgSalva(n); }
     const conversas = (dados && dados.conversas) || [];
     const aguardando = conversas.filter(c => c.aguardando).length;
