@@ -22,6 +22,7 @@ input:focus,select:focus,textarea:focus{border-color:#4a5c2f!important;box-shado
 </style>
 <style id="holy-mobile">
 @media (max-width: 820px){
+  .mk-grid{grid-template-columns:1fr !important}
   /* evita o zoom automático do iPhone ao tocar num campo */
   input, select, textarea { font-size: 16px !important; }
   /* formulários e colunas lado a lado viram uma coluna */
@@ -17253,7 +17254,7 @@ window.onerror=function(msg,src,line,col,err){
 // ══════════════════════════════════════════════════════════════════
 // HOLY CLOUD: dados do CRM salvos na nuvem (Vercel), com cópia no aparelho
 // ══════════════════════════════════════════════════════════════════
-var HOLY_KEYS = ['imoveis', 'clientes', 'timeline', 'empreendimentos', 'wa_config', 'site_config'];
+var HOLY_KEYS = ['imoveis', 'clientes', 'timeline', 'empreendimentos', 'wa_config', 'site_config', 'campanhas'];
 var HolyAuth = {
   get: function () { try { return localStorage.getItem('hly_admin_key') || ''; } catch (e) { return ''; } },
   set: function (k) { try { localStorage.setItem('hly_admin_key', k); } catch (e) {} },
@@ -17421,6 +17422,9 @@ var HolySite = (function () {
   async function sync() {
     if (!HolyAuth.get()) return;
     try {
+      try { var cps = HolyStore.get('campanhas', []).filter(function (c) { return c && c.formulario; });
+        if (cps.length && Date.now() - (sync._meta || 0) > 300000) { sync._meta = Date.now(); await holyFetch('/api/meta', { method: 'POST', body: JSON.stringify({ acao: 'puxarLeads', forms: cps.map(function (c) { return { id: c.formulario, item: c.itemNome }; }) }) }); }
+      } catch (e) {}
       var r = await holyFetch('/api/leads?novos=1'); var d = await r.json();
       if (!d.success) return;
       var forms = d.data.filter(function (l) { return l.tipo === 'formulario'; });
@@ -17432,11 +17436,12 @@ var HolySite = (function () {
           forms.slice().reverse().forEach(function (l) {
             var tel = soDigitos(l.telefone), mail = String(l.email || '').toLowerCase();
             var ex = lista.find(function (c) { return (tel && tel.length >= 8 && soDigitos(c.celular || c.tel).slice(-8) === tel.slice(-8)) || (mail && String(c.email || '').toLowerCase() === mail); });
-            var desc = 'Contato pelo site' + (l.interesse ? ' | Interesse: ' + l.interesse : '') + (l.imovel ? ' | Imóvel: ' + l.imovel : '') + (l.mensagem ? ' | "' + l.mensagem + '"' : '');
+            var deMeta = /^Meta/.test(l.origem || '');
+            var desc = (deMeta ? 'Lead de anúncio na Meta (' + l.origem.replace(/^Meta Ads:?\s*/, '') + ')' : 'Contato pelo site') + (l.interesse ? ' | Interesse: ' + l.interesse : '') + (l.imovel ? ' | Imóvel: ' + l.imovel : '') + (l.mensagem ? ' | "' + l.mensagem + '"' : '');
             var cli = ex;
             if (!cli) {
               var nome = l.nome || 'Lead do site';
-              cli = { id: 'cl' + rid(), nome: nome, avatar: nome.trim().split(' ').map(function (w) { return w[0]; }).join('').toUpperCase().slice(0, 2), email: l.email || '', celular: l.telefone || '', tel: '', cpf: '', nascimento: '', profissao: '', empresa: '', renda: 0, patrimonioEst: 0, origem: 'Site', stage: 'Prospecção', temp: 'warm', obs: desc, interesses: [], interacoes: [], createdAt: hoje(), leadSite: l.id };
+              cli = { id: 'cl' + rid(), nome: nome, avatar: nome.trim().split(' ').map(function (w) { return w[0]; }).join('').toUpperCase().slice(0, 2), email: l.email || '', celular: l.telefone || '', tel: '', cpf: '', nascimento: '', profissao: '', empresa: '', renda: 0, patrimonioEst: 0, origem: deMeta ? 'Meta Ads' : 'Site', stage: 'Prospecção', temp: 'warm', obs: desc, interesses: [], interacoes: [], createdAt: hoje(), leadSite: l.id };
               lista.unshift(cli);
             }
             novosTL.push({ id: 'int' + rid(), tipo: 'Nota interna', data: String(l.criado_em || '').slice(0, 10) || hoje(), hora: hora(l.criado_em), desc: desc, imovelId: '', clienteId: cli.id, cliente: cli.nome });
@@ -17752,7 +17757,7 @@ async function apiDelete(path, id) {
 
 const BAIRROS_SC = (cidade) => CIDADES_SC[cidade] || ["Centro", "Outros"];
 const STATUS_IMOVEL = ["Disponível", "Reservado", "Negociação", "Vendido", "Locado", "Captação"];
-const ORIGENS = ["Instagram", "WhatsApp", "Indicação", "Landing Page", "Site", "Facebook", "Portais", "Ligação", "Evento", "Outros"];
+const ORIGENS = ["Instagram", "WhatsApp", "Indicação", "Landing Page", "Site", "Meta Ads", "Facebook", "Portais", "Ligação", "Evento", "Outros"];
 const FINALIDADES = ["Moradia", "Investimento", "Locação", "Misto"];
 const DIFS_OPT = ["Lavabo social", "Suíte master com closet", "Closet", "Banheira", "Home office", "Varanda gourmet", "Sacada com churrasqueira", "Churrasqueira", "Terraço", "Jardim", "Garden", "Piscina", "Piscina aquecida", "Hidromassagem/Jacuzzi", "Sauna", "Adega", "Home theater", "Lareira", "Cozinha integrada", "Cozinha gourmet", "Lavanderia separada", "Dependência de serviço", "Depósito", "Pé-direito duplo", "Mobiliado", "Semimobiliado", "Decorado", "Ar-condicionado", "Infra para ar-condicionado", "Aquecimento a gás", "Piso aquecido", "Automação residencial", "Fechadura digital", "Energia solar", "Vista mar", "Vista panorâmica", "Frente mar", "Andar alto", "Cobertura", "Pet friendly", "Condomínio fechado"];
 const LAZER_OPT = ["Salão de festas", "Espaço gourmet", "Churrasqueira coletiva", "Academia", "Pilates/Yoga", "Sauna seca", "Sauna úmida", "Spa", "Sala de massagem", "Piscina adulto", "Piscina infantil", "Piscina aquecida", "Piscina coberta", "Piscina com borda infinita", "Raia de natação", "Hidromassagem/Jacuzzi", "Solarium", "Rooftop", "Deck molhado", "Home market", "Coworking", "Sala de reunião", "Cinema", "Brinquedoteca", "Playground", "Espaço teen", "Salão de jogos", "Pub/Bar", "Adega coletiva", "Espaço zen", "Quadra", "Quadra de beach tennis", "Quadra de tênis", "Quadra de squash", "Campo de futebol", "Pista de caminhada", "Bicicletário", "Pet place", "Pet wash", "Lavanderia coletiva", "Espaço beleza", "Car wash", "Carregador para carro elétrico", "Gerador", "Portaria 24h", "Portaria remota", "Segurança privada", "Concierge", "Serviço de praia", "Box de praia", "Depósito/Hobby box", "Hall decorado", "Elevador social e de serviço"];
@@ -17876,11 +17881,11 @@ function FS({ label, value, onChange, options }) {
         React.createElement("label", { style: { fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 500 } }, label),
         React.createElement("select", { value: value || "", onChange: e => onChange(e.target.value), style: { padding: "9px 12px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 13, color: C.ink, background: C.white, outline: "none", width: "100%" } }, options.map(o => React.createElement("option", { key: o.v || o, value: o.v || o }, o.l || o))));
 }
-function PBtn({ onClick, children, loading, full, color = C.olive, sm, variant }) {
-    const bg = variant === "ghost" ? "none" : loading ? C.muted : color;
+function PBtn({ onClick, children, loading, full, color = C.olive, sm, variant, disabled }) {
+    const bg = variant === "ghost" ? "none" : (loading || disabled) ? C.muted : color;
     const col = variant === "ghost" ? color : C.white;
     const brd = variant === "ghost" ? `0.5px solid ${color}40` : "none";
-    return React.createElement("button", { onClick: onClick, disabled: loading, style: { width: full ? "100%" : "auto", padding: sm ? "6px 12px" : "10px 18px", borderRadius: 8, fontSize: sm ? 11 : 13, fontWeight: 700, background: bg, color: col, border: brd, cursor: loading ? "not-allowed" : "pointer", letterSpacing: "0.03em", transition: "opacity 0.15s" } }, loading ? "…" : children);
+    return React.createElement("button", { onClick: onClick, disabled: loading || disabled, style: { opacity: disabled ? 0.55 : 1, width: full ? "100%" : "auto", padding: sm ? "6px 12px" : "10px 18px", borderRadius: 8, fontSize: sm ? 11 : 13, fontWeight: 700, background: bg, color: col, border: brd, cursor: (loading || disabled) ? "not-allowed" : "pointer", letterSpacing: "0.03em", transition: "opacity 0.15s" } }, loading ? "…" : children);
 }
 function SBar({ score }) {
     const col = score >= 75 ? C.success : score >= 50 ? C.gold : score >= 30 ? C.warn : C.muted;
@@ -17898,8 +17903,8 @@ function AIBox({ text }) {
         React.createElement("div", { style: { fontSize: 10, color: C.oliveMid, marginBottom: 8, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" } }, "\u2726 Consultor IA"),
         React.createElement("div", { style: { fontSize: 13, color: C.inkMid, lineHeight: 1.75, whiteSpace: "pre-wrap" } }, text));
 }
-function Modal({ onClose, children, width = 600 }) {
-    return React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(26,28,24,0.6)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 2000, padding: 16, overflowY: "auto" }, onClick: onClose },
+function Modal({ onClose, children, width = 600, z }) {
+    return React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(26,28,24,0.6)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: z || 2000, padding: 16, overflowY: "auto" }, onClick: onClose },
         React.createElement("div", { onClick: e => e.stopPropagation(), style: { background: C.white, borderRadius: 16, padding: 28, width: "100%", maxWidth: width, border: `0.5px solid ${C.border}`, margin: "24px auto" } }, children));
 }
 function MHead({ title, sub, onClose }) {
@@ -18196,6 +18201,8 @@ ${imovel.exclusividade ? `<div style="font-size:10px;padding:5px 12px;background
                     imovel.exclusividade && React.createElement(Bdg, { label: "Exclusividade", color: C.gold }))),
             React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
                 React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: () => onEdit(imovel) }, "\u270F\uFE0F Editar"),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.blue, onClick: () => abrirMkt("campanha", imovel, "im") }, "📣 Anunciar"),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, onClick: () => abrirMkt("post", imovel, "im") }, "📸 Post"),
                 React.createElement(PBtn, { sm: true, variant: "ghost", color: C.danger, onClick: () => { if (window.confirm("Excluir \"" + imovel.nome + "\"?\n\nEsta a\u00E7\u00E3o n\u00E3o pode ser desfeita.")) onDelete(imovel.id); } }, "\uD83D\uDDD1\uFE0F Excluir"),
                 React.createElement("button", { onClick: onClose, style: { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.muted } }, "\u00D7"))),
         ((_c = imovel.fotos) === null || _c === void 0 ? void 0 : _c.length) > 0
@@ -18733,6 +18740,8 @@ function EmpreendimentosPage() {
                         btnP("◀", () => mover(e.id, -1), null, "Mover para antes"),
                         btnP("▶", () => mover(e.id, 1), null, "Mover para depois"),
                         btnP("Editar", () => setEdit(e), C.olive),
+                        btnP("📣 Anunciar", () => abrirMkt("campanha", e, "em"), C.blue),
+                        btnP("📸 Post", () => abrirMkt("post", e, "em"), C.gold),
                         btnP(e.publicarSite === false ? "Mostrar" : "Ocultar", () => alternar(e.id), C.blue),
                         btnP("Excluir", () => excluir(e), C.danger)))))));
 }
@@ -19330,6 +19339,452 @@ function Dashboard({ clientes, imoveis, timeline, setPage }) {
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════════
 // ── CONFIG PAGE ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+// MARKETING: anúncios na Meta (campanhas de leads) e criador de posts
+// ═══════════════════════════════════════════════════════════════════════
+const abrirMkt = (modo, item, kind) => window.dispatchEvent(new CustomEvent("holy-mkt", { detail: { modo, item, kind } }));
+async function metaApi(acao, data) {
+    const r = await holyFetch("/api/meta", { method: "POST", body: JSON.stringify(Object.assign({ acao }, data || {})) });
+    const d = await r.json().catch(() => ({}));
+    if (!d.success) throw new Error(d.error || "Falha na comunicação com a Meta");
+    return d;
+}
+function mktFotos(item) {
+    const pega = l => (l || []).map(f => typeof f === "string" ? f : f && f.url).filter(u => u && /^https:/.test(u));
+    const fotos = (item.fotos || []).slice().sort((a, b) => ((b && b.principal) ? 1 : 0) - ((a && a.principal) ? 1 : 0));
+    return Array.from(new Set(pega(fotos).concat(pega(item.lazerFotos))));
+}
+function mktVitrine(item, kind) {
+    const linhas = v => Array.isArray(v) ? v : String(v || "").split("\n").map(x => x.trim()).filter(Boolean);
+    if (kind === "im") return { tipo: "imovel", nome: item.nome, tipoImovel: item.tipo, cidade: String(item.cidade || "").replace(/-SC$/i, ""), bairro: item.bairro,
+        valor: +item.valor ? "R$ " + Number(item.valor).toLocaleString("pt-BR") : "", finalidade: item.finalidade, areaTotal: item.area, areaPrivativa: item.areaPrivativa || item.areaUtil,
+        quartos: item.quartos, suites: item.suites, vagas: item.vagas, lavabos: item.lavabos, diferenciais: item.diferenciais || [], lazer: item.lazer || [],
+        descricao: String(item.descricao || "").slice(0, 1500), status: item.status, link: location.origin + "/#imovel-" + item.id };
+    return { tipo: "empreendimento", nome: item.nome, complexo: item.complexo, cidade: item.cidade, status: item.status, tipoLabel: item.tipoLabel, preco: item.preco,
+        destaques: item.destaques || [], diferenciais: linhas(item.diferenciais), lazer: linhas(item.lazer), ficha: String(item.ficha || "").slice(0, 1500),
+        descricao: String(item.descricao || "").slice(0, 2500), link: location.origin + "/#empreendimento-" + item.id };
+}
+const mkInput = { padding: "9px 11px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 13, width: "100%", fontFamily: "inherit" };
+const mkBox = (cor) => ({ padding: "12px 14px", background: cor || C.cream, border: `0.5px solid ${C.border}`, borderRadius: 10 });
+const mkLbl = t => React.createElement("div", { style: { fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 6 } }, t);
+
+function MarketingHost() {
+    const [st, setSt] = useState(null);
+    useEffect(() => { const f = e => setSt(e.detail); window.addEventListener("holy-mkt", f); return () => window.removeEventListener("holy-mkt", f); }, []);
+    if (!st) return null;
+    const fechar = () => setSt(null);
+    return st.modo === "campanha" ? React.createElement(CampanhaWizard, { item: st.item, kind: st.kind, onClose: fechar }) : React.createElement(PostStudio, { item: st.item, kind: st.kind, onClose: fechar });
+}
+
+// ── Assistente de campanha ─────────────────────────────────────────────
+function CampanhaWizard({ item, kind, onClose }) {
+    const [passo, setPasso] = useState(1);
+    const [meta, setMeta] = useState(null);
+    const [load, setLoad] = useState(""); const [erro, setErro] = useState("");
+    const [e, setE] = useState(null);
+    const [foto, setFoto] = useState("");
+    const [aceito, setAceito] = useState(false);
+    const [res, setRes] = useState(null);
+    const [, setCamps] = usePS("campanhas", []);
+    const fotos = mktFotos(item);
+    const vit = mktVitrine(item, kind);
+    useEffect(() => { metaApi("status").then(setMeta).catch(er => setMeta({ configurado: false, erro: er.message })); setFoto(fotos[0] || ""); }, []);
+    const E = (k, v) => setE(p => Object.assign({}, p, { [k]: v }));
+    async function gerar() {
+        setErro(""); setLoad("A IA está montando a estratégia…");
+        try { const d = await metaApi("sugerir", { item: vit }); const s = d.estrategia; while ((s.textos || []).length < 3) s.textos.push({ texto_principal: "", titulo: "", descricao: "" }); setE(s); setPasso(2); }
+        catch (er) { setErro(er.message); }
+        setLoad("");
+    }
+    async function criar() {
+        setErro(""); setLoad("Criando campanha, formulário, público e anúncios na Meta…");
+        try {
+            const d = await metaApi("criar", { nome: item.nome, foto, link: vit.link, pracas: e.pracas, interesses: e.interesses, orcamento_diario: e.orcamento_diario, duracao_dias: e.duracao_dias,
+                textos: e.textos.filter(t => t.texto_principal && t.texto_principal.trim()), perguntas: e.perguntas, agradecimento: e.agradecimento });
+            setRes(d);
+            setCamps(p => [{ id: "cp" + uid(), itemId: item.id, kind, itemNome: item.nome, criadoEm: new Date().toISOString(), campanha: d.campanha, conjunto: d.conjunto, anuncios: d.anuncios, formulario: d.formulario,
+                link: d.link, orcamento_diario: d.orcamento_diario, dias: d.dias, pracas: e.pracas.map(p => p.cidade + " (" + p.raio_km + " km)"), status: "PAUSED" }, ...(p || [])]);
+            setPasso(4);
+        } catch (er) { setErro(er.message); }
+        setLoad("");
+    }
+    const passos = ["Estratégia", "Público e anúncio", "Revisar e criar"];
+    const total = e ? Math.round((+e.orcamento_diario || 0) * (+e.duracao_dias || 0)) : 0;
+    return React.createElement(Modal, { onClose, width: 860, z: 2600 },
+        React.createElement(MHead, { title: "📣 Anunciar: " + item.nome, sub: "Campanha de leads no Facebook e no Instagram", onClose }),
+        passo < 4 && React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 16 } }, passos.map((p, i) => React.createElement("div", { key: p, style: { flex: 1, fontSize: 11, fontWeight: 700, padding: "8px 10px", borderRadius: 8, background: passo === i + 1 ? C.olive : C.cream, color: passo === i + 1 ? "#fff" : C.muted } }, (i + 1) + ". " + p))),
+        meta && !meta.configurado && React.createElement("div", { style: Object.assign(mkBox("#fff8e6"), { fontSize: 12, color: C.inkMid, marginBottom: 14, lineHeight: 1.6 }) }, "⚠ A conta de anúncios da Meta ainda não está conectada. Você pode gerar e revisar a estratégia agora; para criar a campanha, conecte a Meta (veja a página Campanhas)."),
+        erro && React.createElement("div", { style: { fontSize: 12, color: C.danger, background: "#fdecea", padding: "10px 12px", borderRadius: 8, marginBottom: 12 } }, "❌ " + erro),
+        load && React.createElement("div", { style: { fontSize: 13, color: C.olive, padding: "10px 0" } }, "⏳ " + load),
+        passo === 1 && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
+            React.createElement("div", { style: mkBox() },
+                React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, item.nome),
+                React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 4 } }, [vit.tipoImovel || vit.tipoLabel, vit.bairro, vit.cidade, vit.valor || vit.preco].filter(Boolean).join(" · "))),
+            React.createElement("div", { style: { fontSize: 13, color: C.inkMid, lineHeight: 1.7 } },
+                "A IA analisa este ", kind === "im" ? "imóvel" : "empreendimento", " e monta: as ", React.createElement("b", null, "praças"), " de onde vêm os compradores, os ", React.createElement("b", null, "sinais de interesse"), ", o ", React.createElement("b", null, "orçamento"), ", ",
+                React.createElement("b", null, "3 textos para teste A/B"), " e um ", React.createElement("b", null, "formulário de alta intenção"), " com perguntas que separam curiosos de compradores."),
+            React.createElement("div", { style: Object.assign(mkBox("#eef4ff"), { fontSize: 12, color: C.inkMid, lineHeight: 1.6 }) },
+                React.createElement("b", null, "Regra da Meta para imóveis: "), "todo anúncio de imóvel entra na Categoria Especial de Moradia. Não é permitido escolher idade, gênero ou CEP, e não há exclusões. O lead quente vem das praças certas, do texto que abre com o valor, do formulário qualificador e do atendimento rápido da Helena."),
+            !fotos.length && React.createElement("div", { style: { fontSize: 12, color: C.danger } }, "Este cadastro ainda não tem fotos na nuvem. Adicione fotos antes de anunciar."),
+            React.createElement("div", { style: { display: "flex", justifyContent: "flex-end" } }, React.createElement(PBtn, { onClick: gerar, loading: !!load }, "✦ Gerar estratégia com IA"))),
+        passo === 2 && e && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+            React.createElement("div", { style: mkBox() }, mkLbl("Comprador provável (orienta o anúncio, não vira segmentação)"), React.createElement("div", { style: { fontSize: 13, color: C.inkMid, lineHeight: 1.6 } }, e.persona)),
+            React.createElement("div", null, mkLbl("Praças (cidades e raio)"),
+                (e.pracas || []).map((p, i) => React.createElement("div", { key: i, style: { display: "grid", gridTemplateColumns: "2fr 70px 90px 34px", gap: 6, marginBottom: 6 } },
+                    React.createElement("input", { style: mkInput, value: p.cidade, onChange: ev => E("pracas", e.pracas.map((x, k) => k === i ? Object.assign({}, x, { cidade: ev.target.value }) : x)), title: p.motivo || "" }),
+                    React.createElement("input", { style: mkInput, value: p.uf, maxLength: 2, onChange: ev => E("pracas", e.pracas.map((x, k) => k === i ? Object.assign({}, x, { uf: ev.target.value.toUpperCase() }) : x)) }),
+                    React.createElement("input", { style: mkInput, type: "number", min: 25, value: p.raio_km, onChange: ev => E("pracas", e.pracas.map((x, k) => k === i ? Object.assign({}, x, { raio_km: +ev.target.value }) : x)) }),
+                    React.createElement("button", { onClick: () => E("pracas", e.pracas.filter((_, k) => k !== i)), style: { border: "none", background: "none", color: C.danger, cursor: "pointer", fontSize: 16 } }, "×"))),
+                React.createElement("button", { onClick: () => E("pracas", [...(e.pracas || []), { cidade: "", uf: "SC", raio_km: 25 }]), style: { fontSize: 12, background: "none", border: `0.5px dashed ${C.border}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.olive } }, "+ Adicionar cidade"),
+                React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 6 } }, "Cidade · UF · raio em km (mínimo 25 km). Passe o mouse sobre a cidade para ver o motivo da escolha.")),
+            React.createElement("div", null, mkLbl("Sinais de interesse (separados por vírgula)"),
+                React.createElement("input", { style: mkInput, value: (e.interesses || []).join(", "), onChange: ev => E("interesses", ev.target.value.split(",").map(x => x.trim()).filter(Boolean)) })),
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 } },
+                React.createElement("div", null, mkLbl("Orçamento por dia (R$)"), React.createElement("input", { style: mkInput, type: "number", min: 20, value: e.orcamento_diario, onChange: ev => E("orcamento_diario", +ev.target.value) })),
+                React.createElement("div", null, mkLbl("Duração (dias)"), React.createElement("input", { style: mkInput, type: "number", min: 3, value: e.duracao_dias, onChange: ev => E("duracao_dias", +ev.target.value) })),
+                React.createElement("div", null, mkLbl("Investimento total"), React.createElement("div", { style: { fontSize: 18, fontWeight: 700, color: C.olive, paddingTop: 6 } }, "R$ " + total.toLocaleString("pt-BR")))),
+            e.justificativa_orcamento && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: -8 } }, e.justificativa_orcamento),
+            React.createElement("div", null, mkLbl("Foto do anúncio"),
+                React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(90px,1fr))", gap: 6, maxHeight: 170, overflowY: "auto" } },
+                    fotos.map(u => React.createElement("button", { key: u, onClick: () => setFoto(u), style: { padding: 0, height: 64, borderRadius: 8, overflow: "hidden", cursor: "pointer", border: foto === u ? `3px solid ${C.gold}` : `1px solid ${C.border}` } },
+                        React.createElement("img", { src: u, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }))))),
+            React.createElement("div", null, mkLbl("Textos (3 variações para teste A/B)"),
+                e.textos.map((t, i) => React.createElement("div", { key: i, style: Object.assign(mkBox("#fff"), { marginBottom: 8, display: "flex", flexDirection: "column", gap: 6 }) },
+                    React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: C.gold } }, "Variação " + String.fromCharCode(65 + i)),
+                    React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 80, resize: "vertical" }), value: t.texto_principal, placeholder: "Texto principal", onChange: ev => E("textos", e.textos.map((x, k) => k === i ? Object.assign({}, x, { texto_principal: ev.target.value }) : x)) }),
+                    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 } },
+                        React.createElement("input", { style: mkInput, value: t.titulo, placeholder: "Título", maxLength: 80, onChange: ev => E("textos", e.textos.map((x, k) => k === i ? Object.assign({}, x, { titulo: ev.target.value }) : x)) }),
+                        React.createElement("input", { style: mkInput, value: t.descricao || "", placeholder: "Descrição curta", maxLength: 60, onChange: ev => E("textos", e.textos.map((x, k) => k === i ? Object.assign({}, x, { descricao: ev.target.value }) : x)) }))))),
+            React.createElement("div", null, mkLbl("Perguntas qualificadoras do formulário (opções separadas por ;)"),
+                (e.perguntas || []).map((q, i) => React.createElement("div", { key: i, style: { display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 6, marginBottom: 6 } },
+                    React.createElement("input", { style: mkInput, value: q.pergunta, onChange: ev => E("perguntas", e.perguntas.map((x, k) => k === i ? Object.assign({}, x, { pergunta: ev.target.value }) : x)) }),
+                    React.createElement("input", { style: mkInput, value: (q.opcoes || []).join("; "), onChange: ev => E("perguntas", e.perguntas.map((x, k) => k === i ? Object.assign({}, x, { opcoes: ev.target.value.split(";").map(o => o.trim()).filter(Boolean) }) : x)) }))),
+                React.createElement("div", { style: { fontSize: 11, color: C.muted } }, "Nome, telefone e e-mail já vêm preenchidos pelo Facebook. O formulário é de alta intenção: a pessoa confirma os dados antes de enviar.")),
+            React.createElement("div", null, mkLbl("Mensagem final do formulário"), React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 56 }), value: e.agradecimento, onChange: ev => E("agradecimento", ev.target.value) })),
+            (e.dicas || []).length > 0 && React.createElement("div", { style: Object.assign(mkBox("#f2f5ec"), { fontSize: 12, color: C.inkMid, lineHeight: 1.6 }) }, React.createElement("b", null, "Dicas da IA: "), e.dicas.join(" · ")),
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between" } },
+                React.createElement(PBtn, { variant: "ghost", onClick: () => setPasso(1) }, "← Voltar"),
+                React.createElement(PBtn, { onClick: () => setPasso(3) }, "Revisar →"))),
+        passo === 3 && e && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
+            React.createElement("div", { style: mkBox() },
+                [["Objetivo", "Leads com formulário de alta intenção (Facebook e Instagram)"], ["Categoria especial", "Moradia (obrigatória para imóveis)"],
+                 ["Praças", (e.pracas || []).filter(p => p.cidade).map(p => p.cidade + "/" + p.uf + " (" + p.raio_km + " km)").join(", ")], ["Público", "Advantage+ com sinais: " + ((e.interesses || []).join(", ") || "nenhum")],
+                 ["Orçamento", "R$ " + e.orcamento_diario + "/dia por " + e.duracao_dias + " dias (total R$ " + total.toLocaleString("pt-BR") + ")"], ["Anúncios", e.textos.filter(t => t.texto_principal).length + " variações de texto com a foto escolhida"],
+                 ["Perguntas", (e.perguntas || []).map(q => q.pergunta).join(" · ")]].map(([k, v]) => React.createElement("div", { key: k, style: { display: "flex", gap: 12, padding: "6px 0", borderBottom: `0.5px solid ${C.border}`, fontSize: 12 } },
+                    React.createElement("div", { style: { width: 130, color: C.muted, flexShrink: 0 } }, k), React.createElement("div", { style: { color: C.ink } }, v)))),
+            foto && React.createElement("img", { src: foto, alt: "", style: { width: "100%", maxHeight: 220, objectFit: "cover", borderRadius: 10 } }),
+            React.createElement("label", { style: { display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, color: C.inkMid, cursor: "pointer", lineHeight: 1.5 } },
+                React.createElement("input", { type: "checkbox", checked: aceito, onChange: ev => setAceito(ev.target.checked), style: { accentColor: C.olive, marginTop: 2 } }),
+                "Entendo que a campanha é criada PAUSADA, que só começa a gastar quando eu ativar, e que o investimento é cobrado pela Meta na forma de pagamento da conta de anúncios."),
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between" } },
+                React.createElement(PBtn, { variant: "ghost", onClick: () => setPasso(2) }, "← Voltar"),
+                React.createElement(PBtn, { onClick: criar, loading: !!load, disabled: !aceito || !(meta && meta.configurado) || !foto }, "Criar campanha na Meta"))),
+        passo === 4 && res && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
+            React.createElement("div", { style: { fontSize: 16, fontWeight: 700, color: C.success } }, "✅ Campanha criada (pausada)"),
+            React.createElement("ul", { style: { fontSize: 13, color: C.inkMid, lineHeight: 1.8, paddingLeft: 18 } }, res.passos.map((p, i) => React.createElement("li", { key: i }, p))),
+            React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.6 } }, "Revise no Gerenciador de Anúncios e ative pela página Campanhas do CRM. Os leads entram sozinhos em Clientes, com origem Meta Ads."),
+            React.createElement("div", { style: { display: "flex", gap: 8 } },
+                React.createElement("a", { href: res.link, target: "_blank", rel: "noopener", style: { padding: "10px 16px", borderRadius: 8, background: C.blue, color: "#fff", fontSize: 13, fontWeight: 700 } }, "Abrir no Gerenciador de Anúncios"),
+                React.createElement(PBtn, { variant: "ghost", onClick: () => { onClose(); window.dispatchEvent(new CustomEvent("holy-go", { detail: "campanhas" })); } }, "Ir para Campanhas"))));
+}
+
+// ── Página Campanhas ───────────────────────────────────────────────────
+function CampanhasPage() {
+    const [camps, setCamps] = usePS("campanhas", []);
+    const [meta, setMeta] = useState(null);
+    const [m, setM] = useState({});
+    const [msg, setMsg] = useState("");
+    const lista = camps || [];
+    async function atualizar() {
+        if (!lista.length) return;
+        try { const d = await metaApi("metricas", { ids: lista.map(c => c.campanha) }); setM(d.metricas || {}); } catch (e) { setMsg("❌ " + e.message); }
+    }
+    useEffect(() => { metaApi("status").then(setMeta).catch(e => setMeta({ configurado: false, erro: e.message })); }, []);
+    useEffect(() => { if (meta && meta.configurado) atualizar(); }, [meta, lista.length]);
+    async function alternar(c, ativo) {
+        if (ativo && !confirm(`Ativar "${c.itemNome}"? A campanha começa a veicular e a gastar até R$ ${c.orcamento_diario}/dia.`)) return;
+        try { await metaApi("statusCampanha", { ativo, campanha: c.campanha, conjunto: c.conjunto, anuncios: c.anuncios }); setCamps(p => p.map(x => x.id === c.id ? Object.assign({}, x, { status: ativo ? "ACTIVE" : "PAUSED" }) : x)); setTimeout(atualizar, 1500); }
+        catch (e) { setMsg("❌ " + e.message); }
+    }
+    async function puxar() {
+        setMsg("Buscando leads na Meta…");
+        try { const d = await metaApi("puxarLeads", { forms: lista.map(c => ({ id: c.formulario, item: c.itemNome })) }); await HolySite.sync(); setMsg(d.novos ? `✅ ${d.novos} lead(s) novo(s) foram para Clientes.` : "Nenhum lead novo agora."); }
+        catch (e) { setMsg("❌ " + e.message); }
+    }
+    const brl = v => "R$ " + (+v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const tot = Object.values(m).reduce((a, x) => ({ gasto: a.gasto + (x.gasto || 0), leads: a.leads + (x.leads || 0) }), { gasto: 0, leads: 0 });
+    return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+        React.createElement("div", { style: Object.assign(mkBox("#fff"), { borderLeft: `3px solid ${meta && meta.configurado ? C.success : C.warn}` }) },
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 6 } }, "Conexão com a Meta"),
+            !meta ? React.createElement("div", { style: { fontSize: 12, color: C.muted } }, "Verificando…")
+                : meta.configurado ? React.createElement("div", { style: { fontSize: 12, color: C.inkMid, lineHeight: 1.7 } },
+                    "Conta de anúncios: ", React.createElement("b", null, meta.conta || meta.erroConta || "—"), meta.moeda ? " (" + meta.moeda + ")" : "", meta.contaAtiva === false ? " ⚠ conta não está ativa" : "", React.createElement("br"),
+                    "Página: ", React.createElement("b", null, meta.pagina || meta.erroPagina || "—"), " · Instagram: ", React.createElement("b", null, meta.instagram || "não vinculado"))
+                : React.createElement("div", { style: { fontSize: 12, color: C.inkMid, lineHeight: 1.7 } }, "Ainda não conectada. Faltam na Vercel: ", React.createElement("b", null, (meta.faltando || []).join(", ") || meta.erro), ". Veja o passo a passo no LEIA-ME (seção Meta).")),
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 } },
+            React.createElement("div", { style: { fontSize: 12, color: C.muted } }, `${lista.length} campanha(s) · investido ${brl(tot.gasto)} · ${tot.leads} lead(s)` + (tot.leads ? ` · custo médio por lead ${brl(tot.gasto / tot.leads)}` : "")),
+            React.createElement("div", { style: { display: "flex", gap: 8 } },
+                React.createElement(PBtn, { variant: "ghost", sm: true, onClick: atualizar }, "🔄 Atualizar números"),
+                React.createElement(PBtn, { variant: "ghost", sm: true, onClick: puxar }, "⬇ Buscar leads agora"))),
+        msg && React.createElement("div", { style: { fontSize: 12, color: C.inkMid } }, msg),
+        !lista.length && React.createElement("div", { style: { textAlign: "center", padding: "40px 20px", background: C.white, border: `0.5px dashed ${C.border}`, borderRadius: 12, color: C.muted, fontSize: 13, lineHeight: 1.7 } },
+            "Nenhuma campanha ainda.", React.createElement("br"), "Abra um imóvel ou empreendimento e clique em ", React.createElement("b", null, "📣 Anunciar"), "."),
+        lista.map(c => { const x = m[c.campanha] || {}; const ativo = (x.status || c.status) === "ACTIVE";
+            return React.createElement("div", { key: c.id, style: Object.assign(mkBox("#fff"), { display: "flex", flexDirection: "column", gap: 10 }) },
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" } },
+                    React.createElement("div", null, React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, c.itemNome),
+                        React.createElement("div", { style: { fontSize: 11, color: C.muted } }, "Criada em " + new Date(c.criadoEm).toLocaleDateString("pt-BR") + " · R$ " + c.orcamento_diario + "/dia · " + (c.pracas || []).join(", "))),
+                    React.createElement(Chip, { label: x.erro ? "Erro" : ativo ? "● Ativa" : (x.status || c.status) === "PAUSED" ? "Pausada" : (x.status || c.status || "—"), color: ativo ? C.success : C.muted })),
+                x.erro ? React.createElement("div", { style: { fontSize: 12, color: C.danger } }, x.erro)
+                    : React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 8 } },
+                        [["Investido", brl(x.gasto)], ["Leads", x.leads || 0], ["Custo por lead", x.cpl ? brl(x.cpl) : "—"], ["Alcance", (x.alcance || 0).toLocaleString("pt-BR")], ["Cliques", (x.cliques || 0).toLocaleString("pt-BR")]].map(([k, v]) =>
+                            React.createElement("div", { key: k, style: { background: C.cream, borderRadius: 8, padding: "8px 10px" } }, React.createElement("div", { style: { fontSize: 10, color: C.muted } }, k), React.createElement("div", { style: { fontSize: 16, fontWeight: 700, color: C.olive } }, v)))),
+                React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+                    meta && meta.configurado && React.createElement(PBtn, { sm: true, variant: ativo ? "ghost" : undefined, onClick: () => alternar(c, !ativo) }, ativo ? "⏸ Pausar" : "▶ Ativar"),
+                    React.createElement("a", { href: c.link, target: "_blank", rel: "noopener", style: { fontSize: 12, fontWeight: 700, color: C.blue, padding: "7px 10px" } }, "Abrir no Gerenciador"),
+                    React.createElement("button", { onClick: () => { if (confirm("Remover da lista do CRM? (a campanha continua na Meta)")) setCamps(p => p.filter(y => y.id !== c.id)); }, style: { fontSize: 11, background: "none", border: "none", color: C.muted, cursor: "pointer" } }, "Remover da lista"))); }),
+        React.createElement("div", { style: Object.assign(mkBox("#f2f5ec"), { fontSize: 12, color: C.inkMid, lineHeight: 1.7 }) },
+            React.createElement("b", null, "Como ter leads mais quentes: "), "deixe a campanha rodar ao menos 7 dias sem mexer (fase de aprendizado); pause a variação de texto com custo por lead mais alto; responda os leads em minutos (a Helena ajuda); e marque no Funil quem virou visita ou proposta, para saber qual campanha traz compradores de verdade."));
+}
+
+// ── Criador de posts ──────────────────────────────────────────────────
+const MK = { olive: "#2d3a1f", oliveDk: "#1a2310", gold: "#b8993a", goldLt: "#d9be6f", cream: "#f5f3ee" };
+async function mkFonts() {
+    if (mkFonts.ok) return;
+    const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;600;700&display=swap"; document.head.appendChild(l);
+    try { await Promise.all(['700 60px "Playfair Display"', '600 30px Inter', '400 30px Inter', '700 30px Inter'].map(f => document.fonts.load(f))); } catch (e) {}
+    mkFonts.ok = true;
+}
+const mkCache = {};
+function mkImg(url) {
+    if (!url) return Promise.resolve(null);
+    if (!mkCache[url]) mkCache[url] = new Promise(res => { const i = new Image(); i.crossOrigin = "anonymous"; i.onload = () => res(i); i.onerror = () => res(null); i.src = "/api/img?url=" + encodeURIComponent(url); });
+    return mkCache[url];
+}
+function mkCover(ctx, img, x, y, w, h, zoom, blur) {
+    if (!img) { const g = ctx.createLinearGradient(x, y, x + w, y + h); g.addColorStop(0, MK.oliveDk); g.addColorStop(1, "#4a5c2f"); ctx.fillStyle = g; ctx.fillRect(x, y, w, h); return; }
+    const s = Math.max(w / img.width, h / img.height) * (zoom || 1), iw = img.width * s, ih = img.height * s;
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); if (blur) ctx.filter = "blur(" + blur + "px)";
+    ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih); ctx.restore();
+}
+function mkLines(ctx, text, maxW, maxLines) {
+    const words = String(text || "").split(/\s+/).filter(Boolean); let line = "", out = [];
+    for (const w of words) { const t = line ? line + " " + w : w; if (ctx.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t; }
+    if (line) out.push(line);
+    if (maxLines && out.length > maxLines) { out = out.slice(0, maxLines); out[maxLines - 1] = out[maxLines - 1].replace(/\s*\S*$/, "…"); }
+    return out;
+}
+function mkText(ctx, lines, x, y, lh) { lines.forEach((l, i) => ctx.fillText(l, x, y + i * lh)); return lines.length * lh; }
+function mkMarca(ctx, claro, x, y) {
+    ctx.textAlign = "left"; ctx.fillStyle = MK.gold; ctx.font = '700 44px "Playfair Display", Georgia, serif'; ctx.fillText("HOLY", x, y);
+    ctx.font = "600 14px Inter, Arial"; ctx.fillStyle = claro ? "rgba(255,255,255,.8)" : MK.olive; ctx.fillText("CURADORIA IMOBILIÁRIA", x + 2, y + 24);
+}
+function mkSlide(ctx, W, H, s, img, t, i, n, formato) {
+    t = t == null ? 1 : t; const A = formato === "reels" ? Math.min(1, t / 0.18) : 1; const Z = formato === "reels" ? 1.12 - 0.12 * t : 1;
+    const P = 72, maxW = W - P * 2, story = H > W * 1.5;
+    ctx.save(); ctx.clearRect(0, 0, W, H); ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+    const tipo = s.tipo || "gancho";
+    if (tipo === "gancho") {
+        mkCover(ctx, img, 0, 0, W, H, Z);
+        const g = ctx.createLinearGradient(0, H * 0.35, 0, H); g.addColorStop(0, "rgba(16,20,10,0)"); g.addColorStop(1, "rgba(16,20,10,.94)"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        const tg = ctx.createLinearGradient(0, 0, 0, 220); tg.addColorStop(0, "rgba(16,20,10,.55)"); tg.addColorStop(1, "rgba(16,20,10,0)"); ctx.fillStyle = tg; ctx.fillRect(0, 0, W, 220);
+        mkMarca(ctx, true, P, story ? 150 : 110);
+        ctx.globalAlpha = A;
+        ctx.font = (story ? 96 : 84) + 'px "Playfair Display", Georgia, serif'; ctx.font = "700 " + ctx.font;
+        const tl = mkLines(ctx, s.titulo, maxW, 4); ctx.font = "400 " + (story ? 38 : 34) + "px Inter, Arial"; const xl = mkLines(ctx, s.texto, maxW, 3);
+        const lhT = story ? 106 : 92, lhX = story ? 52 : 46; let y = H - (story ? 280 : 140) - xl.length * lhX - tl.length * lhT;
+        if (s.kicker) { ctx.font = "700 28px Inter, Arial"; ctx.fillStyle = MK.goldLt; ctx.fillText(String(s.kicker).toUpperCase(), P, y - 10); y += 30; }
+        ctx.fillStyle = "#fff"; ctx.font = "700 " + (story ? 96 : 84) + 'px "Playfair Display", Georgia, serif'; y += mkText(ctx, tl, P, y + lhT * 0.8, lhT);
+        ctx.fillStyle = "rgba(255,255,255,.88)"; ctx.font = "400 " + (story ? 38 : 34) + "px Inter, Arial"; mkText(ctx, xl, P, y + 58, lhX);
+    } else if (tipo === "prova") {
+        ctx.fillStyle = MK.olive; ctx.fillRect(0, 0, W, H); mkMarca(ctx, true, P, story ? 150 : 110);
+        const fh = story ? H * 0.32 : H * 0.3; mkCover(ctx, img, 0, H - fh, W, fh, Z); const g = ctx.createLinearGradient(0, H - fh, 0, H - fh + 160); g.addColorStop(0, MK.olive); g.addColorStop(1, "rgba(45,58,31,0)"); ctx.fillStyle = g; ctx.fillRect(0, H - fh, W, 160);
+        ctx.globalAlpha = A; let y = story ? 330 : 250;
+        ctx.fillStyle = "#fff"; ctx.font = '700 64px "Playfair Display", Georgia, serif'; y += mkText(ctx, mkLines(ctx, s.titulo, maxW, 2), P, y, 76) + 40;
+        const itens = (s.itens || []).slice(0, 4).map(x => String(x).split("|")); const cw = (maxW - 24) / 2, ch = story ? 230 : 190;
+        itens.forEach((it, k) => { const cx = P + (k % 2) * (cw + 24), cy = y + Math.floor(k / 2) * (ch + 24);
+            ctx.fillStyle = "rgba(255,255,255,.07)"; ctx.fillRect(cx, cy, cw, ch); ctx.fillStyle = MK.gold; ctx.fillRect(cx, cy, 6, ch);
+            ctx.fillStyle = MK.goldLt; ctx.font = '700 ' + (story ? 76 : 66) + 'px "Playfair Display", Georgia, serif'; ctx.fillText(mkLines(ctx, it[0], cw - 50, 1)[0] || "", cx + 34, cy + ch * 0.52);
+            ctx.fillStyle = "rgba(255,255,255,.8)"; ctx.font = "400 30px Inter, Arial"; ctx.fillText(mkLines(ctx, it[1] || "", cw - 50, 1)[0] || "", cx + 34, cy + ch * 0.8); });
+    } else if (tipo === "oferta") {
+        mkCover(ctx, img, 0, 0, W, H, Z, 18); ctx.fillStyle = "rgba(16,20,10,.6)"; ctx.fillRect(0, 0, W, H); mkMarca(ctx, true, P, story ? 150 : 110);
+        ctx.globalAlpha = A; const cw = W - P * 2, lhO = story ? 96 : 88;
+        ctx.font = '700 ' + (story ? 84 : 76) + 'px "Playfair Display", Georgia, serif'; const nT = mkLines(ctx, s.titulo, cw - 80, 2).length; ctx.font = "400 32px Inter, Arial"; const nX = mkLines(ctx, s.texto, cw - 100, 4).length;
+        const chh = 170 + nT * lhO + nX * 46 + 110, cy = (H - chh) / 2;
+        ctx.fillStyle = MK.cream; ctx.fillRect(P, cy, cw, chh); ctx.fillStyle = MK.gold; ctx.fillRect(P, cy, cw, 8);
+        ctx.textAlign = "center"; ctx.fillStyle = MK.gold; ctx.font = "700 28px Inter, Arial"; ctx.fillText(String(s.kicker || "VALORES").toUpperCase(), W / 2, cy + 110);
+        ctx.fillStyle = MK.olive; ctx.font = '700 ' + (story ? 84 : 76) + 'px "Playfair Display", Georgia, serif'; const tl = mkLines(ctx, s.titulo, cw - 80, 2); mkText(ctx, tl, W / 2, cy + 230, story ? 96 : 88);
+        ctx.fillStyle = "#3d4237"; ctx.font = "400 32px Inter, Arial"; mkText(ctx, mkLines(ctx, s.texto, cw - 100, 4), W / 2, cy + 230 + tl.length * (story ? 96 : 88) + 30, 46);
+    } else if (tipo === "cta") {
+        ctx.fillStyle = MK.oliveDk; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 0.28; mkCover(ctx, img, 0, 0, W, H, Z); ctx.globalAlpha = 1;
+        const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "rgba(26,35,16,.55)"); g.addColorStop(1, "rgba(26,35,16,.95)"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        mkMarca(ctx, true, P, story ? 150 : 110); ctx.globalAlpha = A; ctx.textAlign = "center";
+        ctx.fillStyle = "#fff"; ctx.font = '700 ' + (story ? 92 : 80) + 'px "Playfair Display", Georgia, serif'; const tl = mkLines(ctx, s.titulo, maxW, 3); let y = H * (story ? 0.38 : 0.34);
+        y += mkText(ctx, tl, W / 2, y, story ? 104 : 92);
+        ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.font = "400 34px Inter, Arial"; y += mkText(ctx, mkLines(ctx, s.texto, maxW - 40, 4), W / 2, y + 30, 48) + 70;
+        const bw = Math.min(maxW, 760), bh = 110, bx = (W - bw) / 2; ctx.fillStyle = MK.gold; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(bx, y, bw, bh, 55); else ctx.rect(bx, y, bw, bh); ctx.fill();
+        ctx.fillStyle = MK.oliveDk; ctx.font = "700 36px Inter, Arial"; ctx.fillText(s.botao || "Fale com a Holy no WhatsApp", W / 2, y + 68);
+        ctx.fillStyle = MK.goldLt; ctx.font = "600 32px Inter, Arial"; ctx.fillText("(49) 98845-4873  ·  holyimoveis.com", W / 2, y + bh + 80);
+    } else if (tipo === "enquete") {
+        mkCover(ctx, img, 0, 0, W, H, Z); ctx.fillStyle = "rgba(16,20,10,.35)"; ctx.fillRect(0, 0, W, H); mkMarca(ctx, true, P, 150);
+        ctx.globalAlpha = A; const cw = W - P * 2, cy = H * 0.34; ctx.font = '700 62px "Playfair Display", Georgia, serif'; const ql = mkLines(ctx, s.titulo, cw - 80, 3);
+        const chq = 120 + ql.length * 74 + 70; ctx.fillStyle = MK.cream; ctx.fillRect(P, cy, cw, chq); ctx.fillStyle = MK.gold; ctx.fillRect(P, cy, cw, 8);
+        ctx.textAlign = "center"; ctx.fillStyle = MK.olive; mkText(ctx, ql, W / 2, cy + 110, 74);
+        ctx.fillStyle = MK.gold; ctx.font = "700 28px Inter, Arial"; ctx.fillText("RESPONDA NA ENQUETE ↓", W / 2, cy + chq - 44);
+    } else {
+        const ph = story ? H * 0.55 : H * 0.56; mkCover(ctx, img, 0, 0, W, ph, Z); ctx.fillStyle = MK.olive; ctx.fillRect(0, ph, W, H - ph);
+        const tg = ctx.createLinearGradient(0, 0, 0, 220); tg.addColorStop(0, "rgba(16,20,10,.5)"); tg.addColorStop(1, "rgba(16,20,10,0)"); ctx.fillStyle = tg; ctx.fillRect(0, 0, W, 220);
+        mkMarca(ctx, true, P, story ? 150 : 110); ctx.globalAlpha = A; let y = ph + 90;
+        ctx.fillStyle = MK.goldLt; ctx.font = "700 26px Inter, Arial"; ctx.fillText(String(s.kicker || (tipo === "lazer" ? "ESTILO DE VIDA" : "DIFERENCIAIS")).toUpperCase(), P, y); y += 70;
+        ctx.fillStyle = "#fff"; ctx.font = '700 58px "Playfair Display", Georgia, serif'; y += mkText(ctx, mkLines(ctx, s.titulo, maxW, 2), P, y, 68) + 20;
+        const itens = (s.itens || []).filter(Boolean).slice(0, story ? 5 : 4);
+        if (itens.length) itens.forEach(it => { ctx.fillStyle = MK.gold; ctx.beginPath(); ctx.arc(P + 9, y - 11, 8, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.font = "400 34px Inter, Arial"; ctx.fillText(mkLines(ctx, it, maxW - 40, 1)[0], P + 36, y); y += 58; });
+        else { ctx.fillStyle = "rgba(255,255,255,.88)"; ctx.font = "400 34px Inter, Arial"; mkText(ctx, mkLines(ctx, s.texto, maxW, 5), P, y, 48); }
+    }
+    ctx.globalAlpha = 1;
+    if (formato === "feed" && n > 1) { ctx.textAlign = "right"; ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.font = "600 24px Inter, Arial"; ctx.fillText((i + 1) + "/" + n, W - P, 104); }
+    ctx.restore();
+}
+function mkPadrao(v, formato) {
+    const dif = (v.diferenciais || []).filter(Boolean).slice(0, 4), laz = (v.lazer || []).filter(Boolean).slice(0, 4);
+    const preco = v.valor ? "R$ " + String(v.valor).replace(/^R\$\s*/, "") : (v.preco || "Sob consulta");
+    const stats = v.tipo === "imovel"
+        ? [[v.areaPrivativa ? v.areaPrivativa + " m²" : "", "área privativa"], [v.areaTotal ? v.areaTotal + " m²" : "", "área total"], [v.quartos ? String(v.quartos) : "", "dormitórios"], [v.vagas ? String(v.vagas) : "", "vagas"]].filter(s => s[0])
+        : (v.destaques || []).map(d => [d.n, d.l]);
+    const local = [v.bairro, v.cidade].filter(Boolean).join(" · ");
+    const g = { tipo: "gancho", kicker: local, titulo: v.nome, texto: v.tipoLabel || v.tipoImovel || "" };
+    const d = { tipo: "desejo", titulo: "O que torna este imóvel especial", itens: dif };
+    const l = { tipo: "lazer", titulo: "Lazer e estilo de vida", itens: laz };
+    const p = { tipo: "prova", titulo: "Os números", itens: stats.slice(0, 4).map(s => s.join("|")) };
+    const o = { tipo: "oferta", kicker: "Valores", titulo: (/^(a partir|R\$|sob|em breve)/i.test(preco) ? preco : "A partir de " + preco), texto: "Condições sob consulta com a Holy." };
+    const c = { tipo: "cta", titulo: "Agende sua visita", texto: "Fale com a Holy e receba fotos, plantas e condições completas.", botao: "Chame no WhatsApp" };
+    if (formato === "story") return [g, Object.assign({}, d, { tipo: "desejo" }), { tipo: "enquete", titulo: "O que mais pesa na sua escolha?", itens: ["Localização", "Lazer"] }, c];
+    return [g, d, l, p, o, c].filter(s => s.tipo !== "lazer" || laz.length).filter(s => s.tipo !== "prova" || (s.itens || []).length);
+}
+function PostStudio({ item, kind, onClose }) {
+    const vit = mktVitrine(item, kind);
+    const fotos = mktFotos(item);
+    const [formato, setFormato] = useState("feed");
+    const [slides, setSlides] = useState(() => mkPadrao(vit, "feed"));
+    const [fotoIdx, setFotoIdx] = useState({});
+    const [legenda, setLegenda] = useState("");
+    const [hashtags, setHashtags] = useState("");
+    const [narracao, setNarracao] = useState("");
+    const [prev, setPrev] = useState([]);
+    const [load, setLoad] = useState(""); const [msg, setMsg] = useState("");
+    const [video, setVideo] = useState(null);
+    const W = 1080, H = formato === "feed" ? 1350 : 1920;
+    const fotoDe = i => fotos.length ? fotos[(fotoIdx[i] != null ? fotoIdx[i] : i) % fotos.length] : "";
+    useEffect(() => { setSlides(mkPadrao(vit, formato)); setFotoIdx({}); setVideo(null); }, [formato]);
+    async function renderTudo(q) {
+        await mkFonts(); const out = [];
+        for (let i = 0; i < slides.length; i++) { const cv = document.createElement("canvas"); cv.width = W; cv.height = H; mkSlide(cv.getContext("2d"), W, H, slides[i], await mkImg(fotoDe(i)), 1, i, slides.length, formato); out.push(cv.toDataURL("image/jpeg", q || 0.9)); }
+        return out;
+    }
+    useEffect(() => { let vivo = true; const t = setTimeout(async () => { const r = await renderTudo(0.7); if (vivo) setPrev(r); }, 400); return () => { vivo = false; clearTimeout(t); }; }, [slides, fotoIdx, formato]);
+    async function gerarIA() {
+        setLoad("A IA está escrevendo o roteiro de venda…"); setMsg("");
+        const estrutura = formato === "feed" ? "carrossel de 6 slides, tipos nesta ordem: gancho, desejo, lazer, prova, oferta, cta"
+            : formato === "story" ? "sequência de 4 stories, tipos nesta ordem: gancho, desejo, enquete, cta" : "reels de 6 cenas (2,5 s cada), tipos nesta ordem: gancho, desejo, lazer, prova, oferta, cta";
+        const sys = "Você é o copywriter da Holy Curadoria Imobiliária. Tom informal, porém elegante; português correto; nunca use 'top' nem 'perfeito'. Use SOMENTE os dados fornecidos: nunca invente valores, prazos, condições ou itens. Estrutura de venda: gancho que prende, desejo (diferenciais), estilo de vida, prova (números), oferta (valor/condição) e chamada para ação para conversar no WhatsApp ou agendar visita. Responda APENAS com JSON válido, sem texto antes ou depois.";
+        const prompt = `Crie o conteúdo para Instagram (${estrutura}) do ${kind === "im" ? "imóvel" : "empreendimento"} abaixo.
+Formato JSON: {"slides":[{"tipo":"gancho","kicker":"bairro ou cidade","titulo":"até 45 caracteres","texto":"até 90 caracteres"},{"tipo":"desejo","titulo":"...","itens":["até 4 itens curtos"]},{"tipo":"lazer","titulo":"...","itens":["..."]},{"tipo":"prova","titulo":"...","itens":["número|rótulo"]},{"tipo":"oferta","kicker":"Valores","titulo":"valor exato fornecido ou 'Sob consulta'","texto":"condição só se fornecida"},{"tipo":"enquete","titulo":"pergunta","itens":["opção A","opção B"]},{"tipo":"cta","titulo":"...","texto":"...","botao":"até 32 caracteres"}],"legenda":"primeira linha com gancho; 3 a 5 linhas de valor; termine com chamada para o WhatsApp (49) 98845-4873 ou link da bio","hashtags":["8 a 12 hashtags locais e do segmento"],"narracao":"roteiro de narração curto para o reels, uma frase por cena (só para reels)"}
+Use apenas os tipos da estrutura pedida.
+Dados: ${JSON.stringify(vit).slice(0, 9000)}`;
+        const r = await holyIA(prompt, 1800, sys);
+        if (r.error) { setMsg("❌ " + r.error); setLoad(""); return; }
+        try {
+            const j = JSON.parse(String(r.text).replace(/```json|```/g, "").trim().replace(/^[^{]*/, "").replace(/[^}]*$/, ""));
+            if (Array.isArray(j.slides) && j.slides.length) setSlides(j.slides);
+            setLegenda(j.legenda || ""); setHashtags((j.hashtags || []).map(h => h.startsWith("#") ? h : "#" + h).join(" ")); setNarracao(Array.isArray(j.narracao) ? j.narracao.join("\n") : (j.narracao || ""));
+        } catch (e) { setMsg("❌ Não consegui ler a resposta da IA. Tente de novo."); }
+        setLoad("");
+    }
+    const S = (i, k, v) => setSlides(p => p.map((s, x) => x === i ? Object.assign({}, s, { [k]: v }) : s));
+    async function baixarZip() {
+        setLoad("Preparando as artes…");
+        try {
+            if (!window.JSZip) await new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+            const imgs = await renderTudo(0.92); const z = new window.JSZip(); const base = (item.nome || "post").normalize("NFD").replace(/[^\w]+/g, "-").toLowerCase();
+            imgs.forEach((d, i) => z.file(`${base}-${formato}-${i + 1}.jpg`, d.split(",")[1], { base64: true }));
+            z.file("legenda.txt", legenda + "\n\n" + hashtags + (narracao ? "\n\nNARRAÇÃO:\n" + narracao : ""));
+            const blob = await z.generateAsync({ type: "blob" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${base}-${formato}.zip`; a.click();
+        } catch (e) { setMsg("❌ " + e.message); }
+        setLoad("");
+    }
+    async function gerarVideo() {
+        setLoad("Gravando o vídeo do Reels (cerca de 16 segundos, mantenha esta aba aberta)…"); setVideo(null); setMsg("");
+        try {
+            await mkFonts(); const imgs = []; for (let i = 0; i < slides.length; i++) imgs.push(await mkImg(fotoDe(i)));
+            const cv = document.createElement("canvas"); cv.width = 1080; cv.height = 1920; const ctx = cv.getContext("2d");
+            const tipos = ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp9", "video/webm"];
+            const mime = window.MediaRecorder && tipos.find(t => MediaRecorder.isTypeSupported(t));
+            if (!mime) throw new Error("Este navegador não grava vídeo. Use o Google Chrome no computador.");
+            const rec = new MediaRecorder(cv.captureStream(30), { mimeType: mime, videoBitsPerSecond: 8000000 }); const partes = [];
+            rec.ondataavailable = e => e.data.size && partes.push(e.data); const fim = new Promise(r => rec.onstop = r);
+            mkSlide(ctx, 1080, 1920, slides[0], imgs[0], 0, 0, slides.length, "reels"); rec.start(250);
+            const dur = 2.6, total = slides.length * dur, t0 = performance.now();
+            await new Promise(ok => { (function quadro() { const el = (performance.now() - t0) / 1000; if (el >= total) return ok(); const i = Math.min(slides.length - 1, Math.floor(el / dur)); mkSlide(ctx, 1080, 1920, slides[i], imgs[i], (el - i * dur) / dur, i, slides.length, "reels"); requestAnimationFrame(quadro); })(); });
+            rec.stop(); await fim;
+            const ext = mime.indexOf("mp4") >= 0 ? "mp4" : "webm"; const blob = new Blob(partes, { type: mime.split(";")[0] });
+            setVideo({ url: URL.createObjectURL(blob), ext });
+            if (ext === "webm") setMsg("O vídeo saiu em WebM. O Instagram pede MP4: atualize o Chrome ou converta o arquivo antes de postar.");
+        } catch (e) { setMsg("❌ " + e.message); }
+        setLoad("");
+    }
+    async function publicar() {
+        if (!confirm(formato === "story" ? "Publicar estes stories agora no Instagram da Holy?" : "Publicar este carrossel agora no Instagram da Holy?")) return;
+        setLoad("Enviando as artes e publicando no Instagram…"); setMsg("");
+        try {
+            const imgs = await renderTudo(0.9); const urls = [];
+            for (let i = 0; i < imgs.length; i++) urls.push(await holyEnviarDataUrl(imgs[i], `post-${i + 1}.jpg`, "posts/" + (item.id || "item")));
+            await metaApi("publicarIG", { tipo: formato === "story" ? "story" : "carrossel", imagens: urls, legenda: legenda + (hashtags ? "\n\n" + hashtags : "") });
+            setMsg("✅ Publicado no Instagram!");
+        } catch (e) { setMsg("❌ " + e.message); }
+        setLoad("");
+    }
+    const tamanho = formato === "feed" ? "1080 × 1350 (4:5)" : "1080 × 1920 (9:16)";
+    return React.createElement(Modal, { onClose, width: 1080, z: 2600 },
+        React.createElement(MHead, { title: "📸 Criar post: " + item.nome, sub: "Instagram · feed, stories e reels na identidade da Holy", onClose }),
+        React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 } },
+            [["feed", "Feed (carrossel)"], ["story", "Stories"], ["reels", "Reels (vídeo)"]].map(([k, l]) => React.createElement("button", { key: k, onClick: () => setFormato(k), style: { padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${formato === k ? C.olive : C.border}`, background: formato === k ? C.olive : C.white, color: formato === k ? "#fff" : C.inkMid } }, l)),
+            React.createElement("div", { style: { flex: 1 } }),
+            React.createElement(PBtn, { sm: true, onClick: gerarIA, loading: load.startsWith("A IA") }, "✦ Gerar roteiro de venda com IA")),
+        (load || msg) && React.createElement("div", { style: { fontSize: 12, color: msg.startsWith("❌") ? C.danger : C.olive, marginBottom: 10 } }, load ? "⏳ " + load : msg),
+        !fotos.length && React.createElement("div", { style: { fontSize: 12, color: C.danger, marginBottom: 10 } }, "Este cadastro não tem fotos na nuvem; as artes saem com fundo da marca."),
+        React.createElement("div", { className: "mk-grid", style: { display: "grid", gridTemplateColumns: "minmax(0,1.1fr) minmax(0,1fr)", gap: 18 } },
+            React.createElement("div", null,
+                mkLbl("Prévia · " + tamanho),
+                React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 8 } },
+                    prev.map((d, i) => React.createElement("div", { key: i },
+                        React.createElement("img", { src: d, alt: "", style: { width: "100%", borderRadius: 6, border: `0.5px solid ${C.border}`, display: "block" } }),
+                        fotos.length > 1 && React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, color: C.muted, marginTop: 3 } },
+                            React.createElement("button", { onClick: () => setFotoIdx(p => Object.assign({}, p, { [i]: ((p[i] != null ? p[i] : i) + fotos.length - 1) % fotos.length })), style: { border: "none", background: "none", cursor: "pointer", color: C.olive } }, "◀"), "trocar foto",
+                            React.createElement("button", { onClick: () => setFotoIdx(p => Object.assign({}, p, { [i]: ((p[i] != null ? p[i] : i) + 1) % fotos.length })), style: { border: "none", background: "none", cursor: "pointer", color: C.olive } }, "▶"))))),
+                React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 } },
+                    React.createElement(PBtn, { sm: true, onClick: baixarZip, disabled: !!load }, "⬇ Baixar artes + legenda (.zip)"),
+                    formato === "reels" && React.createElement(PBtn, { sm: true, variant: "ghost", onClick: gerarVideo, disabled: !!load }, "🎬 Gerar vídeo do Reels"),
+                    formato !== "reels" && React.createElement(PBtn, { sm: true, variant: "ghost", onClick: publicar, disabled: !!load }, "📤 Publicar no Instagram")),
+                video && React.createElement("div", { style: { marginTop: 12 } },
+                    React.createElement("video", { src: video.url, controls: true, style: { width: 220, borderRadius: 8, display: "block" } }),
+                    React.createElement("a", { href: video.url, download: (item.nome || "reels") + "." + video.ext, style: { fontSize: 12, fontWeight: 700, color: C.olive } }, "⬇ Baixar vídeo (." + video.ext + ")"),
+                    React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 4 } }, "Poste pelo app do Instagram e escolha uma música em alta no próprio app."))),
+            React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10, maxHeight: 620, overflowY: "auto", paddingRight: 4 } },
+                mkLbl("Textos de cada " + (formato === "reels" ? "cena" : "tela")),
+                slides.map((s, i) => React.createElement("div", { key: i, style: Object.assign(mkBox("#fff"), { display: "flex", flexDirection: "column", gap: 6 }) },
+                    React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: C.gold } }, (i + 1) + ". " + ({ gancho: "Gancho", desejo: "Desejo", lazer: "Estilo de vida", prova: "Prova (números)", oferta: "Oferta", cta: "Chamada para ação", enquete: "Enquete" }[s.tipo] || s.tipo)),
+                    React.createElement("input", { style: mkInput, value: s.titulo || "", placeholder: "Título", onChange: e => S(i, "titulo", e.target.value) }),
+                    s.tipo === "enquete" && React.createElement("div", { style: { fontSize: 11, color: C.muted } }, "Ao postar, adicione abaixo do quadro a figurinha de Enquete do Instagram com as opções listadas aqui."),
+                    (s.itens && s.itens.length) || ["desejo", "lazer", "prova", "enquete"].includes(s.tipo)
+                        ? React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 64 }), value: (s.itens || []).join("\n"), placeholder: s.tipo === "prova" ? "número|rótulo (um por linha)" : "um item por linha", onChange: e => S(i, "itens", e.target.value.split("\n")) })
+                        : React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 52 }), value: s.texto || "", placeholder: "Texto", onChange: e => S(i, "texto", e.target.value) }))),
+                mkLbl("Legenda"),
+                React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 120 }), value: legenda, placeholder: "Gere com IA ou escreva a legenda", onChange: e => setLegenda(e.target.value) }),
+                React.createElement("input", { style: mkInput, value: hashtags, placeholder: "#imoveis #itapema …", onChange: e => setHashtags(e.target.value) }),
+                formato === "reels" && React.createElement(React.Fragment, null, mkLbl("Narração do Reels (opcional)"), React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 80 }), value: narracao, onChange: e => setNarracao(e.target.value) })),
+                React.createElement("button", { onClick: () => { navigator.clipboard && navigator.clipboard.writeText(legenda + "\n\n" + hashtags); setMsg("Legenda copiada."); }, style: { alignSelf: "flex-start", fontSize: 12, background: "none", border: `0.5px solid ${C.border}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.olive } }, "📋 Copiar legenda"))));
+}
+
 function ConfigPage() {
   const [st, setSt] = useState(null);
   const [imp, setImp] = useState('');
@@ -19690,6 +20145,7 @@ function App() {
         { k: "dashboard", i: "⌂", l: "Dashboard" },
         { k: "clientes", i: "◎", l: "Clientes" },
         { k: "conversas", i: "💬", l: "Conversas" },
+        { k: "campanhas", i: "📣", l: "Campanhas" },
         { k: "imoveis", i: "▦", l: "Imóveis" },
         { k: "empreendimentos", i: "▤", l: "Empreendimentos" },
         { k: "kanban", i: "≡", l: "Funil" },
@@ -19701,6 +20157,7 @@ function App() {
     ];;
     const totC = imoveis.filter(i => i.status === "Disponível").reduce((s, i) => s + i.valor, 0);
     return React.createElement(React.Fragment, null,
+        React.createElement(MarketingHost, null),
         React.createElement("style", null, `
       @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,400&display=swap');
       *{box-sizing:border-box;margin:0;padding:0}
@@ -19750,6 +20207,7 @@ function App() {
                     page === "imoveis" && React.createElement(ImoveisPage, { imoveis: imoveis, clientes: clientes, onAdd: addIm, onEdit: editIm, onDelete: id => setImoveis(p => p.filter(i => i.id !== id)) }),
                     page === "empreendimentos" && React.createElement(EmpreendimentosPage, null),
                     page === "conversas" && React.createElement(ConversasPage, null),
+                    page === "campanhas" && React.createElement(CampanhasPage, null),
                     page === "kanban" && React.createElement(React.Fragment, null,
                         React.createElement(SecT, null, "Funil Kanban"),
                         React.createElement(KanbanPage, { clientes: clientes })),

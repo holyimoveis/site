@@ -59,3 +59,15 @@ As variáveis antigas **CRM_API_KEY** e **KV_...** não são mais usadas e podem
 | `POST /api/ia` | senha | Consultor IA (usa ANTHROPIC_API_KEY) |
 | `/api/empreendimentos` | público lê, senha grava | empreendimentos do site |
 | `GET /api/status` | público | diagnóstico |
+
+## Anúncios na Meta e criador de posts (out/2026)
+
+Arquivos: `api/meta.js` (campanhas, leads, Instagram), `api/img.js` (fotos para o criador de posts), `privacidade.html` (exigida pelos formulários de lead).
+
+Variáveis na Vercel (Segredo, 3 ambientes):
+- `META_ACCESS_TOKEN`: token do usuário do sistema (Configurações do negócio > Usuários do sistema), com as permissões ads_management, ads_read, business_management, pages_show_list, pages_read_engagement, pages_manage_ads, pages_manage_metadata, leads_retrieval, instagram_basic, instagram_content_publish.
+- `META_AD_ACCOUNT_ID`: número da conta de anúncios (com ou sem "act_").
+- `META_PAGE_ID`: ID da Página do Facebook da Holy.
+- Opcionais: `META_IG_USER_ID` (descoberto sozinho pela Página), `META_API_VERSION` (padrão v25.0).
+
+Regras: anúncios de imóveis sempre na Categoria Especial de Moradia (HOUSING): sem idade/gênero/CEP, sem exclusões, raio mínimo de 25 km. Campanhas são criadas PAUSADAS. Leads dos formulários entram em Clientes com origem "Meta Ads" (verificação a cada 5 minutos).
