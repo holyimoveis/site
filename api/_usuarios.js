@@ -4,8 +4,9 @@
 // GET                                            -> { usuarios }         (admin e gerente; e-mail só para o admin)
 // POST { acao:'criar', nome, email, perfil, senha }                     (admin)
 // PATCH { id, nome?, perfil?, ativo?, senha? }                          (admin)
+// DELETE ?id=  (admin; só usuário desativado; clientes dele ficam sem responsável)
 // POST { acao:'minhaSenha', atual, nova }                               (o próprio usuário)
-import { sql, ensureSchema, cors, body, ok, err, fail, newId, str } from './_lib.js';
+import { sql, ensureSchema, cors, body, ok, err, fail, newId, str, atualizarDoc } from './_lib.js';
 import { PERFIS, sessao, pode, hashSenha, confereSenha, emitirToken } from './_auth.js';
 
 const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
@@ -76,6 +77,20 @@ export default async function handler(req, res) {
       return ok(res, { usuario: pub(r[0], true) });
     }
 
+    // Excluir de vez: só usuário já desativado. Os clientes dele ficam "Sem responsável" para redistribuir.
+    if (req.method === 'DELETE') {
+      const id = String((req.query || {}).id || b.id || '');
+      const r0 = await sql.query('SELECT ativo, nome FROM usuarios WHERE id = $1', [id]);
+      if (!r0[0]) return err(res, 404, 'Usuário não encontrado.');
+      if (r0[0].ativo) return err(res, 400, 'Desative o usuário antes de excluir.');
+      let liberados = 0;
+      await atualizarDoc('clientes', (lista) => {
+        lista = Array.isArray(lista) ? lista : []; liberados = 0;
+        return lista.map((c) => { if (c && c.responsavelId === id) { liberados++; return { ...c, responsavelId: '', responsavelNome: '' }; } return c; });
+      }, []);
+      await sql.query('DELETE FROM usuarios WHERE id = $1', [id]);
+      return ok(res, { liberados });
+    }
     return err(res, 405, 'Método não permitido.');
   } catch (e) { return fail(res, e); }
 }

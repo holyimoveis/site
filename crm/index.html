@@ -20360,6 +20360,11 @@ function UsuariosPage() {
     const api = async (method, body) => { const r = await holyFetch("/api/usuarios", { method, body: JSON.stringify(body) }); const d = await r.json().catch(() => ({})); if (!d.success) throw new Error(d.error || "Erro"); return d; };
     const criar = async () => { setMsg("Criando…"); try { await api("POST", Object.assign({ acao: "criar" }, novo)); setNovo({ nome: "", email: "", perfil: "corretor", senha: "" }); setMsg("✅ Usuário criado. Passe o e-mail e a senha inicial para a pessoa; ela pode trocar a senha em Configurações."); carregar(); } catch (e) { setMsg("❌ " + e.message); } };
     const mudar = async (u, campos, aviso) => { if (aviso && !confirm(aviso)) return; try { await api("PATCH", Object.assign({ id: u.id }, campos)); carregar(); } catch (e) { alert(e.message); } };
+    const excluir = async u => {
+        if (!confirm("Excluir " + u.nome + " de vez? O login some e os clientes dele ficam \"Sem responsável\" para você redistribuir em Equipe. O histórico na Timeline continua.")) return;
+        try { const r = await holyFetch("/api/usuarios?id=" + encodeURIComponent(u.id), { method: "DELETE" }); const d = await r.json(); if (!d.success) throw new Error(d.error); await HolyStore.pullAll(["clientes"]).catch(() => {}); carregar(); if (d.liberados) alert(d.liberados + " cliente(s) ficaram sem responsável. Redistribua em Equipe."); }
+        catch (e) { alert(e.message); }
+    };
     const senha = async u => { const s = prompt("Nova senha para " + u.nome + " (mínimo 8 caracteres):"); if (s) mudar(u, { senha: s }); };
     const inp = { padding: "9px 10px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 13, minWidth: 0 };
     return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16, maxWidth: 900 } },
@@ -20381,7 +20386,8 @@ function UsuariosPage() {
                     React.createElement("div", { style: { fontSize: 11, color: C.muted } }, u.email + (u.ultimo_acesso ? " · último acesso " + new Date(u.ultimo_acesso).toLocaleDateString("pt-BR") : " · nunca entrou"))),
                 React.createElement("select", { value: u.perfil, onChange: e => mudar(u, { perfil: e.target.value }), style: inp }, Object.entries(PERFIS_NOME).map(([k, v]) => React.createElement("option", { key: k, value: k }, v))),
                 React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: () => senha(u) }, "Trocar senha"),
-                React.createElement(PBtn, { sm: true, variant: "ghost", color: u.ativo ? C.danger : C.success, onClick: () => mudar(u, { ativo: !u.ativo }, u.ativo ? "Desativar " + u.nome + "? A pessoa perde o acesso na hora. Os clientes dela continuam no CRM; redistribua em Equipe." : null) }, u.ativo ? "Desativar" : "Reativar")))));
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: u.ativo ? C.danger : C.success, onClick: () => mudar(u, { ativo: !u.ativo }, u.ativo ? "Desativar " + u.nome + "? A pessoa perde o acesso na hora. Os clientes dela continuam no CRM; redistribua em Equipe." : null) }, u.ativo ? "Desativar" : "Reativar"),
+                !u.ativo && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.danger, onClick: () => excluir(u) }, "🗑 Excluir")))));
 }
 
 function MinhaConta() {
@@ -20479,6 +20485,7 @@ function App() {
                         React.createElement("div", { style: { minWidth: 0 } },
                             React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: C.white, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, (HolyUser && HolyUser.nome) || "Holy Curadoria"),
                             React.createElement("div", { style: { fontSize: 9, color: C.muted } }, PERFIS_NOME[holyPerfil()] + (HolyUser && HolyUser.mestre ? " · chave mestra" : "")))),
+                    React.createElement("button", { onClick: () => { if (confirm("Sair do CRM neste aparelho? Seus dados continuam salvos na nuvem.")) { HolyStore.flush(); HolyAuth.clear(); setTimeout(() => location.reload(), 600); } }, style: { display: "block", fontSize: 11, color: C.oliveLt, background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: "2px 0 6px" } }, "\u21AA Sair"),
                     holyPode("configCompleta") && React.createElement("button", { onClick: resetData, style: { fontSize: 9, color: "rgba(255,255,255,0.2)", background: "none", border: "none", cursor: "pointer", textAlign: "left" } }, "\u21BA Reset dados"))),
             React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 } },
                 React.createElement("div", { style: { background: C.white, borderBottom: `0.5px solid ${C.border}`, padding: isM ? "calc(8px + env(safe-area-inset-top, 0px)) 12px 8px" : "11px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0, gap: 10 } },
