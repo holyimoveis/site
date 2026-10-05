@@ -71,3 +71,12 @@ Variáveis na Vercel (Segredo, 3 ambientes):
 - Opcionais: `META_IG_USER_ID` (descoberto sozinho pela Página), `META_API_VERSION` (padrão v25.0).
 
 Regras: anúncios de imóveis sempre na Categoria Especial de Moradia (HOUSING): sem idade/gênero/CEP, sem exclusões, raio mínimo de 25 km. Campanhas são criadas PAUSADAS. Leads dos formulários entram em Clientes com origem "Meta Ads" (verificação a cada 5 minutos).
+
+## Atualização out/2026 (2): estratégia, correções e logo
+- Estratégia com IA: classifica o padrão do imóvel, define objetivo mensurável, orçamento por faixa, custo por lead e leads estimados, plano de otimização e 3 anúncios com ângulos diferentes.
+- Nomes únicos de formulário e campanha; se uma etapa falhar, o que foi criado é desfeito e o erro diz a etapa.
+- Leads da Meta com o nome da campanha e as respostas legíveis.
+- Botão Excluir cliente (apaga também o histórico dele na Timeline).
+- Página Campanhas mostra o saldo da conta de anúncios e avisa antes de ativar com saldo baixo.
+- Publicação no Instagram espera cada imagem ficar pronta (corrige o erro 9007 "mídia não está pronta").
+- Logo oficial da Holy (assets/holy-logo-claro.svg, holy-logo-escuro.svg, holy-coroa.svg) no CRM e nas artes.

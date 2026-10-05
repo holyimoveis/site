@@ -14,7 +14,7 @@ async function graph(path, method = 'GET', params = {}, token) {
   const tk = token || TOKEN();
   let url = `https://graph.facebook.com/${V()}/${path.replace(/^\//, '')}`;
   const opt = { method, headers: {} };
-  if (method === 'GET') {
+  if (method === 'GET' || method === 'DELETE') {
     const q = new URLSearchParams({ access_token: tk });
     for (const [k, v] of Object.entries(params)) q.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
     url += (url.includes('?') ? '&' : '?') + q.toString();
@@ -49,44 +49,77 @@ const site = (req) => process.env.SITE_URL || ('https://' + (req.headers['x-forw
 // ── IA: estratégia, público e textos ──────────────────────────────────
 const FERRAMENTA = {
   name: 'estrategia',
-  description: 'Estratégia de campanha de leads no Meta para um imóvel ou empreendimento.',
+  description: 'Plano de campanha de leads no Meta para um imóvel ou empreendimento, com objetivo, orçamento por padrão do imóvel e anúncios.',
   input_schema: {
     type: 'object',
     properties: {
-      persona: { type: 'string', description: 'Quem é o comprador provável e por quê (para orientar criativo e praças; NÃO vira segmentação demográfica).' },
+      objetivo: { type: 'string', description: 'Objetivo da campanha em UMA frase mensurável (ex.: "Gerar 25 a 35 leads qualificados em 21 dias, a até R$ 80 por lead, de compradores com prazo de até 12 meses").' },
+      padrao: { type: 'string', enum: ['econômico', 'médio', 'médio-alto', 'alto padrão', 'luxo'], description: 'Padrão do imóvel, pelo valor e pelos atributos.' },
+      persona: { type: 'string', description: 'Quem é o comprador provável e o que ele valoriza (orienta criativo e praças; NÃO vira segmentação demográfica).' },
       pracas: { type: 'array', items: { type: 'object', properties: { cidade: { type: 'string' }, uf: { type: 'string' }, raio_km: { type: 'number' }, motivo: { type: 'string' } }, required: ['cidade', 'uf', 'raio_km'] }, description: '2 a 6 cidades de origem dos compradores, raio mínimo 25 km.' },
-      interesses: { type: 'array', items: { type: 'string' }, description: 'Até 8 sinais de interesse (nomes como aparecem no Meta, ex.: Golfe, Investimento imobiliário, Imóveis de luxo).' },
-      orcamento_diario: { type: 'number', description: 'Sugestão em reais por dia.' },
+      interesses: { type: 'array', items: { type: 'string' }, description: 'Até 8 sinais de interesse (nomes como aparecem no Meta).' },
+      orcamento_diario: { type: 'number', description: 'Reais por dia, dentro da faixa do padrão.' },
       duracao_dias: { type: 'number' },
-      justificativa_orcamento: { type: 'string' },
-      textos: { type: 'array', items: { type: 'object', properties: { texto_principal: { type: 'string' }, titulo: { type: 'string' }, descricao: { type: 'string' } }, required: ['texto_principal', 'titulo'] }, description: 'Exatamente 3 variações para teste A/B.' },
+      cpl_estimado: { type: 'object', properties: { min: { type: 'number' }, max: { type: 'number' } }, required: ['min', 'max'], description: 'Custo por lead esperado, em reais.' },
+      leads_estimados: { type: 'object', properties: { min: { type: 'number' }, max: { type: 'number' } }, required: ['min', 'max'] },
+      justificativa_orcamento: { type: 'string', description: '1 a 2 frases com os números que justificam o orçamento.' },
+      plano_otimizacao: { type: 'array', items: { type: 'string' }, description: '3 a 5 ações por fase (ex.: "Dias 1-7: não editar; aprendizado").' },
+      textos: { type: 'array', items: { type: 'object', properties: { angulo: { type: 'string' }, texto_principal: { type: 'string' }, titulo: { type: 'string' }, descricao: { type: 'string' } }, required: ['angulo', 'texto_principal', 'titulo'] }, description: 'Exatamente 3 variações, cada uma com um ângulo diferente.' },
       perguntas: { type: 'array', items: { type: 'object', properties: { pergunta: { type: 'string' }, opcoes: { type: 'array', items: { type: 'string' } } }, required: ['pergunta', 'opcoes'] }, description: '2 ou 3 perguntas qualificadoras de múltipla escolha.' },
       agradecimento: { type: 'string', description: 'Texto da tela final do formulário.' },
       dicas: { type: 'array', items: { type: 'string' } },
     },
-    required: ['persona', 'pracas', 'interesses', 'orcamento_diario', 'duracao_dias', 'textos', 'perguntas', 'agradecimento'],
+    required: ['objetivo', 'padrao', 'persona', 'pracas', 'interesses', 'orcamento_diario', 'duracao_dias', 'cpl_estimado', 'leads_estimados', 'justificativa_orcamento', 'plano_otimizacao', 'textos', 'perguntas', 'agradecimento'],
   },
+};
+// Faixas de referência por padrão (R$/dia, dias, CPL). A IA ajusta dentro delas pela praça e pela concorrência.
+const FAIXAS = {
+  'econômico': { dia: [30, 50], dias: [14, 21], cpl: [8, 25] },
+  'médio': { dia: [40, 70], dias: [14, 21], cpl: [15, 40] },
+  'médio-alto': { dia: [60, 100], dias: [21, 28], cpl: [30, 80] },
+  'alto padrão': { dia: [80, 150], dias: [21, 28], cpl: [60, 150] },
+  'luxo': { dia: [120, 250], dias: [28, 30], cpl: [120, 350] },
 };
 async function sugerir(item) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('Falta ANTHROPIC_API_KEY.');
-  const sys = `Você é um gestor de tráfego sênior especializado em imóveis de alto padrão no Brasil, trabalhando para a Holy Curadoria Imobiliária (Santa Catarina). Objetivo: o MENOR custo por lead QUALIFICADO (lead quente), não o lead mais barato.
+  const tabela = Object.entries(FAIXAS).map(([k, f]) => `- ${k}: R$ ${f.dia[0]} a ${f.dia[1]}/dia · ${f.dias[0]} a ${f.dias[1]} dias · custo por lead esperado R$ ${f.cpl[0]} a ${f.cpl[1]}`).join('\n');
+  const sys = `Você é, ao mesmo tempo, gestor de tráfego de alta performance especializado no mercado imobiliário brasileiro e copywriter de imóveis de alto padrão. Trabalha para a Holy Curadoria Imobiliária (Santa Catarina: Chapecó, Balneário Camboriú, Itapema, Porto Belo). Pense como quem é cobrado por resultado: o alvo é o MENOR custo por lead QUALIFICADO (comprador com intenção e capacidade), nunca o lead mais barato.
 
-REGRAS OBRIGATÓRIAS DA META (Categoria Especial de Anúncio: Moradia/HOUSING):
-- Proibido segmentar por idade, gênero, CEP; não existem exclusões nem públicos semelhantes. Idade fica 18-65+ e todos os gêneros.
-- Localização só por cidades com raio de no mínimo 25 km (use 25 a 40 km).
-- Interesses funcionam apenas como sinais para o público Advantage+.
-- Os textos devem descrever o IMÓVEL e nunca o tipo de comprador (nada de "ideal para casais", "para famílias", "para executivos", idade, religião etc.).
+PASSO 1 · CLASSIFIQUE O PADRÃO
+Pelo valor e pelos atributos: econômico (até R$ 350 mil), médio (R$ 350 a 800 mil), médio-alto (R$ 800 mil a 1,5 milhão), alto padrão (R$ 1,5 a 4 milhões), luxo (acima de R$ 4 milhões). Sem valor informado, deduza pelos atributos (metragem, suítes, localização, lazer) e diga isso na justificativa. Empreendimento com várias unidades: use o valor de entrada.
 
-ESTRATÉGIA PARA LEAD QUENTE:
-- Praças: onde moram os compradores prováveis (ex.: imóveis no litoral catarinense atraem compradores do Oeste de SC, Serra e capitais do Sul, Curitiba, São Paulo; imóveis em Chapecó atraem a própria região).
-- O primeiro texto deve abrir com o valor ("a partir de R$ ...") ou um dado forte, para filtrar curiosos. Use só informações fornecidas; nunca invente preço, prazo ou condição.
-- Perguntas do formulário qualificam: objetivo (morar, investir, temporada), prazo de compra e forma de pagamento.
-- Orçamento: realista para leads no Brasil, com tempo de aprendizado (mínimo 7 dias).
+PASSO 2 · DEFINA O OBJETIVO
+Uma frase mensurável com volume de leads, prazo e custo por lead máximo, coerentes com o orçamento (leads estimados = investimento total ÷ custo por lead).
+
+PASSO 3 · ORÇAMENTO (referência de mercado; ajuste dentro da faixa pela praça e pela concorrência)
+${tabela}
+Nunca abaixo de R$ 30/dia nem menos de 14 dias (7 de aprendizado + 7 de otimização). Lançamento com várias unidades pode ir ao topo da faixa.
+
+PASSO 4 · PRAÇAS E SINAIS
+Praças = onde moram os compradores prováveis (litoral catarinense atrai Oeste de SC, Serra, Curitiba, Porto Alegre, São Paulo e a própria região; Chapecó atrai a própria cidade e o entorno). Interesses são só sinais para o Advantage+.
+
+PASSO 5 · ANÚNCIOS (3 variações, cada uma com um ângulo DIFERENTE)
+A) "Valor e números": abre com o preço ("A partir de R$ …" ou o valor exato) e 2 a 3 dados concretos (m², suítes, vagas, vista, distância do mar) quando fornecidos.
+B) "Experiência do imóvel": como é viver ali, através de atributos reais (luz natural, pé-direito, vista, acabamento, planta, lazer). Descreva o imóvel, nunca o comprador.
+C) "Localização e exclusividade": o que o endereço entrega (bairro, quadra do mar, acessos, entorno) e por que é raro, sem inventar.
+Estrutura do texto principal: 1ª linha é o gancho (até 90 caracteres, aparece antes do "ver mais"); depois 2 a 4 linhas curtas com atributos concretos; termine com a chamada para o formulário (ex.: "Toque em Cadastre-se e receba plantas, fotos e condições.").
+Título: até 40 caracteres, concreto. Descrição: até 30 caracteres.
+Vocabulário refinado e preciso, à altura do padrão: prefira substantivos concretos ("vista definitiva para o mar", "suíte master com closet", "planta integrada", "pé-direito duplo") a adjetivos vazios. Econômico e médio: direto e acolhedor, foco em condição e praticidade. Alto padrão e luxo: sóbrio, poucas palavras, sem emojis, exclusividade e precisão.
+PROIBIDO: "imperdível", "oportunidade única", "sonho", "top", "perfeito", "incrível", "maravilhoso", frases em CAIXA ALTA, excesso de exclamações, promessa de valorização ou rentabilidade, e qualquer dado não fornecido (preço, prazo, condição, metragem).
+
+PASSO 6 · FORMULÁRIO
+Perguntas que separam curiosos de compradores: objetivo (morar, investir, temporada), prazo para a compra e forma de pagamento. No alto padrão e no luxo, a forma de pagamento pode virar faixa de investimento.
+
+REGRAS OBRIGATÓRIAS DA META (Categoria Especial de Anúncio: Moradia/HOUSING)
+- Proibido segmentar por idade, gênero ou CEP; sem exclusões nem públicos semelhantes.
+- Localização só por cidades com raio de no mínimo 25 km.
+- Os textos descrevem o IMÓVEL e nunca o tipo de comprador (nada de "ideal para casais", "para famílias", "para executivos", idade, religião, estado civil).
+
 Responda sempre com a ferramenta "estrategia", em português do Brasil.`;
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5', max_tokens: 2500, system: sys,
+    body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5', max_tokens: 4000, system: sys,
       messages: [{ role: 'user', content: 'Dados do anúncio (JSON):\n' + JSON.stringify(item).slice(0, 12000) }],
       tools: [FERRAMENTA], tool_choice: { type: 'tool', name: 'estrategia' } }),
   });
@@ -96,6 +129,9 @@ Responda sempre com a ferramenta "estrategia", em português do Brasil.`;
   if (!u) throw new Error('A IA não devolveu a estratégia.');
   const out = u.input;
   out.pracas = (out.pracas || []).map((p) => ({ ...p, raio_km: Math.max(25, Math.min(80, +p.raio_km || 25)) }));
+  out.orcamento_diario = Math.max(30, Math.round(+out.orcamento_diario || 50));
+  out.duracao_dias = Math.max(14, Math.min(60, Math.round(+out.duracao_dias || 21)));
+  out.faixa = FAIXAS[out.padrao] || null;
   return out;
 }
 
@@ -123,74 +159,100 @@ async function subirImagem(url) {
   if (!k) throw new Error('A Meta não aceitou a imagem.');
   return j.images[k].hash;
 }
+// Carimbo único para nomes na Meta (evita "o nome do formulário já existe" em uma segunda tentativa)
+function carimbo() {
+  const d = new Date(Date.now() - 3 * 3600000); // horário de Brasília
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}h${p(d.getUTCMinutes())}`;
+}
 async function criar(b, req) {
   if (!configurado()) throw new Error('Meta não configurada (faltam META_ACCESS_TOKEN, META_AD_ACCOUNT_ID ou META_PAGE_ID).');
-  const nome = String(b.nome || 'Holy').slice(0, 80);
+  const nome = String(b.nome || 'Holy').slice(0, 60);
+  const sufixo = carimbo() + ' ' + Math.random().toString(36).slice(2, 5).toUpperCase();
   const textos = (b.textos || []).filter((t) => t && t.texto_principal).slice(0, 3);
   if (!textos.length) throw new Error('Inclua ao menos um texto.');
   if (!b.foto || !/^https:/.test(b.foto)) throw new Error('Escolha uma foto do imóvel (já enviada para a nuvem).');
   const diario = Math.max(20, Math.round(+b.orcamento_diario || 50));
   const dias = Math.max(3, Math.min(90, Math.round(+b.duracao_dias || 14)));
   const passos = [];
-  // cidades
-  const cidades = [];
-  for (const p of (b.pracas || []).slice(0, 10)) {
-    const c = await cidadeKey(p.cidade, p.uf);
-    if (c) cidades.push({ key: c.key, radius: Math.max(25, Math.min(80, Math.round(+p.raio_km || 25))), distance_unit: 'kilometer', _nome: c.nome });
-  }
-  if (!cidades.length) throw new Error('Não encontrei as cidades escolhidas no Meta.');
-  passos.push('Praças: ' + cidades.map((c) => c._nome + ' (' + c.radius + ' km)').join(', '));
-  // formulário de lead (alta intenção)
-  const ptk = await pageToken();
-  const perguntas = [{ type: 'FULL_NAME' }, { type: 'PHONE' }, { type: 'EMAIL' }];
-  (b.perguntas || []).slice(0, 3).forEach((q, i) => {
-    const ops = (q.opcoes || []).filter(Boolean).slice(0, 6);
-    const chave = String(q.pergunta).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'pergunta';
-    if (q.pergunta && ops.length >= 2) perguntas.push({ type: 'CUSTOM', key: chave + '_' + (i + 1), label: String(q.pergunta).slice(0, 80), options: ops.map((o, k) => ({ value: String(o).slice(0, 80), key: chave + '_' + (i + 1) + '_' + k })) });
-  });
-  const linkPagina = b.link && /^https:/.test(b.link) ? b.link : site(req);
-  const form = await graph(`${PAGE()}/leadgen_forms`, 'POST', {
-    name: `${nome} | ${new Date().toISOString().slice(0, 10)}`.slice(0, 100), locale: 'pt_BR',
-    questions: perguntas, is_optimized_for_quality: true,
-    privacy_policy: { url: site(req) + '/privacidade.html', link_text: 'Política de privacidade da Holy' },
-    thank_you_page: { title: 'Recebemos seu interesse!', body: String(b.agradecimento || 'Um consultor da Holy vai falar com você pelo WhatsApp em breve.').slice(0, 300), button_type: 'VIEW_WEBSITE', button_text: 'Ver o imóvel', website_url: linkPagina },
-  }, ptk);
-  passos.push('Formulário de alta intenção criado');
-  // campanha
-  const camp = await graph(`${ACT()}/campaigns`, 'POST', {
-    name: `Holy | ${nome} | Leads`, objective: 'OUTCOME_LEADS', status: 'PAUSED', buying_type: 'AUCTION',
-    special_ad_categories: ['HOUSING'], special_ad_category_country: ['BR'], is_adset_budget_sharing_enabled: false,
-  });
-  passos.push('Campanha criada (pausada)');
-  // conjunto de anúncios
-  const ints = await interesseIds(b.interesses);
-  const alvoBase = { geo_locations: { cities: cidades.map(({ _nome, ...c }) => c) }, age_min: 18, age_max: 65, targeting_automation: { advantage_audience: 1 } };
-  const inicio = new Date(Date.now() + 10 * 60000), fim = new Date(inicio.getTime() + dias * 86400000);
-  const adsetBase = { name: `${nome} | Público Holy`, campaign_id: camp.id, daily_budget: diario * 100, billing_event: 'IMPRESSIONS', optimization_goal: 'LEAD_GENERATION',
-    destination_type: 'ON_AD', bid_strategy: 'LOWEST_COST_WITHOUT_CAP', promoted_object: { page_id: PAGE() }, start_time: inicio.toISOString(), end_time: fim.toISOString(), status: 'PAUSED' };
-  let adset;
+  const criados = { form: null, camp: null };
+  let etapa = 'Praças';
   try {
-    adset = await graph(`${ACT()}/adsets`, 'POST', { ...adsetBase, targeting: ints.length ? { ...alvoBase, flexible_spec: [{ interests: ints }] } : alvoBase });
-    passos.push(ints.length ? 'Público: Advantage+ com sinais de interesse (' + ints.map((i) => i.name).join(', ') + ')' : 'Público: Advantage+ aberto');
+    // cidades
+    const cidades = [];
+    for (const p of (b.pracas || []).slice(0, 10)) {
+      const c = await cidadeKey(p.cidade, p.uf);
+      if (c) cidades.push({ key: c.key, radius: Math.max(25, Math.min(80, Math.round(+p.raio_km || 25))), distance_unit: 'kilometer', _nome: c.nome });
+    }
+    if (!cidades.length) throw new Error('Não encontrei as cidades escolhidas no Meta.');
+    passos.push('Praças: ' + cidades.map((c) => c._nome + ' (' + c.radius + ' km)').join(', '));
+    // formulário de lead (alta intenção)
+    etapa = 'Formulário de lead';
+    const ptk = await pageToken();
+    const perguntas = [{ type: 'FULL_NAME' }, { type: 'PHONE' }, { type: 'EMAIL' }];
+    (b.perguntas || []).slice(0, 3).forEach((q, i) => {
+      const ops = (q.opcoes || []).filter(Boolean).slice(0, 6);
+      const chave = String(q.pergunta).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'pergunta';
+      if (q.pergunta && ops.length >= 2) perguntas.push({ type: 'CUSTOM', key: chave + '_' + (i + 1), label: String(q.pergunta).slice(0, 80), options: ops.map((o, k) => ({ value: String(o).slice(0, 80), key: chave + '_' + (i + 1) + '_' + k })) });
+    });
+    const linkPagina = b.link && /^https:/.test(b.link) ? b.link : site(req);
+    const form = await graph(`${PAGE()}/leadgen_forms`, 'POST', {
+      name: `${nome} | ${sufixo}`.slice(0, 100), locale: 'pt_BR',
+      questions: perguntas, is_optimized_for_quality: true,
+      privacy_policy: { url: site(req) + '/privacidade.html', link_text: 'Política de privacidade da Holy' },
+      thank_you_page: { title: 'Recebemos seu interesse!', body: String(b.agradecimento || 'Um consultor da Holy vai falar com você pelo WhatsApp em breve.').slice(0, 300), button_type: 'VIEW_WEBSITE', button_text: 'Ver o imóvel', website_url: linkPagina },
+    }, ptk);
+    criados.form = form.id;
+    passos.push('Formulário de alta intenção criado');
+    // campanha
+    etapa = 'Campanha';
+    const camp = await graph(`${ACT()}/campaigns`, 'POST', {
+      name: `Holy | ${nome} | Leads | ${sufixo}`, objective: 'OUTCOME_LEADS', status: 'PAUSED', buying_type: 'AUCTION',
+      special_ad_categories: ['HOUSING'], special_ad_category_country: ['BR'], is_adset_budget_sharing_enabled: false,
+    });
+    criados.camp = camp.id;
+    passos.push('Campanha criada (pausada)');
+    // conjunto de anúncios
+    etapa = 'Público e orçamento';
+    const ints = await interesseIds(b.interesses);
+    const alvoBase = { geo_locations: { cities: cidades.map(({ _nome, ...c }) => c) }, age_min: 18, age_max: 65, targeting_automation: { advantage_audience: 1 } };
+    const inicio = new Date(Date.now() + 10 * 60000), fim = new Date(inicio.getTime() + dias * 86400000);
+    const adsetBase = { name: `${nome} | Público Holy`, campaign_id: camp.id, daily_budget: diario * 100, billing_event: 'IMPRESSIONS', optimization_goal: 'LEAD_GENERATION',
+      destination_type: 'ON_AD', bid_strategy: 'LOWEST_COST_WITHOUT_CAP', promoted_object: { page_id: PAGE() }, start_time: inicio.toISOString(), end_time: fim.toISOString(), status: 'PAUSED' };
+    let adset;
+    try {
+      adset = await graph(`${ACT()}/adsets`, 'POST', { ...adsetBase, targeting: ints.length ? { ...alvoBase, flexible_spec: [{ interests: ints }] } : alvoBase });
+      passos.push(ints.length ? 'Público: Advantage+ com sinais de interesse (' + ints.map((i) => i.name).join(', ') + ')' : 'Público: Advantage+ aberto');
+    } catch (e) {
+      adset = await graph(`${ACT()}/adsets`, 'POST', { ...adsetBase, targeting: alvoBase });
+      passos.push('Público: Advantage+ aberto (a Meta não aceitou os interesses nesta categoria: ' + e.message.slice(0, 120) + ')');
+    }
+    // criativos e anúncios (1 por variação de texto)
+    etapa = 'Imagem do anúncio';
+    const hash = await subirImagem(b.foto);
+    const ig = await igUser();
+    const ads = [];
+    for (let i = 0; i < textos.length; i++) {
+      etapa = 'Anúncio ' + String.fromCharCode(65 + i);
+      const t = textos[i];
+      const story = { page_id: PAGE(), link_data: { image_hash: hash, link: linkPagina, message: String(t.texto_principal).slice(0, 2000), name: String(t.titulo || nome).slice(0, 80), description: String(t.descricao || '').slice(0, 60), call_to_action: { type: 'SIGN_UP', value: { lead_gen_form_id: form.id } } } };
+      if (ig) story.instagram_user_id = ig;
+      const rot = `${nome} | Variação ${String.fromCharCode(65 + i)}` + (t.angulo ? ' · ' + String(t.angulo).slice(0, 30) : '');
+      const cr = await graph(`${ACT()}/adcreatives`, 'POST', { name: rot, object_story_spec: story });
+      const ad = await graph(`${ACT()}/ads`, 'POST', { name: rot, adset_id: adset.id, creative: { creative_id: cr.id }, status: 'PAUSED' });
+      ads.push(ad.id);
+    }
+    passos.push(ads.length + ' anúncio(s) para teste A/B' + (ig ? ' (Facebook + Instagram)' : ' (Facebook; Instagram não vinculado à Página)'));
+    return { campanha: camp.id, conjunto: adset.id, anuncios: ads, formulario: form.id, passos, orcamento_diario: diario, dias,
+      nomeCampanha: `Holy | ${nome} | Leads | ${sufixo}`,
+      link: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${ACT().replace('act_', '')}&selected_campaign_ids=${camp.id}` };
   } catch (e) {
-    adset = await graph(`${ACT()}/adsets`, 'POST', { ...adsetBase, targeting: alvoBase });
-    passos.push('Público: Advantage+ aberto (a Meta não aceitou os interesses nesta categoria: ' + e.message.slice(0, 120) + ')');
+    // Desfaz o que ficou pela metade, para não deixar campanha e formulário órfãos na Meta
+    const limpeza = [];
+    if (criados.camp) { try { await graph(criados.camp, 'DELETE'); limpeza.push('campanha excluída'); } catch (x) { limpeza.push('não consegui excluir a campanha incompleta; exclua no Gerenciador'); } }
+    if (criados.form) { try { await graph(criados.form, 'POST', { status: 'ARCHIVED' }, await pageToken()); limpeza.push('formulário arquivado'); } catch (x) { /* formulário sem anúncio não aparece para ninguém */ } }
+    throw new Error(`Etapa "${etapa}": ${e.message}` + (limpeza.length ? ` · Desfeito: ${limpeza.join(', ')}.` : ''));
   }
-  // criativos e anúncios (1 por variação de texto)
-  const hash = await subirImagem(b.foto);
-  const ig = await igUser();
-  const ads = [];
-  for (let i = 0; i < textos.length; i++) {
-    const t = textos[i];
-    const story = { page_id: PAGE(), link_data: { image_hash: hash, link: linkPagina, message: String(t.texto_principal).slice(0, 2000), name: String(t.titulo || nome).slice(0, 80), description: String(t.descricao || '').slice(0, 60), call_to_action: { type: 'SIGN_UP', value: { lead_gen_form_id: form.id } } } };
-    if (ig) story.instagram_user_id = ig;
-    const cr = await graph(`${ACT()}/adcreatives`, 'POST', { name: `${nome} | Variação ${String.fromCharCode(65 + i)}`, object_story_spec: story });
-    const ad = await graph(`${ACT()}/ads`, 'POST', { name: `${nome} | Variação ${String.fromCharCode(65 + i)}`, adset_id: adset.id, creative: { creative_id: cr.id }, status: 'PAUSED' });
-    ads.push(ad.id);
-  }
-  passos.push(ads.length + ' anúncio(s) para teste A/B' + (ig ? ' (Facebook + Instagram)' : ' (Facebook; Instagram não vinculado à Página)'));
-  return { campanha: camp.id, conjunto: adset.id, anuncios: ads, formulario: form.id, passos, orcamento_diario: diario, dias,
-    link: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${ACT().replace('act_', '')}&selected_campaign_ids=${camp.id}` };
 }
 
 // ── Métricas, status e leads ──────────────────────────────────────────
@@ -224,15 +286,20 @@ async function puxarLeads(forms) {
   for (const f of (forms || []).slice(0, 30)) {
     if (!f || !f.id) continue;
     let j;
-    try { j = await graph(`${f.id}/leads`, 'GET', { fields: 'id,created_time,field_data,ad_name', limit: 100 }, ptk); } catch (e) { continue; }
+    try { j = await graph(`${f.id}/leads`, 'GET', { fields: 'id,created_time,field_data,ad_name,campaign_name', limit: 100 }, ptk); } catch (e) { continue; }
+    // rótulos das perguntas (para gravar "Qual o seu objetivo?: Investir" e não a chave interna)
+    const rotulos = {};
+    try { const fq = await graph(f.id, 'GET', { fields: 'questions' }, ptk); (fq.questions || []).forEach((q) => { if (q.key) rotulos[q.key] = q.label || q.key; }); } catch (e) {}
     for (const l of j.data || []) {
       const fd = {}; (l.field_data || []).forEach((x) => { fd[x.name] = (x.values || []).join(', '); });
       const nome = fd.full_name || fd.nome_completo || '', tel = fd.phone_number || fd.telefone || '', email = fd.email || '';
-      const extras = Object.entries(fd).filter(([k]) => !['full_name', 'phone_number', 'email', 'nome_completo', 'telefone'].includes(k)).map(([k, v]) => k.replace(/_\d+$/, '').replace(/_/g, ' ') + ': ' + v).join(' | ');
+      const legivel = (k) => rotulos[k] || (k.replace(/_\d+$/, '').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) + '?');
+      const extras = Object.entries(fd).filter(([k]) => !['full_name', 'phone_number', 'email', 'nome_completo', 'telefone'].includes(k)).map(([k, v]) => legivel(k).replace(/[?:]?\s*$/, '?') + ' ' + String(v).replace(/_/g, ' ')).join(' | ');
+      const campanha = f.item || l.campaign_name || l.ad_name || '';
       const r = await sql.query(
         `INSERT INTO leads (tipo, nome, email, telefone, interesse, mensagem, origem, imovel, meta_id, criado_em)
          VALUES ('formulario', $1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (meta_id) DO NOTHING RETURNING id`,
-        [nome || null, email || null, tel || null, f.item || null, extras || null, 'Meta Ads' + (l.ad_name ? ': ' + l.ad_name : ''), f.item || null, l.id, l.created_time || new Date().toISOString()]);
+        [nome || null, email || null, tel || null, f.item || null, extras || null, 'Meta Ads' + (campanha ? ': ' + campanha : ''), f.item || null, l.id, l.created_time || new Date().toISOString()]);
       if (r.length) novos++;
     }
   }
@@ -240,12 +307,25 @@ async function puxarLeads(forms) {
 }
 
 // ── Instagram ─────────────────────────────────────────────────────────
+// O Instagram processa cada mídia em segundo plano: só dá para publicar quando o status for FINISHED.
 async function aguardar(id) {
-  for (let i = 0; i < 20; i++) {
-    const j = await graph(id, 'GET', { fields: 'status_code' });
-    if (j.status_code === 'FINISHED' || !j.status_code) return;
-    if (j.status_code === 'ERROR') throw new Error('O Instagram recusou a mídia.');
-    await new Promise((r) => setTimeout(r, 2000));
+  for (let i = 0; i < 25; i++) {
+    let j = {};
+    try { j = await graph(id, 'GET', { fields: 'status_code,status' }); } catch (e) { /* consulta pode falhar logo após criar; tenta de novo */ }
+    if (j.status_code === 'FINISHED') return;
+    if (j.status_code === 'ERROR' || j.status_code === 'EXPIRED') throw new Error('O Instagram recusou a mídia' + (j.status ? ' (' + j.status + ')' : '') + '.');
+    await new Promise((r) => setTimeout(r, i < 5 ? 1500 : 2500));
+  }
+  throw new Error('O Instagram demorou para processar as imagens. Tente publicar de novo em 1 minuto.');
+}
+// Publica com novas tentativas quando a Meta responde "mídia não está pronta" (código 9007)
+async function publicarContainer(ig, creationId) {
+  for (let i = 0; i < 6; i++) {
+    try { return (await graph(`${ig}/media_publish`, 'POST', { creation_id: creationId })).id; }
+    catch (e) {
+      if (!/9007|2207027|não está pronta|not ready/i.test(e.message) || i === 5) throw e;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
   }
 }
 async function publicarIG(b) {
@@ -256,16 +336,15 @@ async function publicarIG(b) {
   const legenda = String(b.legenda || '').slice(0, 2200);
   const publicados = [];
   if (b.tipo === 'story') {
-    for (const u of urls) { const c = await graph(`${ig}/media`, 'POST', { image_url: u, media_type: 'STORIES' }); await aguardar(c.id); publicados.push((await graph(`${ig}/media_publish`, 'POST', { creation_id: c.id })).id); }
+    for (const u of urls) { const c = await graph(`${ig}/media`, 'POST', { image_url: u, media_type: 'STORIES' }); await aguardar(c.id); publicados.push(await publicarContainer(ig, c.id)); }
   } else if (urls.length === 1) {
     const c = await graph(`${ig}/media`, 'POST', { image_url: urls[0], caption: legenda }); await aguardar(c.id);
-    publicados.push((await graph(`${ig}/media_publish`, 'POST', { creation_id: c.id })).id);
+    publicados.push(await publicarContainer(ig, c.id));
   } else {
-    const filhos = [];
-    for (const u of urls) { const c = await graph(`${ig}/media`, 'POST', { image_url: u, is_carousel_item: true }); filhos.push(c.id); }
-    for (const f of filhos) await aguardar(f);
+    const filhos = (await Promise.all(urls.map((u) => graph(`${ig}/media`, 'POST', { image_url: u, is_carousel_item: true })))).map((c) => c.id);
+    await Promise.all(filhos.map((f) => aguardar(f)));
     const car = await graph(`${ig}/media`, 'POST', { media_type: 'CAROUSEL', children: filhos.join(','), caption: legenda }); await aguardar(car.id);
-    publicados.push((await graph(`${ig}/media_publish`, 'POST', { creation_id: car.id })).id);
+    publicados.push(await publicarContainer(ig, car.id));
   }
   return publicados;
 }
@@ -281,7 +360,17 @@ export default async function handler(req, res) {
     if (acao === 'status') {
       if (!configurado()) return ok(res, { configurado: false, faltando: ['META_ACCESS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID'].filter((k) => !process.env[k]) });
       const out = { configurado: true };
-      try { const a = await graph(ACT(), 'GET', { fields: 'name,currency,account_status' }); out.conta = a.name; out.moeda = a.currency; out.contaAtiva = a.account_status === 1; } catch (e) { out.erroConta = e.message; }
+      try {
+        const a = await graph(ACT(), 'GET', { fields: 'name,currency,account_status,is_prepay_account,funding_source_details,spend_cap,amount_spent' });
+        out.conta = a.name; out.moeda = a.currency; out.contaAtiva = a.account_status === 1;
+        out.prepago = !!a.is_prepay_account;
+        const fsd = a.funding_source_details || {};
+        out.pagamento = fsd.display_string || '';
+        // Contas pré-pagas (Pix/boleto): a Meta mostra o saldo no texto, ex. "Saldo disponível (R$6,07 BRL)"
+        const mm = String(fsd.display_string || '').match(/R\$\s?([\d.]+,\d{2}|[\d.]+)/);
+        if (mm) out.saldo = +mm[1].replace(/\./g, '').replace(',', '.');
+        if (+a.spend_cap) out.limiteGasto = (+a.spend_cap - (+a.amount_spent || 0)) / 100;
+      } catch (e) { out.erroConta = e.message; }
       try { const p = await graph(PAGE(), 'GET', { fields: 'name' }); out.pagina = p.name; } catch (e) { out.erroPagina = e.message; }
       try { const ig = await igUser(); if (ig) { const i = await graph(ig, 'GET', { fields: 'username' }); out.instagram = '@' + i.username; } } catch (e) {}
       return ok(res, out);

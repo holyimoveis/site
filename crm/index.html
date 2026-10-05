@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Holy Intelligence CRM</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%234a5c2f'/><text y='.85em' font-size='70' x='12' fill='white' font-family='Georgia'>H</text></svg>">
+<link rel="icon" type="image/svg+xml" href="/assets/holy-coroa.svg">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body,#root{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#faf9f6}
@@ -14,7 +14,7 @@ body{overflow:hidden}
 input,select,textarea{font-family:inherit;outline:none}
 input:focus,select:focus,textarea:focus{border-color:#4a5c2f!important;box-shadow:0 0 0 2px rgba(74,92,47,.1)!important}
 #ld{position:fixed;inset:0;background:#1a1c18;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .5s}
-.ll{font-family:Georgia,serif;font-size:64px;font-weight:700;color:#fff;line-height:1;margin-bottom:8px}
+.ll{width:170px;height:auto;display:block;margin-bottom:18px}
 .ls{font-size:11px;letter-spacing:.22em;color:#8fa060;text-transform:uppercase;margin-bottom:40px}
 .lb{width:180px;height:2px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden}
 .lf{height:100%;background:#4a5c2f;border-radius:2px;animation:lda 1.5s ease forwards}
@@ -56,7 +56,7 @@ input:focus,select:focus,textarea:focus{border-color:#4a5c2f!important;box-shado
 </head>
 <body>
 <div id="ld">
-  <div class="ll">Holy</div>
+  <img class="ll" src="/assets/holy-logo-claro.svg" alt="Holy Curadoria Imobiliária">
   <div class="ls">Intelligence CRM · Chapecó-SC</div>
   <div class="lb"><div class="lf"></div></div>
 </div>
@@ -17437,7 +17437,10 @@ var HolySite = (function () {
             var tel = soDigitos(l.telefone), mail = String(l.email || '').toLowerCase();
             var ex = lista.find(function (c) { return (tel && tel.length >= 8 && soDigitos(c.celular || c.tel).slice(-8) === tel.slice(-8)) || (mail && String(c.email || '').toLowerCase() === mail); });
             var deMeta = /^Meta/.test(l.origem || '');
-            var desc = (deMeta ? 'Lead de anúncio na Meta (' + l.origem.replace(/^Meta Ads:?\s*/, '') + ')' : 'Contato pelo site') + (l.interesse ? ' | Interesse: ' + l.interesse : '') + (l.imovel ? ' | Imóvel: ' + l.imovel : '') + (l.mensagem ? ' | "' + l.mensagem + '"' : '');
+            var campMeta = deMeta ? String(l.origem).replace(/^Meta Ads:?\s*/, '').trim() : '';
+            var desc = deMeta
+              ? 'Lead de anúncio na Meta' + (campMeta ? ' · ' + campMeta : '') + (l.imovel && l.imovel !== campMeta ? ' | Imóvel: ' + l.imovel : '') + (l.mensagem ? ' | Respostas: ' + l.mensagem : '')
+              : 'Contato pelo site' + (l.interesse ? ' | Interesse: ' + l.interesse : '') + (l.imovel ? ' | Imóvel: ' + l.imovel : '') + (l.mensagem ? ' | "' + l.mensagem + '"' : '');
             var cli = ex;
             if (!cli) {
               var nome = l.nome || 'Lead do site';
@@ -17533,8 +17536,8 @@ function holyBoot(render) {
     var box = document.createElement('div');
     box.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#1a1c18;z-index:5000;font-family:-apple-system,Segoe UI,sans-serif;padding:20px';
     box.innerHTML = '<form style="background:#fff;border-radius:16px;padding:32px;width:360px;max-width:100%">'
-      + '<div style="font-family:Georgia,serif;font-size:28px;font-weight:700;color:#1a1c18">Holy</div>'
-      + '<div style="font-size:11px;letter-spacing:.2em;color:#8fa060;margin-bottom:22px">INTELLIGENCE CRM</div>'
+      + '<img src="/assets/holy-logo-escuro.svg" alt="Holy Curadoria Imobiliária" style="width:130px;height:auto;display:block;margin:0 auto 10px">'
+      + '<div style="font-size:11px;letter-spacing:.2em;color:#8fa060;margin-bottom:22px;text-align:center">INTELLIGENCE CRM</div>'
       + '<label style="font-size:12px;color:#7a7d72">Senha do CRM</label>'
       + '<input type="password" autocomplete="current-password" required style="width:100%;margin:6px 0 12px;padding:12px;border:1px solid #dde0d6;border-radius:8px;font-size:15px">'
       + '<div class="m" style="font-size:12px;color:#c0392b;min-height:16px;margin-bottom:8px">' + (msg || '') + '</div>'
@@ -18162,7 +18165,7 @@ function ImovelDetail({ imovel, clientes, onEdit, onDelete, onClose }) {
 .ft{margin-top:36px;border-top:1px solid #d6dfc8;padding-top:14px;font-size:11px;color:#7a7d72;text-align:center}
 @media print{.page{padding:36px}}</style></head><body>
 <div class="page">
-<div class="hd"><div><div class="logo">Holy</div><div class="logo-s">Curadoria de Imóveis</div></div>
+<div class="hd"><div><img src="${location.origin}/assets/holy-logo-escuro.svg" alt="Holy Curadoria Imobiliária" style="width:120px;height:auto;display:block"></div>
 <div style="text-align:right;font-size:11px;color:#7a7d72">Dossier Exclusivo<br>${new Date().toLocaleDateString("pt-BR")}</div></div>
 ${capa ? `<img src="${capa.url}" class="hero" alt="foto principal"/>` : `<div class="hero" style="display:flex;align-items:center;justify-content:center">🏛️</div>`}
 ${fotosSrc.length > 1 ? `<div class="thumb-row">${fotosSrc.slice(1, 4).map(f => `<img src="${f.url}" class="thumb" alt=""/>`).join("")}</div>` : ""}
@@ -18414,7 +18417,7 @@ function IntForm({ clienteId, clienteNome, imoveis, onSave, onClose }) {
 // ═══════════════════════════════════════════════════════════════════════
 // CLIENTE DETAIL
 // ═══════════════════════════════════════════════════════════════════════
-function ClienteDetail({ cliente, imoveis, timeline, onEdit, onAddInt, onClose }) {
+function ClienteDetail({ cliente, imoveis, timeline, onEdit, onAddInt, onDelete, onClose }) {
     var _a;
     const [aiRes, setAiRes] = useState("");
     const [aiL, setAiL] = useState(false);
@@ -18455,6 +18458,7 @@ function ClienteDetail({ cliente, imoveis, timeline, onEdit, onAddInt, onClose }
             React.createElement("div", { style: { display: "flex", gap: 7, flexWrap: "wrap" } },
                 React.createElement(PBtn, { sm: true, onClick: () => onAddInt(cliente) }, "+ Intera\u00E7\u00E3o"),
                 React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: () => onEdit(cliente) }, "\u270F\uFE0F Editar"),
+                onDelete && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.danger, onClick: () => { if (confirm(`Excluir "${cliente.nome}" de forma definitiva? O histórico dele na Timeline também será apagado. Esta ação não pode ser desfeita (o servidor guarda as últimas 30 versões, para emergências).`)) onDelete(cliente); } }, "\uD83D\uDDD1 Excluir"),
                 React.createElement("button", { onClick: onClose, style: { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.muted } }, "\u00D7"))),
         React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 14 } }, [["Renda/mês", fmt(cliente.renda)], ["Patrimônio", fmtK(cliente.patrimonioEst || 0)], ["Idade", age ? `${age} anos` : "—"], ["Cadastro", cliente.createdAt || "—"]].map(([l, v]) => (React.createElement("div", { key: l, style: { background: C.oliveGhost, borderRadius: 8, padding: "9px 12px" } },
             React.createElement("div", { style: { fontSize: 9, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em" } }, l),
@@ -19029,7 +19033,7 @@ function ImoveisPage({ imoveis, clientes, onAdd, onEdit, onDelete }) {
             }),
             filtered.length === 0 && React.createElement("div", { style: { gridColumn: "1/-1", padding: 40, textAlign: "center", color: C.muted, border: `0.5px dashed ${C.border}`, borderRadius: 12 } }, "Nenhum im\u00F3vel encontrado.")));
 }
-function ClientesPage({ clientes, imoveis, timeline, onAdd, onEdit, onAddTL }) {
+function ClientesPage({ clientes, imoveis, timeline, onAdd, onEdit, onAddTL, onDelete }) {
     const [selC, setSelC] = useState(null);
     const [editC, setEditC] = useState(null);
     const [addInt, setAddInt] = useState(null);
@@ -19051,7 +19055,7 @@ function ClientesPage({ clientes, imoveis, timeline, onAdd, onEdit, onAddTL }) {
             else
                 onAdd(c); setEditC(null); }, onClose: () => setEditC(null) }),
         addInt && React.createElement(IntForm, { clienteId: addInt.id, clienteNome: addInt.nome, imoveis: imoveis, onSave: onAddTL, onClose: () => setAddInt(null) }),
-        selC && React.createElement(ClienteDetail, { cliente: selC, imoveis: imoveis, timeline: timeline, onEdit: c => { setSelC(null); setEditC(c); }, onAddInt: c => setAddInt(c), onClose: () => setSelC(null) }),
+        selC && React.createElement(ClienteDetail, { cliente: selC, imoveis: imoveis, timeline: timeline, onEdit: c => { setSelC(null); setEditC(c); }, onAddInt: c => setAddInt(c), onDelete: onDelete ? c => { onDelete(c.id); setSelC(null); } : null, onClose: () => setSelC(null) }),
         React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" } },
             React.createElement("input", { value: srch, onChange: e => setSrch(e.target.value), placeholder: "\uD83D\uDD0D Nome ou e-mail\u2026", style: { padding: "7px 12px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 12, color: C.ink, outline: "none", flex: 1, minWidth: 160 } }),
             React.createElement("div", { style: { display: "flex", gap: 5 } }, [["all", "Todos"], ["hot", "🔴"], ["warm", "🟡"], ["cold", "🔵"]].map(([k, l]) => React.createElement("button", { key: k, onClick: () => setFTemp(k), style: { fontSize: 11, padding: "5px 12px", borderRadius: 20, cursor: "pointer", background: fTemp === k ? C.olive : C.white, color: fTemp === k ? C.white : C.muted, border: `0.5px solid ${fTemp === k ? C.olive : C.border}`, fontWeight: fTemp === k ? 600 : 400 } }, l))),
@@ -19392,7 +19396,7 @@ function CampanhaWizard({ item, kind, onClose }) {
     const E = (k, v) => setE(p => Object.assign({}, p, { [k]: v }));
     async function gerar() {
         setErro(""); setLoad("A IA está montando a estratégia…");
-        try { const d = await metaApi("sugerir", { item: vit }); const s = d.estrategia; while ((s.textos || []).length < 3) s.textos.push({ texto_principal: "", titulo: "", descricao: "" }); setE(s); setPasso(2); }
+        try { const d = await metaApi("sugerir", { item: vit }); const s = d.estrategia; s.textos = s.textos || []; while (s.textos.length < 3) s.textos.push({ angulo: "", texto_principal: "", titulo: "", descricao: "" }); setE(s); setPasso(2); }
         catch (er) { setErro(er.message); }
         setLoad("");
     }
@@ -19403,7 +19407,8 @@ function CampanhaWizard({ item, kind, onClose }) {
                 textos: e.textos.filter(t => t.texto_principal && t.texto_principal.trim()), perguntas: e.perguntas, agradecimento: e.agradecimento });
             setRes(d);
             setCamps(p => [{ id: "cp" + uid(), itemId: item.id, kind, itemNome: item.nome, criadoEm: new Date().toISOString(), campanha: d.campanha, conjunto: d.conjunto, anuncios: d.anuncios, formulario: d.formulario,
-                link: d.link, orcamento_diario: d.orcamento_diario, dias: d.dias, pracas: e.pracas.map(p => p.cidade + " (" + p.raio_km + " km)"), status: "PAUSED" }, ...(p || [])]);
+                link: d.link, orcamento_diario: d.orcamento_diario, dias: d.dias, pracas: e.pracas.map(p => p.cidade + " (" + p.raio_km + " km)"), status: "PAUSED",
+                nomeCampanha: d.nomeCampanha || "", objetivo: e.objetivo || "", padrao: e.padrao || "", cpl_estimado: e.cpl_estimado || null }, ...(p || [])]);
             setPasso(4);
         } catch (er) { setErro(er.message); }
         setLoad("");
@@ -19421,13 +19426,25 @@ function CampanhaWizard({ item, kind, onClose }) {
                 React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, item.nome),
                 React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 4 } }, [vit.tipoImovel || vit.tipoLabel, vit.bairro, vit.cidade, vit.valor || vit.preco].filter(Boolean).join(" · "))),
             React.createElement("div", { style: { fontSize: 13, color: C.inkMid, lineHeight: 1.7 } },
-                "A IA analisa este ", kind === "im" ? "imóvel" : "empreendimento", " e monta: as ", React.createElement("b", null, "praças"), " de onde vêm os compradores, os ", React.createElement("b", null, "sinais de interesse"), ", o ", React.createElement("b", null, "orçamento"), ", ",
+                "A IA analisa este ", kind === "im" ? "imóvel" : "empreendimento", " como um gestor de tráfego: classifica o ", React.createElement("b", null, "padrão"), ", define um ", React.createElement("b", null, "objetivo mensurável"), " e o orçamento da faixa certa, e monta as ", React.createElement("b", null, "praças"), " de onde vêm os compradores, os ", React.createElement("b", null, "sinais de interesse"), ", o ", React.createElement("b", null, "orçamento"), ", ",
                 React.createElement("b", null, "3 textos para teste A/B"), " e um ", React.createElement("b", null, "formulário de alta intenção"), " com perguntas que separam curiosos de compradores."),
             React.createElement("div", { style: Object.assign(mkBox("#eef4ff"), { fontSize: 12, color: C.inkMid, lineHeight: 1.6 }) },
                 React.createElement("b", null, "Regra da Meta para imóveis: "), "todo anúncio de imóvel entra na Categoria Especial de Moradia. Não é permitido escolher idade, gênero ou CEP, e não há exclusões. O lead quente vem das praças certas, do texto que abre com o valor, do formulário qualificador e do atendimento rápido da Helena."),
             !fotos.length && React.createElement("div", { style: { fontSize: 12, color: C.danger } }, "Este cadastro ainda não tem fotos na nuvem. Adicione fotos antes de anunciar."),
             React.createElement("div", { style: { display: "flex", justifyContent: "flex-end" } }, React.createElement(PBtn, { onClick: gerar, loading: !!load }, "✦ Gerar estratégia com IA"))),
         passo === 2 && e && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+            React.createElement("div", { style: Object.assign(mkBox("#fff"), { borderLeft: `3px solid ${C.gold}` }) },
+                mkLbl("Objetivo da campanha"),
+                React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: C.ink, lineHeight: 1.5 } }, e.objetivo || "—"),
+                React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8, marginTop: 10 } },
+                    [["Padrão do imóvel", e.padrao || "—"],
+                     ["Custo por lead esperado", e.cpl_estimado ? "R$ " + Math.round(e.cpl_estimado.min) + " a " + Math.round(e.cpl_estimado.max) : "—"],
+                     ["Leads estimados", e.cpl_estimado && total ? Math.max(1, Math.floor(total / e.cpl_estimado.max)) + " a " + Math.max(1, Math.floor(total / Math.max(1, e.cpl_estimado.min))) : "—"],
+                     ["Faixa de orçamento", e.faixa ? "R$ " + e.faixa.dia[0] + " a " + e.faixa.dia[1] + "/dia" : "—"]].map(([k, v]) =>
+                        React.createElement("div", { key: k, style: { background: C.cream, borderRadius: 8, padding: "8px 10px" } }, React.createElement("div", { style: { fontSize: 10, color: C.muted } }, k), React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: C.olive } }, v)))),
+                (e.plano_otimizacao || []).length > 0 && React.createElement("div", { style: { marginTop: 10 } }, mkLbl("Plano de otimização"),
+                    React.createElement("ul", { style: { fontSize: 12, color: C.inkMid, lineHeight: 1.7, paddingLeft: 18 } }, e.plano_otimizacao.map((x, i) => React.createElement("li", { key: i }, x)))),
+                React.createElement("div", { style: { fontSize: 10, color: C.muted, marginTop: 8 } }, "Estimativas de referência do mercado imobiliário. O custo real depende da praça, da época e da concorrência; acompanhe na página Campanhas.")),
             React.createElement("div", { style: mkBox() }, mkLbl("Comprador provável (orienta o anúncio, não vira segmentação)"), React.createElement("div", { style: { fontSize: 13, color: C.inkMid, lineHeight: 1.6 } }, e.persona)),
             React.createElement("div", null, mkLbl("Praças (cidades e raio)"),
                 (e.pracas || []).map((p, i) => React.createElement("div", { key: i, style: { display: "grid", gridTemplateColumns: "2fr 70px 90px 34px", gap: 6, marginBottom: 6 } },
@@ -19450,7 +19467,7 @@ function CampanhaWizard({ item, kind, onClose }) {
                         React.createElement("img", { src: u, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }))))),
             React.createElement("div", null, mkLbl("Textos (3 variações para teste A/B)"),
                 e.textos.map((t, i) => React.createElement("div", { key: i, style: Object.assign(mkBox("#fff"), { marginBottom: 8, display: "flex", flexDirection: "column", gap: 6 }) },
-                    React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: C.gold } }, "Variação " + String.fromCharCode(65 + i)),
+                    React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: C.gold } }, "Variação " + String.fromCharCode(65 + i) + (t.angulo ? " · " + t.angulo : "")),
                     React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 80, resize: "vertical" }), value: t.texto_principal, placeholder: "Texto principal", onChange: ev => E("textos", e.textos.map((x, k) => k === i ? Object.assign({}, x, { texto_principal: ev.target.value }) : x)) }),
                     React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 } },
                         React.createElement("input", { style: mkInput, value: t.titulo, placeholder: "Título", maxLength: 80, onChange: ev => E("textos", e.textos.map((x, k) => k === i ? Object.assign({}, x, { titulo: ev.target.value }) : x)) }),
@@ -19467,11 +19484,13 @@ function CampanhaWizard({ item, kind, onClose }) {
                 React.createElement(PBtn, { onClick: () => setPasso(3) }, "Revisar →"))),
         passo === 3 && e && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
             React.createElement("div", { style: mkBox() },
-                [["Objetivo", "Leads com formulário de alta intenção (Facebook e Instagram)"], ["Categoria especial", "Moradia (obrigatória para imóveis)"],
+                [["Objetivo", e.objetivo || "Leads com formulário de alta intenção (Facebook e Instagram)"], ["Formato", "Formulário de alta intenção no Facebook e no Instagram"], ["Categoria especial", "Moradia (obrigatória para imóveis)"],
                  ["Praças", (e.pracas || []).filter(p => p.cidade).map(p => p.cidade + "/" + p.uf + " (" + p.raio_km + " km)").join(", ")], ["Público", "Advantage+ com sinais: " + ((e.interesses || []).join(", ") || "nenhum")],
                  ["Orçamento", "R$ " + e.orcamento_diario + "/dia por " + e.duracao_dias + " dias (total R$ " + total.toLocaleString("pt-BR") + ")"], ["Anúncios", e.textos.filter(t => t.texto_principal).length + " variações de texto com a foto escolhida"],
                  ["Perguntas", (e.perguntas || []).map(q => q.pergunta).join(" · ")]].map(([k, v]) => React.createElement("div", { key: k, style: { display: "flex", gap: 12, padding: "6px 0", borderBottom: `0.5px solid ${C.border}`, fontSize: 12 } },
                     React.createElement("div", { style: { width: 130, color: C.muted, flexShrink: 0 } }, k), React.createElement("div", { style: { color: C.ink } }, v)))),
+            meta && meta.saldo != null && meta.saldo < (+e.orcamento_diario || 0) * 3 && React.createElement("div", { style: Object.assign(mkBox("#fff8e6"), { fontSize: 12, color: C.inkMid, lineHeight: 1.6 }) },
+                "⚠ Saldo da conta de anúncios: ", React.createElement("b", null, "R$ " + meta.saldo.toLocaleString("pt-BR", { minimumFractionDigits: 2 })), ". Não cobre 3 dias deste orçamento. Pode criar a campanha agora (ela nasce pausada), mas adicione saldo antes de ativar."),
             foto && React.createElement("img", { src: foto, alt: "", style: { width: "100%", maxHeight: 220, objectFit: "cover", borderRadius: 10 } }),
             React.createElement("label", { style: { display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, color: C.inkMid, cursor: "pointer", lineHeight: 1.5 } },
                 React.createElement("input", { type: "checkbox", checked: aceito, onChange: ev => setAceito(ev.target.checked), style: { accentColor: C.olive, marginTop: 2 } }),
@@ -19502,6 +19521,7 @@ function CampanhasPage() {
     useEffect(() => { metaApi("status").then(setMeta).catch(e => setMeta({ configurado: false, erro: e.message })); }, []);
     useEffect(() => { if (meta && meta.configurado) atualizar(); }, [meta, lista.length]);
     async function alternar(c, ativo) {
+        if (ativo && meta && meta.saldo != null && meta.saldo < (+c.orcamento_diario || 0) * 3 && !confirm(`Atenção: o saldo da conta de anúncios é R$ ${meta.saldo.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}, menos que 3 dias de orçamento (R$ ${c.orcamento_diario}/dia). A campanha vai parar quando o saldo acabar. Ativar mesmo assim?`)) return;
         if (ativo && !confirm(`Ativar "${c.itemNome}"? A campanha começa a veicular e a gastar até R$ ${c.orcamento_diario}/dia.`)) return;
         try { await metaApi("statusCampanha", { ativo, campanha: c.campanha, conjunto: c.conjunto, anuncios: c.anuncios }); setCamps(p => p.map(x => x.id === c.id ? Object.assign({}, x, { status: ativo ? "ACTIVE" : "PAUSED" }) : x)); setTimeout(atualizar, 1500); }
         catch (e) { setMsg("❌ " + e.message); }
@@ -19519,7 +19539,10 @@ function CampanhasPage() {
             !meta ? React.createElement("div", { style: { fontSize: 12, color: C.muted } }, "Verificando…")
                 : meta.configurado ? React.createElement("div", { style: { fontSize: 12, color: C.inkMid, lineHeight: 1.7 } },
                     "Conta de anúncios: ", React.createElement("b", null, meta.conta || meta.erroConta || "—"), meta.moeda ? " (" + meta.moeda + ")" : "", meta.contaAtiva === false ? " ⚠ conta não está ativa" : "", React.createElement("br"),
-                    "Página: ", React.createElement("b", null, meta.pagina || meta.erroPagina || "—"), " · Instagram: ", React.createElement("b", null, meta.instagram || "não vinculado"))
+                    "Página: ", React.createElement("b", null, meta.pagina || meta.erroPagina || "—"), " · Instagram: ", React.createElement("b", null, meta.instagram || "não vinculado"),
+                    (meta.saldo != null || meta.pagamento) && React.createElement(React.Fragment, null, React.createElement("br"), "Pagamento: ",
+                        React.createElement("b", { style: { color: meta.saldo != null && meta.saldo < 150 ? C.danger : C.ink } }, meta.saldo != null ? "saldo de R$ " + meta.saldo.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : meta.pagamento),
+                        meta.saldo != null && meta.saldo < 150 ? " · adicione saldo (Pix ou boleto) no Gerenciador de Anúncios antes de ativar" : ""))
                 : React.createElement("div", { style: { fontSize: 12, color: C.inkMid, lineHeight: 1.7 } }, "Ainda não conectada. Faltam na Vercel: ", React.createElement("b", null, (meta.faltando || []).join(", ") || meta.erro), ". Veja o passo a passo no LEIA-ME (seção Meta).")),
         React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 } },
             React.createElement("div", { style: { fontSize: 12, color: C.muted } }, `${lista.length} campanha(s) · investido ${brl(tot.gasto)} · ${tot.leads} lead(s)` + (tot.leads ? ` · custo médio por lead ${brl(tot.gasto / tot.leads)}` : "")),
@@ -19533,7 +19556,8 @@ function CampanhasPage() {
             return React.createElement("div", { key: c.id, style: Object.assign(mkBox("#fff"), { display: "flex", flexDirection: "column", gap: 10 }) },
                 React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" } },
                     React.createElement("div", null, React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, c.itemNome),
-                        React.createElement("div", { style: { fontSize: 11, color: C.muted } }, "Criada em " + new Date(c.criadoEm).toLocaleDateString("pt-BR") + " · R$ " + c.orcamento_diario + "/dia · " + (c.pracas || []).join(", "))),
+                        React.createElement("div", { style: { fontSize: 11, color: C.muted } }, "Criada em " + new Date(c.criadoEm).toLocaleDateString("pt-BR") + " · R$ " + c.orcamento_diario + "/dia · " + (c.pracas || []).join(", ")),
+                        c.objetivo && React.createElement("div", { style: { fontSize: 11, color: C.inkMid, marginTop: 3 } }, "🎯 " + c.objetivo + (c.cpl_estimado && x.cpl ? (x.cpl <= c.cpl_estimado.max ? " · ✅ dentro da meta de custo" : " · ⚠ acima da meta de custo (R$ " + Math.round(c.cpl_estimado.max) + ")") : ""))),
                     React.createElement(Chip, { label: x.erro ? "Erro" : ativo ? "● Ativa" : (x.status || c.status) === "PAUSED" ? "Pausada" : (x.status || c.status || "—"), color: ativo ? C.success : C.muted })),
                 x.erro ? React.createElement("div", { style: { fontSize: 12, color: C.danger } }, x.erro)
                     : React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 8 } },
@@ -19549,7 +19573,13 @@ function CampanhasPage() {
 
 // ── Criador de posts ──────────────────────────────────────────────────
 const MK = { olive: "#2d3a1f", oliveDk: "#1a2310", gold: "#b8993a", goldLt: "#d9be6f", cream: "#f5f3ee" };
+const MK_LOGO = {};
+function mkLogos() {
+    if (!mkLogos.p) mkLogos.p = Promise.all(["claro", "escuro"].map(k => new Promise(res => { const i = new Image(); i.onload = () => { MK_LOGO[k] = i; res(); }; i.onerror = () => res(); i.src = "/assets/holy-logo-" + k + ".svg"; })));
+    return mkLogos.p;
+}
 async function mkFonts() {
+    await mkLogos();
     if (mkFonts.ok) return;
     const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;600;700&display=swap"; document.head.appendChild(l);
     try { await Promise.all(['700 60px "Playfair Display"', '600 30px Inter', '400 30px Inter', '700 30px Inter'].map(f => document.fonts.load(f))); } catch (e) {}
@@ -19576,6 +19606,12 @@ function mkLines(ctx, text, maxW, maxLines) {
 }
 function mkText(ctx, lines, x, y, lh) { lines.forEach((l, i) => ctx.fillText(l, x, y + i * lh)); return lines.length * lh; }
 function mkMarca(ctx, claro, x, y) {
+    const lg = MK_LOGO[claro ? "claro" : "escuro"];
+    if (lg && lg.width) {
+        const w = y >= 150 ? 170 : 150, h = w * lg.height / lg.width;
+        ctx.save(); ctx.globalAlpha = 1; ctx.drawImage(lg, x, y - (y >= 150 ? 70 : 70), w, h); ctx.restore();
+        return;
+    }
     ctx.textAlign = "left"; ctx.fillStyle = MK.gold; ctx.font = '700 44px "Playfair Display", Georgia, serif'; ctx.fillText("HOLY", x, y);
     ctx.font = "600 14px Inter, Arial"; ctx.fillStyle = claro ? "rgba(255,255,255,.8)" : MK.olive; ctx.fillText("CURADORIA IMOBILIÁRIA", x + 2, y + 24);
 }
@@ -19686,7 +19722,7 @@ function PostStudio({ item, kind, onClose }) {
         setLoad("A IA está escrevendo o roteiro de venda…"); setMsg("");
         const estrutura = formato === "feed" ? "carrossel de 6 slides, tipos nesta ordem: gancho, desejo, lazer, prova, oferta, cta"
             : formato === "story" ? "sequência de 4 stories, tipos nesta ordem: gancho, desejo, enquete, cta" : "reels de 6 cenas (2,5 s cada), tipos nesta ordem: gancho, desejo, lazer, prova, oferta, cta";
-        const sys = "Você é o copywriter da Holy Curadoria Imobiliária. Tom informal, porém elegante; português correto; nunca use 'top' nem 'perfeito'. Use SOMENTE os dados fornecidos: nunca invente valores, prazos, condições ou itens. Estrutura de venda: gancho que prende, desejo (diferenciais), estilo de vida, prova (números), oferta (valor/condição) e chamada para ação para conversar no WhatsApp ou agendar visita. Responda APENAS com JSON válido, sem texto antes ou depois.";
+        const sys = "Você é o copywriter da Holy Curadoria Imobiliária, especialista em imóveis de médio, alto padrão e luxo em Santa Catarina. Tom elegante, seguro e próximo; português impecável. Vocabulário refinado e preciso, à altura do imóvel: prefira substantivos concretos (vista definitiva para o mar, suíte master com closet, planta integrada, pé-direito duplo, acabamento em porcelanato) a adjetivos vazios. Cada tela entrega UMA ideia, em poucas palavras, e diz ao leitor por que este imóvel merece atenção. Imóveis de alto padrão e luxo: sóbrio, sem emojis, exclusividade e precisão. Imóveis econômicos e médios: direto e acolhedor, foco em condição e praticidade. PROIBIDO: 'top', 'perfeito', 'imperdível', 'oportunidade única', 'sonho', 'incrível', 'maravilhoso', frases em caixa alta, excesso de exclamações, promessa de valorização ou rentabilidade. Use SOMENTE os dados fornecidos: nunca invente valores, prazos, condições, metragens ou itens. Estrutura de venda: gancho que prende, desejo (diferenciais), estilo de vida, prova (números), oferta (valor/condição) e chamada para conversar no WhatsApp ou agendar visita. Responda APENAS com JSON válido, sem texto antes ou depois.";
         const prompt = `Crie o conteúdo para Instagram (${estrutura}) do ${kind === "im" ? "imóvel" : "empreendimento"} abaixo.
 Formato JSON: {"slides":[{"tipo":"gancho","kicker":"bairro ou cidade","titulo":"até 45 caracteres","texto":"até 90 caracteres"},{"tipo":"desejo","titulo":"...","itens":["até 4 itens curtos"]},{"tipo":"lazer","titulo":"...","itens":["..."]},{"tipo":"prova","titulo":"...","itens":["número|rótulo"]},{"tipo":"oferta","kicker":"Valores","titulo":"valor exato fornecido ou 'Sob consulta'","texto":"condição só se fornecida"},{"tipo":"enquete","titulo":"pergunta","itens":["opção A","opção B"]},{"tipo":"cta","titulo":"...","texto":"...","botao":"até 32 caracteres"}],"legenda":"primeira linha com gancho; 3 a 5 linhas de valor; termine com chamada para o WhatsApp (49) 98845-4873 ou link da bio","hashtags":["8 a 12 hashtags locais e do segmento"],"narracao":"roteiro de narração curto para o reels, uma frase por cena (só para reels)"}
 Use apenas os tipos da estrutura pedida.
@@ -20136,6 +20172,7 @@ function App() {
     const addCli = c => setClientes(p => [c, ...p]);
     const editCli = c => setClientes(p => p.map(x => x.id === c.id ? c : x));
     const addTL = t => setTimeline(p => [t, ...p]);
+    const delCli = id => { setClientes(p => p.filter(x => x.id !== id)); setTimeline(p => (p || []).filter(t => t.clienteId !== id)); };
     function resetData() {
         const r = window.prompt("Isto apaga TODOS os imóveis, clientes e a timeline, na nuvem e em todos os aparelhos. Baixe um backup antes (Configurações). Para confirmar, digite APAGAR:");
         if (r !== "APAGAR") return;
@@ -20170,8 +20207,8 @@ function App() {
             isM && menu && React.createElement("div", { onClick: () => setMenu(false), style: { position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 2400 } }),
             React.createElement("div", { style: Object.assign({ width: 184, background: C.ink, display: "flex", flexDirection: "column", padding: "20px 0", flexShrink: 0, overflowY: "auto" }, isM ? { position: "fixed", top: 0, left: 0, bottom: 0, width: 240, zIndex: 2500, transform: menu ? "none" : "translateX(-105%)", transition: "transform .25s ease", boxShadow: menu ? "0 0 40px rgba(0,0,0,.4)" : "none", paddingTop: "calc(20px + env(safe-area-inset-top, 0px))" } : {}) },
                 React.createElement("div", { style: { padding: "0 18px 20px" } },
-                    React.createElement("div", { style: { fontFamily: "'Cormorant Garamond',serif", fontSize: 24, fontWeight: 700, color: C.white, lineHeight: 1 } }, "Holy"),
-                    React.createElement("div", { style: { fontFamily: "'Cormorant Garamond',serif", fontSize: 10, color: C.oliveLt, letterSpacing: "0.2em", marginTop: 2 } }, "INTELLIGENCE CRM"),
+                    React.createElement("img", { src: "/assets/holy-logo-claro.svg", alt: "Holy Curadoria Imobiliária", style: { width: 112, height: "auto", display: "block" } }),
+                    React.createElement("div", { style: { fontSize: 9, color: C.oliveLt, letterSpacing: "0.2em", marginTop: 8 } }, "INTELLIGENCE CRM"),
                     React.createElement("div", { style: { width: 28, height: 1.5, background: C.olive, marginTop: 10 } }),
                     React.createElement("div", { style: { fontSize: 9, color: C.oliveMid, marginTop: 8, fontFamily: "'DM Mono',monospace" } },
                         fmtK(totC),
@@ -20203,7 +20240,7 @@ function App() {
                             "i"))),
                 React.createElement("div", { style: { flex: 1, overflowY: "auto", padding: isM ? "14px 12px 80px" : 22 } },
                     page === "dashboard" && React.createElement(Dashboard, { clientes: clientes, imoveis: imoveis, timeline: timeline, setPage: setPage }),
-                    page === "clientes" && React.createElement(ClientesPage, { clientes: clientes, imoveis: imoveis, timeline: timeline, onAdd: addCli, onEdit: editCli, onAddTL: addTL }),
+                    page === "clientes" && React.createElement(ClientesPage, { clientes: clientes, imoveis: imoveis, timeline: timeline, onAdd: addCli, onEdit: editCli, onAddTL: addTL, onDelete: delCli }),
                     page === "imoveis" && React.createElement(ImoveisPage, { imoveis: imoveis, clientes: clientes, onAdd: addIm, onEdit: editIm, onDelete: id => setImoveis(p => p.filter(i => i.id !== id)) }),
                     page === "empreendimentos" && React.createElement(EmpreendimentosPage, null),
                     page === "conversas" && React.createElement(ConversasPage, null),
