@@ -1,5 +1,6 @@
 // Motor do assistente de WhatsApp da Holy
 // Funciona com a API oficial direto da Meta ou via parceiro oficial 360dialog (necessário para Coexistência).
+import { proximoResponsavel } from './_auth.js';
 import { sql, ensureSchema, atualizarDoc } from './_lib.js';
 import { paraSite as imovelSite } from './imoveis.js';
 import { paraSite as emprSite } from './empreendimentos.js';
@@ -281,13 +282,15 @@ async function sincronizarCRM(waId, conv, out, nomePerfil) {
     .filter((x) => x[1]).map((x) => x[0] + ': ' + x[1]).join(' · ');
   const bloco = '[WhatsApp] ' + (out.resumo || '') + (perfilTxt ? '\n' + perfilTxt : '');
   let clienteId = conv.cliente_id, novo = false, nomeFinal = '';
-  await atualizarDoc('clientes', (lista) => {
+  await atualizarDoc('clientes', async (lista) => {
     lista = Array.isArray(lista) ? lista : [];
     let c = lista.find((x) => x.id === clienteId) || lista.find((x) => String(x.celular || x.tel || '').replace(/\D/g, '').slice(-8) === fim8);
     if (!c) {
       novo = true;
       const nome = (out.nome_cliente || nomePerfil || 'Contato WhatsApp ' + tel.slice(-4)).trim();
       c = { id: 'cl' + rid(), nome, avatar: nome.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2), email: '', celular: tel, tel: '', cpf: '', nascimento: '', profissao: '', empresa: '', renda: 0, patrimonioEst: 0, origem: 'WhatsApp', stage: 'Prospecção', temp: 'warm', obs: '', interesses: [], interacoes: [], createdAt: hojeISO() };
+      const resp = await proximoResponsavel().catch(() => null); // rodízio entre corretores (se ligado)
+      if (resp) { c.responsavelId = resp.id; c.responsavelNome = resp.nome; }
       lista.unshift(c);
     }
     if (out.nome_cliente && /^Contato WhatsApp/.test(c.nome)) { c.nome = out.nome_cliente.trim(); c.avatar = c.nome.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2); }

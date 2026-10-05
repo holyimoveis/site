@@ -60,6 +60,16 @@ export function ensureSchema() {
           texto TEXT NOT NULL,
           criado_em TIMESTAMPTZ NOT NULL DEFAULT now())`);
       await sql.query(`CREATE INDEX IF NOT EXISTS wa_msg_idx ON wa_mensagens (wa_id, id DESC)`);
+      // Usuários do CRM (login individual por perfil)
+      await sql.query(`CREATE TABLE IF NOT EXISTS usuarios (
+          id TEXT PRIMARY KEY,
+          nome TEXT NOT NULL,
+          email TEXT NOT NULL UNIQUE,
+          perfil TEXT NOT NULL,
+          senha_hash TEXT NOT NULL,
+          ativo BOOLEAN NOT NULL DEFAULT true,
+          ultimo_acesso TIMESTAMPTZ,
+          criado_em TIMESTAMPTZ NOT NULL DEFAULT now())`);
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -68,7 +78,7 @@ export function ensureSchema() {
 export function cors(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Key');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Key, X-Holy-Token');
   if (req.method === 'OPTIONS') { res.status(204).end(); return true; }
   return false;
 }

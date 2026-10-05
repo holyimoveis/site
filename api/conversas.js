@@ -1,17 +1,32 @@
 // Conversas do WhatsApp para o CRM (só com X-Admin-Key)
-import { sql, ensureSchema, cors, isAdmin, body, ok, err, fail } from './_lib.js';
+import { sql, ensureSchema, cors, body, ok, err, fail } from './_lib.js';
+import { sessao, pode, ehDoUsuario } from './_auth.js';
 import { enviarTexto, salvarMensagem, whatsappConfigurado, provedor, conectarWebhookKapso, lerConfig, pensar, catalogo, montarHistorico, avisarEdipo, criarModeloAviso } from './_wa.js';
 export const maxDuration = 60;
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
-  if (!isAdmin(req)) return err(res, 401, 'Senha do CRM inválida.');
   res.setHeader('Cache-Control', 'no-store');
   try {
     await ensureSchema();
+    const s = await sessao(req);
+    if (!s) return err(res, 401, 'Senha do CRM inválida.');
+    if (!pode(s, 'conversas')) return err(res, 403, 'Seu perfil não tem acesso às conversas.');
     const q = req.query || {};
+    // Corretor: só as conversas dos clientes que são dele
+    let meus = null;
+    if (s.perfil === 'corretor') {
+      const r = await sql.query("SELECT valor FROM crm_docs WHERE chave = 'clientes'");
+      meus = new Set((Array.isArray(r[0] && r[0].valor) ? r[0].valor : []).filter((c) => ehDoUsuario(c, s.uid)).map((c) => c.id));
+    }
+    const permitida = async (waId) => {
+      if (!meus) return true;
+      const c = (await sql.query('SELECT cliente_id FROM wa_conversas WHERE wa_id = $1', [String(waId)]))[0];
+      return !!(c && c.cliente_id && meus.has(c.cliente_id));
+    };
     if (req.method === 'GET') {
       if (q.wa_id) {
+        if (!(await permitida(q.wa_id))) return err(res, 403, 'Esta conversa não é de um cliente seu.');
         const msgs = (await sql.query('SELECT id, papel, texto, criado_em FROM wa_mensagens WHERE wa_id = $1 ORDER BY id DESC LIMIT 300', [String(q.wa_id)])).reverse();
         const conv = (await sql.query('SELECT * FROM wa_conversas WHERE wa_id = $1', [String(q.wa_id)]))[0] || null;
         return ok(res, { conversa: conv, mensagens: msgs });
@@ -20,18 +35,20 @@ export default async function handler(req, res) {
           (SELECT papel FROM wa_mensagens m WHERE m.wa_id = c.wa_id ORDER BY id DESC LIMIT 1) AS ultimo_papel
           FROM wa_conversas c ORDER BY ultima_msg DESC LIMIT 300`);
       const cfg = await lerConfig();
-      return ok(res, { conversas: lista, whatsapp: whatsappConfigurado(), provedor: provedor(), assistente_ativo: cfg.ativo !== false,
+      return ok(res, { conversas: meus ? lista.filter((c) => c.cliente_id && meus.has(c.cliente_id)) : lista, whatsapp: whatsappConfigurado(), provedor: provedor(), assistente_ativo: cfg.ativo !== false,
         webhook: process.env.WHATSAPP_VERIFY_TOKEN ? 'configurado' : 'falta WHATSAPP_VERIFY_TOKEN' });
     }
     const b = body(req);
     if (req.method === 'PATCH') {
       if (!b.wa_id) return err(res, 400, 'Informe wa_id.');
+      if (!(await permitida(b.wa_id))) return err(res, 403, 'Esta conversa não é de um cliente seu.');
       await sql.query('UPDATE wa_conversas SET pausado = $2, aguardando = CASE WHEN $2 THEN aguardando ELSE false END, motivo = CASE WHEN $2 THEN COALESCE($3, motivo) ELSE NULL END WHERE wa_id = $1',
         [String(b.wa_id), !!b.pausado, b.motivo || (b.pausado ? 'Pausado por você no CRM' : null)]);
       if (b.lido) await sql.query('UPDATE wa_conversas SET aguardando = false WHERE wa_id = $1', [String(b.wa_id)]);
       return ok(res);
     }
     if (req.method === 'POST') {
+      if (['simular', 'modeloAviso', 'testarAviso', 'webhook', 'webhook360'].includes(b.acao) && !pode(s, 'helena.config')) return err(res, 403, 'Só o administrador configura a Helena.');
       // Testar o assistente sem WhatsApp (simulador do CRM)
       if (b.acao === 'simular') {
         const hist = (Array.isArray(b.historico) ? b.historico : []).slice(-30).map((m) => ({ papel: m.papel === 'cliente' ? 'cliente' : 'assistente', texto: String(m.texto || '').slice(0, 2000) }));
@@ -71,13 +88,14 @@ export default async function handler(req, res) {
       }
       // Enviar mensagem sua pelo CRM
       if (!b.wa_id || !String(b.texto || '').trim()) return err(res, 400, 'Informe wa_id e texto.');
+      if (!(await permitida(b.wa_id))) return err(res, 403, 'Esta conversa não é de um cliente seu.');
       const conv = (await sql.query('SELECT ultima_cliente FROM wa_conversas WHERE wa_id = $1', [String(b.wa_id)]))[0];
       if (!conv || !conv.ultima_cliente || Date.now() - new Date(conv.ultima_cliente).getTime() > 24 * 3600 * 1000) {
         return err(res, 400, 'Já se passaram 24 horas desde a última mensagem do cliente. Pelas regras do WhatsApp, responda pelo app do celular ou espere ele escrever.');
       }
       const wamid = await enviarTexto(String(b.wa_id), String(b.texto).trim());
       await salvarMensagem(String(b.wa_id), 'humano', String(b.texto).trim(), wamid);
-      await sql.query("UPDATE wa_conversas SET pausado = true, aguardando = false, motivo = 'Você assumiu pelo CRM' WHERE wa_id = $1", [String(b.wa_id)]);
+      await sql.query("UPDATE wa_conversas SET pausado = true, aguardando = false, motivo = $2 WHERE wa_id = $1", [String(b.wa_id), (s.mestre ? 'Você' : s.nome) + ' assumiu pelo CRM']);
       return ok(res);
     }
     return err(res, 405, 'Método não permitido.');

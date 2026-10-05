@@ -1,7 +1,8 @@
 // Leads do site -> CRM
 // POST (público): formulário de contato e cliques nos botões de WhatsApp
 // GET/PATCH/DELETE (só com X-Admin-Key): o CRM busca os leads e atualiza a etapa
-import { sql, ensureSchema, cors, isAdmin, body, ok, err, fail, ipHash, str } from './_lib.js';
+import { sql, ensureSchema, cors, body, ok, err, fail, ipHash, str } from './_lib.js';
+import { sessao, pode } from './_auth.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -25,7 +26,9 @@ export default async function handler(req, res) {
       return ok(res, { id: r[0].id }, 201);
     }
 
-    if (!isAdmin(req)) return err(res, 401, 'Chave de administrador inválida.');
+    const s = await sessao(req);
+    if (!s) return err(res, 401, 'Chave de administrador inválida.');
+    if (!pode(s, 'leads')) return err(res, 403, 'Sem permissão.');
 
     if (req.method === 'GET') {
       const desde = q.desde && !isNaN(Date.parse(q.desde)) ? new Date(q.desde).toISOString() : '1970-01-01T00:00:00Z';

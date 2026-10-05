@@ -1,67 +1,189 @@
-// Dados do CRM na nuvem (só com X-Admin-Key)
+// Dados do CRM na nuvem, com permissões por perfil
 // GET  /api/crm?chave=imoveis            -> { data, versao }
 // GET  /api/crm?chaves=imoveis,clientes  -> { docs: { imoveis:{data,versao}, ... } }
 // POST /api/crm { chave, valor, versao }  -> grava se a versão bater; senão 409 com a versão atual
-import { sql, ensureSchema, cors, isAdmin, body, ok, err, fail } from './_lib.js';
+// POST /api/crm { acao:'sincronizarLeads' } -> leva os contatos do site e da Meta para Clientes (com rodízio)
+// Admin e gerente gravam o documento inteiro. Corretor e secretária gravam por mesclagem no servidor:
+// só o que podem editar é aceito, nada é excluído e a resposta traz os dados atualizados.
+import { sql, ensureSchema, cors, body, ok, err, fail, atualizarDoc } from './_lib.js';
+import { sessao, ehDoUsuario, proximoResponsavel } from './_auth.js';
 
 const CHAVE_OK = /^[a-z_]{1,40}$/;
 const HIST_MAX = 30; // cópias guardadas por chave (desfazer em caso de erro)
+const LISTAS = ['imoveis', 'clientes', 'timeline', 'empreendimentos', 'campanhas', 'posts_aprovacao'];
 
 async function ler(chave) {
   const r = await sql.query('SELECT valor, versao FROM crm_docs WHERE chave = $1', [chave]);
   return r[0] ? { data: r[0].valor, versao: r[0].versao } : { data: null, versao: 0 };
 }
+const arr = (v) => (Array.isArray(v) ? v : []);
+
+// ── Leitura conforme o perfil ─────────────────────────────────────────
+async function clientesDe(s) {
+  const c = arr((await ler('clientes')).data);
+  return s.perfil === 'corretor' ? c.filter((x) => ehDoUsuario(x, s.uid)) : c;
+}
+async function filtrar(s, chave, data) {
+  const p = s.perfil;
+  if (p === 'admin') return data;
+  if (chave === 'clientes') return p === 'corretor' ? arr(data).filter((x) => ehDoUsuario(x, s.uid)) : data;
+  if (chave === 'timeline') {
+    if (p !== 'corretor') return data;
+    const meus = new Set((await clientesDe(s)).map((c) => c.id));
+    return arr(data).filter((t) => (t && t.clienteId && meus.has(t.clienteId)) || (t && t.autorId === s.uid));
+  }
+  if (chave === 'campanhas') return p === 'gerente' ? data : [];
+  if (chave === 'posts_aprovacao') return p === 'gerente' ? data : arr(data).filter((x) => x && x.autorId === s.uid);
+  if (chave === 'wa_config') return p === 'gerente' ? data : {};
+  return data; // imoveis, empreendimentos, site_config, equipe_config: leitura liberada
+}
+
+// ── Escrita conforme o perfil ─────────────────────────────────────────
+// 'total': grava o documento inteiro · 'mesclar': só o permitido · null: sem permissão
+function modoEscrita(s, chave) {
+  const p = s.perfil;
+  if (p === 'admin') return 'total';
+  if (p === 'gerente') return ['campanhas', 'equipe_config', 'wa_config', 'site_config'].includes(chave) ? null : 'total';
+  if (p === 'corretor') return ['clientes', 'imoveis', 'timeline', 'posts_aprovacao'].includes(chave) ? 'mesclar' : null;
+  if (p === 'secretaria') return ['clientes', 'imoveis', 'timeline'].includes(chave) ? 'mesclar' : null;
+  return null;
+}
+function podeEditar(s, chave, item) {
+  if (!item) return false;
+  if (s.perfil === 'secretaria') return chave !== 'timeline';
+  if (chave === 'clientes') return ehDoUsuario(item, s.uid);
+  if (chave === 'imoveis') return item.criadoPor === s.uid;
+  return false; // timeline e posts: só acrescenta
+}
+// Campos que só admin e gerente mudam
+const PROTEGIDOS = { clientes: ['criadoPor', 'responsavelId', 'responsavelNome'], imoveis: ['criadoPor'], timeline: [], posts_aprovacao: [] };
+
+function carimbarNovos(s, chave, atual, valor) {
+  if (!Array.isArray(valor) || !['clientes', 'imoveis', 'timeline', 'posts_aprovacao'].includes(chave)) return valor;
+  const ja = new Set(arr(atual).map((x) => x && x.id));
+  return valor.map((x) => {
+    if (!x || x.id == null || ja.has(x.id)) return x;
+    if (chave === 'timeline' || chave === 'posts_aprovacao') return { ...x, autorId: x.autorId || s.uid, autor: x.autor || s.nome };
+    const y = { ...x, criadoPor: x.criadoPor || s.uid };
+    if (chave === 'clientes' && s.perfil === 'corretor') { y.responsavelId = s.uid; y.responsavelNome = s.nome; }
+    return y;
+  });
+}
+function mesclar(s, chave, servidor, enviado) {
+  servidor = arr(servidor); enviado = arr(enviado);
+  const E = new Map(enviado.filter((x) => x && x.id != null).map((x) => [x.id, x]));
+  const S = new Set(servidor.map((x) => x && x.id));
+  const fixos = PROTEGIDOS[chave] || [];
+  const out = servidor.map((x) => {
+    const e = x && E.get(x.id);
+    if (!e || !podeEditar(s, chave, x)) return x;
+    const y = { ...e };
+    fixos.forEach((f) => { if (x[f] !== undefined) y[f] = x[f]; else delete y[f]; });
+    return y;
+  });
+  const novos = carimbarNovos(s, chave, servidor, enviado.filter((x) => x && x.id != null && !S.has(x.id)));
+  return novos.concat(out);
+}
+
+// ── Contatos do site e da Meta -> Clientes (no servidor, com rodízio) ──
+const dig = (v) => String(v || '').replace(/\D/g, '');
+const rid = () => Math.random().toString(36).slice(2, 9);
+async function sincronizarLeads() {
+  const leads = await sql.query(`SELECT * FROM leads WHERE tipo = 'formulario' AND sincronizado = false ORDER BY criado_em ASC LIMIT 100`);
+  if (!leads.length) return { novos: 0, nomes: [] };
+  let tl = [], nomes = [];
+  await atualizarDoc('clientes', async (lista) => {
+    lista = arr(lista); tl = []; nomes = [];
+    for (const l of leads) {
+      const tel = dig(l.telefone), mail = String(l.email || '').toLowerCase();
+      const deMeta = /^Meta/.test(l.origem || '');
+      const camp = deMeta ? String(l.origem).replace(/^Meta Ads:?\s*/, '').trim() : '';
+      const desc = deMeta
+        ? 'Lead de anúncio na Meta' + (camp ? ' · ' + camp : '') + (l.imovel && l.imovel !== camp ? ' | Imóvel: ' + l.imovel : '') + (l.mensagem ? ' | Respostas: ' + l.mensagem : '')
+        : 'Contato pelo site' + (l.interesse ? ' | Interesse: ' + l.interesse : '') + (l.imovel ? ' | Imóvel: ' + l.imovel : '') + (l.mensagem ? ' | "' + l.mensagem + '"' : '');
+      let c = lista.find((x) => (tel.length >= 8 && dig(x.celular || x.tel).slice(-8) === tel.slice(-8)) || (mail && String(x.email || '').toLowerCase() === mail));
+      if (!c) {
+        const nome = l.nome || 'Lead do site';
+        const r = await proximoResponsavel();
+        c = { id: 'cl' + rid(), nome, avatar: nome.trim().split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2), email: l.email || '', celular: l.telefone || '', tel: '', cpf: '', nascimento: '', profissao: '', empresa: '', renda: 0, patrimonioEst: 0,
+          origem: deMeta ? 'Meta Ads' : 'Site', stage: 'Prospecção', temp: 'warm', obs: desc, interesses: [], interacoes: [], createdAt: String(l.criado_em ? new Date(l.criado_em).toISOString() : new Date().toISOString()).slice(0, 10), leadSite: l.id,
+          ...(r ? { responsavelId: r.id, responsavelNome: r.nome } : {}) };
+        lista.unshift(c);
+        nomes.push(nome);
+      }
+      const d = l.criado_em ? new Date(l.criado_em) : new Date();
+      tl.push({ id: 'int' + rid(), tipo: 'Nota interna', data: d.toISOString().slice(0, 10), hora: d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }), desc: desc + (c.responsavelNome ? ' · Responsável: ' + c.responsavelNome : ''), imovelId: '', clienteId: c.id, cliente: c.nome, autor: 'Sistema' });
+    }
+    return lista;
+  });
+  await atualizarDoc('timeline', (t) => tl.concat(arr(t)));
+  await sql.query('UPDATE leads SET sincronizado = true, atualizado_em = now() WHERE id = ANY($1::bigint[])', [leads.map((l) => l.id)]);
+  return { novos: leads.length, nomes };
+}
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
-  if (!isAdmin(req)) return err(res, 401, 'Senha do CRM inválida.');
   res.setHeader('Cache-Control', 'no-store');
   try {
     await ensureSchema();
+    const s = await sessao(req);
+    if (!s) return err(res, 401, 'Senha do CRM inválida.');
     const q = req.query || {};
 
     if (req.method === 'GET') {
       if (q.chaves) {
         const chaves = String(q.chaves).split(',').filter((c) => CHAVE_OK.test(c)).slice(0, 20);
         const docs = {};
-        for (const c of chaves) docs[c] = await ler(c);
+        for (const c of chaves) { const d = await ler(c); docs[c] = { data: await filtrar(s, c, d.data), versao: d.versao }; }
         return ok(res, { docs });
       }
       if (!CHAVE_OK.test(q.chave || '')) return err(res, 400, 'Chave inválida.');
-      return ok(res, await ler(q.chave));
+      const d = await ler(q.chave);
+      return ok(res, { data: await filtrar(s, q.chave, d.data), versao: d.versao });
     }
 
     if (req.method === 'POST') {
       const b = body(req);
+      if (b.acao === 'sincronizarLeads') return ok(res, await sincronizarLeads());
       if (!CHAVE_OK.test(b.chave || '')) return err(res, 400, 'Chave inválida.');
       if (b.valor === undefined) return err(res, 400, 'Informe "valor".');
       const json = JSON.stringify(b.valor);
       if (json.length > 4_000_000) return err(res, 413, 'Dados grandes demais. Fotos precisam ir pelo envio de fotos, não dentro do cadastro.');
-      const base = Number.isFinite(+b.versao) ? Math.trunc(+b.versao) : null;
+      const modo = modoEscrita(s, b.chave);
+      if (!modo) return err(res, 403, 'Seu perfil não pode alterar esta área.');
 
-      // guarda a versão anterior no histórico antes de sobrescrever
+      if (modo === 'mesclar') {
+        const novo = await atualizarDoc(b.chave, (atual) => mesclar(s, b.chave, atual, b.valor), []);
+        const d = await ler(b.chave);
+        return ok(res, { versao: d.versao, data: await filtrar(s, b.chave, novo) });
+      }
+
+      const base = Number.isFinite(+b.versao) ? Math.trunc(+b.versao) : null;
       const atual = await ler(b.chave);
       if (base !== null && base !== atual.versao) {
-        return res.status(409).json({ success: false, error: 'conflito', data: atual.data, versao: atual.versao });
+        return res.status(409).json({ success: false, error: 'conflito', data: await filtrar(s, b.chave, atual.data), versao: atual.versao });
       }
+      const valor = carimbarNovos(s, b.chave, atual.data, b.valor);
+      const jsonFinal = JSON.stringify(valor);
       let r;
       if (atual.versao === 0) {
         r = await sql.query(
           `INSERT INTO crm_docs (chave, valor, versao) VALUES ($1, $2::jsonb, 1)
-           ON CONFLICT (chave) DO NOTHING RETURNING versao`, [b.chave, json]);
+           ON CONFLICT (chave) DO NOTHING RETURNING versao`, [b.chave, jsonFinal]);
       } else {
         await sql.query('INSERT INTO crm_historico (chave, valor, versao) VALUES ($1, $2::jsonb, $3)', [b.chave, JSON.stringify(atual.data), atual.versao]);
         await sql.query(
           `DELETE FROM crm_historico WHERE chave = $1 AND id NOT IN (SELECT id FROM crm_historico WHERE chave = $1 ORDER BY id DESC LIMIT ${HIST_MAX})`, [b.chave]);
         r = await sql.query(
           `UPDATE crm_docs SET valor = $2::jsonb, versao = versao + 1, atualizado_em = now()
-           WHERE chave = $1 AND versao = $3 RETURNING versao`, [b.chave, json, atual.versao]);
+           WHERE chave = $1 AND versao = $3 RETURNING versao`, [b.chave, jsonFinal, atual.versao]);
       }
       if (!r.length) {
         const agora = await ler(b.chave);
-        return res.status(409).json({ success: false, error: 'conflito', data: agora.data, versao: agora.versao });
+        return res.status(409).json({ success: false, error: 'conflito', data: await filtrar(s, b.chave, agora.data), versao: agora.versao });
       }
-      return ok(res, { versao: r[0].versao });
+      // Se o servidor carimbou algo (autor, quem cadastrou), devolve para o aparelho ficar igual
+      return ok(res, { versao: r[0].versao, ...(jsonFinal !== json ? { data: valor } : {}) });
     }
 
     return err(res, 405, 'Método não permitido.');

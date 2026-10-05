@@ -1,14 +1,16 @@
 // Upload de fotos/plantas do CRM para o Vercel Blob (só com X-Admin-Key)
 // Envie JSON: { nome: "sala.jpg", pasta: "imoveis/hl101", data: "<base64 ou dataURL>" }
 import { put } from '@vercel/blob';
-import { cors, isAdmin, body, ok, err } from './_lib.js';
+import { cors, body, ok, err } from './_lib.js';
+import { sessao, pode } from './_auth.js';
 
 const TIPOS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf', 'video/mp4': 'mp4' };
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
   if (req.method !== 'POST') return err(res, 405, 'Use POST.');
-  if (!isAdmin(req)) return err(res, 401, 'Chave de administrador inválida.');
+  const s = await sessao(req).catch(() => null);
+  if (!pode(s, 'upload')) return err(res, 401, 'Chave de administrador inválida.');
   if (!process.env.BLOB_STORE_ID && !process.env.BLOB_READ_WRITE_TOKEN) return err(res, 503, 'Armazenamento de fotos não conectado. Veja o LEIA-ME, passo 4.');
   try {
     const b = body(req);

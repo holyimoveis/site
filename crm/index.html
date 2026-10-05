@@ -17254,15 +17254,37 @@ window.onerror=function(msg,src,line,col,err){
 // ══════════════════════════════════════════════════════════════════
 // HOLY CLOUD: dados do CRM salvos na nuvem (Vercel), com cópia no aparelho
 // ══════════════════════════════════════════════════════════════════
-var HOLY_KEYS = ['imoveis', 'clientes', 'timeline', 'empreendimentos', 'wa_config', 'site_config', 'campanhas'];
+var HOLY_KEYS = ['imoveis', 'clientes', 'timeline', 'empreendimentos', 'wa_config', 'site_config', 'campanhas', 'equipe_config', 'posts_aprovacao'];
+// Acesso: login individual (token) ou chave mestra (ADMIN_KEY), que vale como administrador
 var HolyAuth = {
-  get: function () { try { return localStorage.getItem('hly_admin_key') || ''; } catch (e) { return ''; } },
-  set: function (k) { try { localStorage.setItem('hly_admin_key', k); } catch (e) {} },
-  clear: function () { try { localStorage.removeItem('hly_admin_key'); } catch (e) {} }
+  get: function () { try { return localStorage.getItem('hly_token') || localStorage.getItem('hly_admin_key') || ''; } catch (e) { return ''; } },
+  token: function () { try { return localStorage.getItem('hly_token') || ''; } catch (e) { return ''; } },
+  chave: function () { try { return localStorage.getItem('hly_admin_key') || ''; } catch (e) { return ''; } },
+  set: function (k) { try { localStorage.removeItem('hly_token'); localStorage.setItem('hly_admin_key', k); } catch (e) {} },
+  setToken: function (t) { try { localStorage.removeItem('hly_admin_key'); localStorage.setItem('hly_token', t); } catch (e) {} },
+  clear: function () { try { localStorage.removeItem('hly_admin_key'); localStorage.removeItem('hly_token'); localStorage.removeItem('hly_user'); } catch (e) {} }
 };
+var HolyUser = (function () { try { return JSON.parse(localStorage.getItem('hly_user') || 'null'); } catch (e) { return null; } })();
+function holyPerfil() { return (HolyUser && HolyUser.perfil) || 'admin'; }
+function holyPode(acao) {
+  var R = { campanhas: ['admin', 'gerente'], anunciar: ['admin'], ativarCampanha: ['admin'], publicarIG: ['admin', 'gerente'], post: ['admin', 'gerente', 'corretor'],
+    conversas: ['admin', 'gerente', 'corretor'], excluirCliente: ['admin'], excluirImovel: ['admin'], editarEmpr: ['admin', 'gerente'], distribuir: ['admin', 'gerente'],
+    equipe: ['admin', 'gerente'], usuarios: ['admin'], configCompleta: ['admin'], leadsSite: ['admin', 'gerente'] };
+  return (R[acao] || []).indexOf(holyPerfil()) >= 0;
+}
+// Ao trocar de usuário no mesmo aparelho, apaga os dados guardados do usuário anterior
+function holyTrocarUsuario(u) {
+  var antes = HolyUser && HolyUser.id;
+  if (antes !== (u && u.id)) {
+    try { Object.keys(localStorage).forEach(function (k) { if (/^hly_(base_)?[a-z_]+$/.test(k) && !/^hly_(token|admin_key|user|api_url|api_key|anthropic_key)$/.test(k)) localStorage.removeItem(k); }); } catch (e) {}
+  }
+  HolyUser = u; try { localStorage.setItem('hly_user', JSON.stringify(u)); } catch (e) {}
+}
 function holyFetch(path, opts) {
   opts = opts || {};
-  opts.headers = Object.assign({ 'Content-Type': 'application/json', 'X-Admin-Key': HolyAuth.get() }, opts.headers || {});
+  var h = { 'Content-Type': 'application/json' };
+  if (HolyAuth.token()) h['X-Holy-Token'] = HolyAuth.token(); else h['X-Admin-Key'] = HolyAuth.chave();
+  opts.headers = Object.assign(h, opts.headers || {});
   return fetch(path, opts);
 }
 
@@ -17312,6 +17334,11 @@ var HolyStore = (function () {
       var r = await holyFetch('/api/crm', { method: 'POST', body: JSON.stringify({ chave: k, valor: vals[k], versao: versao[k] || 0 }) });
       var d = await r.json().catch(function () { return {}; });
       if (r.status === 401) { HolyBadge.show('senha'); return; }
+      if (r.status === 403) {
+        vals[k] = clone(base[k]); lsSet('hly_' + k, vals[k]); pending[k] = false; saveMeta(); emit(k);
+        HolyBadge.show('salvo'); if (typeof HolyToast === 'function') HolyToast('🔒 ' + (d.error || 'Seu perfil não pode alterar esta área.'));
+        return;
+      }
       if (r.status === 409) {
         var merged = merge3(base[k], vals[k], d.data || []);
         versao[k] = d.versao; base[k] = clone(d.data || []); lsSet('hly_base_' + k, base[k]);
@@ -17319,7 +17346,9 @@ var HolyStore = (function () {
         inflight[k] = false; schedule(k, 50); return;
       }
       if (!r.ok || !d.success) throw new Error(d.error || ('HTTP ' + r.status));
-      versao[k] = d.versao; base[k] = clone(vals[k]); lsSet('hly_base_' + k, base[k]);
+      versao[k] = d.versao;
+      if (d.data !== undefined && d.data !== null) { vals[k] = d.data; lsSet('hly_' + k, vals[k]); emit(k); } // o servidor ajustou (permissões, autor)
+      base[k] = clone(vals[k]); lsSet('hly_base_' + k, base[k]);
       pending[k] = false; saveMeta();
       HolyBadge.show(Object.keys(pending).some(function (x) { return pending[x]; }) ? 'salvando' : 'salvo');
     } catch (e) {
@@ -17422,42 +17451,20 @@ var HolySite = (function () {
   async function sync() {
     if (!HolyAuth.get()) return;
     try {
-      try { var cps = HolyStore.get('campanhas', []).filter(function (c) { return c && c.formulario; });
+      try { var cps = holyPode('campanhas') ? HolyStore.get('campanhas', []).filter(function (c) { return c && c.formulario; }) : [];
         if (cps.length && Date.now() - (sync._meta || 0) > 300000) { sync._meta = Date.now(); await holyFetch('/api/meta', { method: 'POST', body: JSON.stringify({ acao: 'puxarLeads', forms: cps.map(function (c) { return { id: c.formulario, item: c.itemNome }; }) }) }); }
       } catch (e) {}
-      var r = await holyFetch('/api/leads?novos=1'); var d = await r.json();
-      if (!d.success) return;
-      var forms = d.data.filter(function (l) { return l.tipo === 'formulario'; });
-      var cliques = d.data.filter(function (l) { return l.tipo !== 'formulario'; });
-      if (forms.length) {
-        var novosTL = [];
-        HolyStore.update('clientes', function (lista) {
-          lista = (lista || []).slice();
-          forms.slice().reverse().forEach(function (l) {
-            var tel = soDigitos(l.telefone), mail = String(l.email || '').toLowerCase();
-            var ex = lista.find(function (c) { return (tel && tel.length >= 8 && soDigitos(c.celular || c.tel).slice(-8) === tel.slice(-8)) || (mail && String(c.email || '').toLowerCase() === mail); });
-            var deMeta = /^Meta/.test(l.origem || '');
-            var campMeta = deMeta ? String(l.origem).replace(/^Meta Ads:?\s*/, '').trim() : '';
-            var desc = deMeta
-              ? 'Lead de anúncio na Meta' + (campMeta ? ' · ' + campMeta : '') + (l.imovel && l.imovel !== campMeta ? ' | Imóvel: ' + l.imovel : '') + (l.mensagem ? ' | Respostas: ' + l.mensagem : '')
-              : 'Contato pelo site' + (l.interesse ? ' | Interesse: ' + l.interesse : '') + (l.imovel ? ' | Imóvel: ' + l.imovel : '') + (l.mensagem ? ' | "' + l.mensagem + '"' : '');
-            var cli = ex;
-            if (!cli) {
-              var nome = l.nome || 'Lead do site';
-              cli = { id: 'cl' + rid(), nome: nome, avatar: nome.trim().split(' ').map(function (w) { return w[0]; }).join('').toUpperCase().slice(0, 2), email: l.email || '', celular: l.telefone || '', tel: '', cpf: '', nascimento: '', profissao: '', empresa: '', renda: 0, patrimonioEst: 0, origem: deMeta ? 'Meta Ads' : 'Site', stage: 'Prospecção', temp: 'warm', obs: desc, interesses: [], interacoes: [], createdAt: hoje(), leadSite: l.id };
-              lista.unshift(cli);
-            }
-            novosTL.push({ id: 'int' + rid(), tipo: 'Nota interna', data: String(l.criado_em || '').slice(0, 10) || hoje(), hora: hora(l.criado_em), desc: desc, imovelId: '', clienteId: cli.id, cliente: cli.nome });
-          });
-          return lista;
-        });
-        if (novosTL.length) HolyStore.update('timeline', function (t) { return novosTL.concat(t || []); });
-        await holyFetch('/api/leads', { method: 'PATCH', body: JSON.stringify({ ids: forms.map(function (l) { return l.id; }), sincronizado: true }) });
-        HolyToast(forms.length === 1 ? '🌐 Novo contato do site: ' + (forms[0].nome || '') + ' (em Clientes e no Funil)' : '🌐 ' + forms.length + ' novos contatos do site foram para Clientes e para o Funil');
-      }
+      // Contatos do site e da Meta viram clientes no servidor (com rodízio entre corretores, se ligado)
+      var antes = {}; (HolyStore.get('clientes', []) || []).forEach(function (c) { antes[c.id] = 1; });
+      var rs = await holyFetch('/api/crm', { method: 'POST', body: JSON.stringify({ acao: 'sincronizarLeads' }) }); var ds = await rs.json().catch(function () { return {}; });
+      if (ds.success && ds.novos) await HolyStore.pullAll(['clientes', 'timeline']).catch(function () {});
+      var meus = (HolyStore.get('clientes', []) || []).filter(function (c) { return !antes[c.id] && (holyPerfil() !== 'corretor' || c.responsavelId === (HolyUser && HolyUser.id)); });
+      if (meus.length && Object.keys(antes).length) HolyToast(meus.length === 1 ? '🌐 Novo lead: ' + (meus[0].nome || '') + (meus[0].responsavelNome ? ' (com ' + meus[0].responsavelNome + ')' : '') : '🌐 ' + meus.length + ' novos leads em Clientes');
+      var cliques = [];
+      if (holyPode('leadsSite')) { var r = await holyFetch('/api/leads?novos=1&tipo=whatsapp'); var d = await r.json(); if (d.success) cliques = d.data; }
       atividade = cliques.concat(atividade.filter(function (a) { return !cliques.some(function (c) { return c.id === a.id; }); })).slice(0, 60);
       HolyBadge.site(atividade.filter(function (a) { return !a.visto; }).length);
-      try { var rc = await holyFetch('/api/conversas'); var dc = await rc.json(); if (dc.success) { var na = dc.conversas.filter(function (c) { return c.aguardando; }).length; if (na > (HolySite._na || 0)) HolyToast('🔔 ' + (na === 1 ? 'Uma conversa do WhatsApp precisa de você' : na + ' conversas do WhatsApp precisam de você')); HolySite._na = na; HolyBadge.wa(na); } } catch (e2) {}
+      if (holyPode('conversas')) try { var rc = await holyFetch('/api/conversas'); var dc = await rc.json(); if (dc.success) { var na = dc.conversas.filter(function (c) { return c.aguardando; }).length; if (na > (HolySite._na || 0)) HolyToast('🔔 ' + (na === 1 ? 'Uma conversa do WhatsApp precisa de você' : na + ' conversas do WhatsApp precisam de você')); HolySite._na = na; HolyBadge.wa(na); } } catch (e2) {}
     } catch (e) {}
   }
   function openPanel() {
@@ -17535,21 +17542,46 @@ function holyBoot(render) {
     if (ld) ld.style.display = 'none';
     var box = document.createElement('div');
     box.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#1a1c18;z-index:5000;font-family:-apple-system,Segoe UI,sans-serif;padding:20px';
+    var inp = 'width:100%;margin:6px 0 12px;padding:12px;border:1px solid #dde0d6;border-radius:8px;font-size:15px';
     box.innerHTML = '<form style="background:#fff;border-radius:16px;padding:32px;width:360px;max-width:100%">'
       + '<img src="/assets/holy-logo-escuro.svg" alt="Holy Curadoria Imobiliária" style="width:130px;height:auto;display:block;margin:0 auto 10px">'
       + '<div style="font-size:11px;letter-spacing:.2em;color:#8fa060;margin-bottom:22px;text-align:center">INTELLIGENCE CRM</div>'
-      + '<label style="font-size:12px;color:#7a7d72">Senha do CRM</label>'
-      + '<input type="password" autocomplete="current-password" required style="width:100%;margin:6px 0 12px;padding:12px;border:1px solid #dde0d6;border-radius:8px;font-size:15px">'
+      + '<div class="u"><label style="font-size:12px;color:#7a7d72">E-mail</label><input name="email" type="email" autocomplete="username" style="' + inp + '">'
+      + '<label style="font-size:12px;color:#7a7d72">Senha</label><input name="senha" type="password" autocomplete="current-password" style="' + inp + '"></div>'
+      + '<div class="k" style="display:none"><label style="font-size:12px;color:#7a7d72">Chave mestra (ADMIN_KEY)</label><input name="chave" type="password" autocomplete="off" style="' + inp + '"></div>'
       + '<div class="m" style="font-size:12px;color:#c0392b;min-height:16px;margin-bottom:8px">' + (msg || '') + '</div>'
       + '<button style="width:100%;padding:12px;border:0;border-radius:8px;background:#4a5c2f;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Entrar</button>'
-      + '<p style="font-size:11px;color:#7a7d72;margin-top:14px;line-height:1.5">É a senha ADMIN_KEY cadastrada na Vercel. Ela fica guardada neste aparelho até você sair.</p></form>';
+      + '<a href="#" class="t" style="display:block;text-align:center;font-size:11px;color:#7a7d72;margin-top:14px">Entrar com a chave mestra do administrador</a></form>';
     document.body.appendChild(box);
-    var inp = box.querySelector('input'); inp.focus();
-    box.querySelector('form').onsubmit = function (e) {
-      e.preventDefault(); HolyAuth.set(inp.value.trim()); box.querySelector('.m').textContent = 'Verificando…';
-      carregar().then(function () { box.remove(); if (ld) ld.style.display = ''; iniciar(); })
-        .catch(function (er) { HolyAuth.clear(); box.querySelector('.m').textContent = er.message === '401' ? 'Senha incorreta.' : 'Sem conexão com o servidor. Tente de novo.'; });
+    var f = box.querySelector('form'), modoChave = false, m = box.querySelector('.m');
+    f.email.focus();
+    box.querySelector('.t').onclick = function (e) {
+      e.preventDefault(); modoChave = !modoChave;
+      box.querySelector('.u').style.display = modoChave ? 'none' : ''; box.querySelector('.k').style.display = modoChave ? '' : 'none';
+      this.textContent = modoChave ? 'Entrar com e-mail e senha' : 'Entrar com a chave mestra do administrador';
+      (modoChave ? f.chave : f.email).focus();
     };
+    f.onsubmit = async function (e) {
+      e.preventDefault(); m.textContent = 'Verificando…';
+      try {
+        if (modoChave) { HolyAuth.set(f.chave.value.trim()); }
+        else {
+          var r = await fetch('/api/usuarios', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'login', email: f.email.value.trim(), senha: f.senha.value }) });
+          var d = await r.json().catch(function () { return {}; });
+          if (!d.success) { m.textContent = d.error || 'E-mail ou senha incorretos.'; return; }
+          HolyAuth.setToken(d.token);
+        }
+        await quemSou();
+        await carregar(); box.remove(); if (ld) ld.style.display = ''; iniciar();
+      } catch (er) { if (modoChave) HolyAuth.clear(); m.textContent = er.message === '401' ? (modoChave ? 'Chave incorreta.' : 'Acesso recusado.') : 'Sem conexão com o servidor. Tente de novo.'; }
+    };
+  }
+  async function quemSou() {
+    var r = await holyFetch('/api/usuarios?me=1');
+    if (r.status === 401) throw new Error('401');
+    var d = await r.json().catch(function () { return {}; });
+    if (d.success && d.usuario) holyTrocarUsuario(d.usuario);
+    else holyTrocarUsuario({ id: 'admin', nome: 'Administrador', perfil: 'admin', perfilNome: 'Administrador', mestre: true });
   }
   function carregar() { return HolyStore.pullAll(); }
   function iniciar() {
@@ -17562,8 +17594,8 @@ function holyBoot(render) {
     window.addEventListener('beforeunload', function (e) { if (HolyStore.hasPending()) { HolyStore.flush(); e.preventDefault(); e.returnValue = ''; } });
   }
   if (!HolyAuth.get()) return login();
-  carregar().then(iniciar).catch(function (er) {
-    if (er.message === '401') { HolyAuth.clear(); return login('Senha alterada. Entre de novo.'); }
+  quemSou().catch(function (er) { if (er.message === '401') throw er; }).then(carregar).then(iniciar).catch(function (er) {
+    if (er.message === '401') { HolyAuth.clear(); return login('Sua sessão expirou ou a senha mudou. Entre de novo.'); }
     iniciar(); HolyBadge.show('offline');
   });
 }
@@ -17605,6 +17637,7 @@ var useState = React.useState;
 var useEffect = React.useEffect;
 var useCallback = React.useCallback;
 var useRef = React.useRef;
+var useMemo = React.useMemo;
 var Fragment = React.Fragment;
 // ═══════════════════════════════════════════════════════════════════════
 // TOKENS
@@ -18204,9 +18237,9 @@ ${imovel.exclusividade ? `<div style="font-size:10px;padding:5px 12px;background
                     imovel.exclusividade && React.createElement(Bdg, { label: "Exclusividade", color: C.gold }))),
             React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
                 React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: () => onEdit(imovel) }, "\u270F\uFE0F Editar"),
-                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.blue, onClick: () => abrirMkt("campanha", imovel, "im") }, "📣 Anunciar"),
-                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, onClick: () => abrirMkt("post", imovel, "im") }, "📸 Post"),
-                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.danger, onClick: () => { if (window.confirm("Excluir \"" + imovel.nome + "\"?\n\nEsta a\u00E7\u00E3o n\u00E3o pode ser desfeita.")) onDelete(imovel.id); } }, "\uD83D\uDDD1\uFE0F Excluir"),
+                holyPode("anunciar") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.blue, onClick: () => abrirMkt("campanha", imovel, "im") }, "📣 Anunciar"),
+                holyPode("post") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, onClick: () => abrirMkt("post", imovel, "im") }, "📸 Post"),
+                holyPode("excluirImovel") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.danger, onClick: () => { if (window.confirm("Excluir \"" + imovel.nome + "\"?\n\nEsta a\u00E7\u00E3o n\u00E3o pode ser desfeita.")) onDelete(imovel.id); } }, "\uD83D\uDDD1\uFE0F Excluir"),
                 React.createElement("button", { onClick: onClose, style: { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.muted } }, "\u00D7"))),
         ((_c = imovel.fotos) === null || _c === void 0 ? void 0 : _c.length) > 0
             ? React.createElement("div", { style: { marginBottom: 16 } },
@@ -18417,7 +18450,8 @@ function IntForm({ clienteId, clienteNome, imoveis, onSave, onClose }) {
 // ═══════════════════════════════════════════════════════════════════════
 // CLIENTE DETAIL
 // ═══════════════════════════════════════════════════════════════════════
-function ClienteDetail({ cliente, imoveis, timeline, onEdit, onAddInt, onDelete, onClose }) {
+function ClienteDetail({ cliente, imoveis, timeline, onEdit, onAddInt, onDelete, onSalvar, onClose }) {
+    const [usuariosCD] = useUsuarios();
     var _a;
     const [aiRes, setAiRes] = useState("");
     const [aiL, setAiL] = useState(false);
@@ -18454,7 +18488,11 @@ function ClienteDetail({ cliente, imoveis, timeline, onEdit, onAddInt, onDelete,
                     React.createElement("div", { style: { display: "flex", gap: 5, marginTop: 7, flexWrap: "wrap" } },
                         React.createElement(Bdg, { label: cliente.stage }),
                         React.createElement(Bdg, { label: tempL[cliente.temp], color: tempC[cliente.temp] }),
-                        React.createElement(Bdg, { label: cliente.origem, color: origC[cliente.origem] || C.muted })))),
+                        React.createElement(Bdg, { label: cliente.origem, color: origC[cliente.origem] || C.muted })),
+                    React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", marginTop: 7, fontSize: 11, color: C.muted } }, "Responsável:",
+                        holyPode("distribuir") && onSalvar
+                            ? React.createElement(ResponsavelSelect, { cliente, usuarios: usuariosCD, sm: true, onChange: r => onSalvar(Object.assign({}, cliente, r)) })
+                            : React.createElement("b", { style: { color: C.inkMid } }, cliente.responsavelNome || "sem responsável")))),
             React.createElement("div", { style: { display: "flex", gap: 7, flexWrap: "wrap" } },
                 React.createElement(PBtn, { sm: true, onClick: () => onAddInt(cliente) }, "+ Intera\u00E7\u00E3o"),
                 React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: () => onEdit(cliente) }, "\u270F\uFE0F Editar"),
@@ -18549,7 +18587,7 @@ function ClienteDetail({ cliente, imoveis, timeline, onEdit, onAddInt, onDelete,
                                 t.hora,
                                 " \u00B7 ",
                                 t.data)),
-                        React.createElement("div", { style: { fontSize: 12, color: C.inkMid, lineHeight: 1.6 } }, t.desc))));
+                        React.createElement("div", { style: { fontSize: 12, color: C.inkMid, lineHeight: 1.6 } }, t.desc, t.autor && React.createElement("span", { style: { fontSize: 10, color: C.muted } }, " · por " + t.autor)))));
             })));
 }
 // ═══════════════════════════════════════════════════════════════════════
@@ -18717,7 +18755,7 @@ function EmpreendimentosPage() {
         edit && React.createElement(EmprForm, { initial: edit === "novo" ? null : edit, onSave: salvar, onClose: () => setEdit(null) }),
         React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 } },
             React.createElement("div", { style: { fontSize: 12, color: C.muted } }, `${lista.length} empreendimento(s) · ${nSite} no site · a ordem abaixo é a ordem do carrossel`),
-            React.createElement("div", { style: { display: "flex", gap: 8 } },
+            holyPode("editarEmpr") && React.createElement("div", { style: { display: "flex", gap: 8 } },
                 React.createElement(PBtn, { variant: "ghost", sm: true, onClick: importar }, "⬇ Trazer os atuais do site"),
                 React.createElement(PBtn, { variant: "ghost", sm: true, onClick: () => pacoteRef.current && pacoteRef.current.click() }, "📦 Importar pacote (.json)"),
                 React.createElement("input", { ref: pacoteRef, type: "file", accept: ".json,application/json", style: { display: "none" }, onChange: importarArquivo }),
@@ -18730,7 +18768,7 @@ function EmpreendimentosPage() {
             "Clique em ", React.createElement("b", null, "⬇ Trazer os atuais do site"), " para gerenciar tudo por aqui."),
         React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 14 } },
             ord.map((e, i) => React.createElement("div", { key: e.id, style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: "hidden", opacity: e.publicarSite === false ? 0.6 : 1 } },
-                React.createElement("div", { onClick: () => setEdit(e), style: { height: 150, background: empCapa(e) ? `url(${empCapa(e)}) center/cover` : C.ink, cursor: "pointer", position: "relative" } },
+                React.createElement("div", { onClick: () => holyPode("editarEmpr") && setEdit(e), style: { height: 150, background: empCapa(e) ? `url(${empCapa(e)}) center/cover` : C.ink, cursor: "pointer", position: "relative" } },
                     React.createElement("span", { style: { position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 4 } }, "#" + (i + 1)),
                     !empCapa(e) && React.createElement("div", { style: { color: C.oliveLt, fontSize: 12, display: "flex", height: "100%", alignItems: "center", justifyContent: "center" } }, "Sem foto")),
                 React.createElement("div", { style: { padding: 14 } },
@@ -18741,13 +18779,13 @@ function EmpreendimentosPage() {
                     React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: e.complexo ? 4 : 12 } }, [e.cidade, e.tipoLabel].filter(Boolean).join(" · ")),
                     e.complexo && React.createElement("div", { style: { fontSize: 10, color: C.gold, fontWeight: 700, marginBottom: 12 } }, "🏘️ " + e.complexo + (e.principal ? " · página principal" : "")),
                     React.createElement("div", { style: { display: "flex", gap: 5, flexWrap: "wrap" } },
-                        btnP("◀", () => mover(e.id, -1), null, "Mover para antes"),
-                        btnP("▶", () => mover(e.id, 1), null, "Mover para depois"),
-                        btnP("Editar", () => setEdit(e), C.olive),
-                        btnP("📣 Anunciar", () => abrirMkt("campanha", e, "em"), C.blue),
-                        btnP("📸 Post", () => abrirMkt("post", e, "em"), C.gold),
-                        btnP(e.publicarSite === false ? "Mostrar" : "Ocultar", () => alternar(e.id), C.blue),
-                        btnP("Excluir", () => excluir(e), C.danger)))))));
+                        holyPode("editarEmpr") && btnP("◀", () => mover(e.id, -1), null, "Mover para antes"),
+                        holyPode("editarEmpr") && btnP("▶", () => mover(e.id, 1), null, "Mover para depois"),
+                        holyPode("editarEmpr") && btnP("Editar", () => setEdit(e), C.olive),
+                        holyPode("anunciar") && btnP("📣 Anunciar", () => abrirMkt("campanha", e, "em"), C.blue),
+                        holyPode("post") && btnP("📸 Post", () => abrirMkt("post", e, "em"), C.gold),
+                        holyPode("editarEmpr") && btnP(e.publicarSite === false ? "Mostrar" : "Ocultar", () => alternar(e.id), C.blue),
+                        holyPode("editarEmpr") && btnP("Excluir", () => excluir(e), C.danger)))))));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -19040,7 +19078,11 @@ function ClientesPage({ clientes, imoveis, timeline, onAdd, onEdit, onAddTL, onD
     const [fTemp, setFTemp] = useState("all");
     const [fSt, setFSt] = useState("all");
     const [srch, setSrch] = useState("");
+    const [fResp, setFResp] = useState("all");
+    const [usuariosCP] = useUsuarios();
     const filtered = clientes.filter(c => {
+        if (fResp !== "all" && (fResp === "sem" ? !!c.responsavelId : c.responsavelId !== fResp))
+            return false;
         if (fTemp !== "all" && c.temp !== fTemp)
             return false;
         if (fSt !== "all" && c.stage !== fSt)
@@ -19055,13 +19097,16 @@ function ClientesPage({ clientes, imoveis, timeline, onAdd, onEdit, onAddTL, onD
             else
                 onAdd(c); setEditC(null); }, onClose: () => setEditC(null) }),
         addInt && React.createElement(IntForm, { clienteId: addInt.id, clienteNome: addInt.nome, imoveis: imoveis, onSave: onAddTL, onClose: () => setAddInt(null) }),
-        selC && React.createElement(ClienteDetail, { cliente: selC, imoveis: imoveis, timeline: timeline, onEdit: c => { setSelC(null); setEditC(c); }, onAddInt: c => setAddInt(c), onDelete: onDelete ? c => { onDelete(c.id); setSelC(null); } : null, onClose: () => setSelC(null) }),
+        selC && React.createElement(ClienteDetail, { cliente: selC, imoveis: imoveis, timeline: timeline, onEdit: c => { setSelC(null); setEditC(c); }, onAddInt: c => setAddInt(c), onDelete: onDelete ? c => { onDelete(c.id); setSelC(null); } : null, onSalvar: c => { onEdit(c); setSelC(c); }, onClose: () => setSelC(null) }),
         React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" } },
             React.createElement("input", { value: srch, onChange: e => setSrch(e.target.value), placeholder: "\uD83D\uDD0D Nome ou e-mail\u2026", style: { padding: "7px 12px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 12, color: C.ink, outline: "none", flex: 1, minWidth: 160 } }),
             React.createElement("div", { style: { display: "flex", gap: 5 } }, [["all", "Todos"], ["hot", "🔴"], ["warm", "🟡"], ["cold", "🔵"]].map(([k, l]) => React.createElement("button", { key: k, onClick: () => setFTemp(k), style: { fontSize: 11, padding: "5px 12px", borderRadius: 20, cursor: "pointer", background: fTemp === k ? C.olive : C.white, color: fTemp === k ? C.white : C.muted, border: `0.5px solid ${fTemp === k ? C.olive : C.border}`, fontWeight: fTemp === k ? 600 : 400 } }, l))),
             React.createElement("select", { value: fSt, onChange: e => setFSt(e.target.value), style: { padding: "7px 11px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 12, color: C.ink, outline: "none" } },
                 React.createElement("option", { value: "all" }, "Todos est\u00E1gios"),
                 KANBAN_STAGES.map(s => React.createElement("option", { key: s, value: s }, s))),
+            holyPode("distribuir") && React.createElement("select", { value: fResp, onChange: e => setFResp(e.target.value), style: { padding: "7px 11px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 12 } },
+                React.createElement("option", { value: "all" }, "Todos os responsáveis"), React.createElement("option", { value: "sem" }, "Sem responsável"),
+                usuariosCP.filter(u => u.ativo).map(u => React.createElement("option", { key: u.id, value: u.id }, u.nome))),
             React.createElement(PBtn, { sm: true, onClick: () => setEditC({}) }, "+ Novo Cliente")),
         React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
             filtered.map(c => {
@@ -19074,7 +19119,8 @@ function ClientesPage({ clientes, imoveis, timeline, onAdd, onEdit, onAddTL, onD
                         React.createElement("div", { style: { display: "flex", gap: 7, alignItems: "center", marginBottom: 3 } },
                             React.createElement("div", { style: { fontSize: 14, fontWeight: 600, color: C.ink } }, c.nome),
                             React.createElement(Bdg, { label: c.stage, sm: true }),
-                            React.createElement(Bdg, { label: tempL[c.temp], color: tempC[c.temp], sm: true })),
+                            React.createElement(Bdg, { label: tempL[c.temp], color: tempC[c.temp], sm: true }),
+                            holyPerfil() !== "corretor" && React.createElement(Bdg, { label: c.responsavelNome ? "👤 " + c.responsavelNome.split(" ")[0] : "Sem responsável", color: c.responsavelNome ? C.blue : C.warn, sm: true })),
                         React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 3 } },
                             c.profissao || "—",
                             c.empresa && ` · ${c.empresa}`),
@@ -19508,6 +19554,31 @@ function CampanhaWizard({ item, kind, onClose }) {
 }
 
 // ── Página Campanhas ───────────────────────────────────────────────────
+// Posts que os corretores enviam para aprovação (admin e gerente publicam ou recusam)
+function AprovacoesPosts() {
+    const [posts, setPosts] = usePS("posts_aprovacao", []);
+    const [load, setLoad] = useState("");
+    const pend = (posts || []).filter(p => p && p.status === "pendente");
+    if (!pend.length || !holyPode("publicarIG")) return null;
+    const marcar = (p, status, extra) => setPosts(l => (l || []).map(x => x.id === p.id ? Object.assign({}, x, { status, revisadoPor: (HolyUser && HolyUser.nome) || "", revisadoEm: new Date().toISOString() }, extra || {}) : x));
+    async function publicar(p) {
+        if (!confirm(`Publicar no Instagram da Holy o ${p.tipo === "story" ? "story" : "carrossel"} de ${p.autor}?`)) return;
+        setLoad(p.id);
+        try { await metaApi("publicarIG", { tipo: p.tipo, imagens: p.imagens, legenda: p.legenda }); marcar(p, "publicado"); HolyToast("✅ Publicado no Instagram"); }
+        catch (e) { alert("Não foi possível publicar: " + e.message); }
+        setLoad("");
+    }
+    return React.createElement("div", { style: Object.assign(mkBox("#fff"), { borderLeft: `3px solid ${C.gold}` }) },
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 8 } }, "📸 Posts aguardando aprovação (" + pend.length + ")"),
+        pend.map(p => React.createElement("div", { key: p.id, style: { borderTop: `0.5px solid ${C.border}`, padding: "10px 0" } },
+            React.createElement("div", { style: { fontSize: 12, color: C.inkMid, marginBottom: 6 } }, React.createElement("b", null, p.item), " · ", p.tipo === "story" ? "Stories" : "Carrossel", " · enviado por ", p.autor, " em ", new Date(p.criadoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })),
+            React.createElement("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6 } }, (p.imagens || []).map((u, i) => React.createElement("img", { key: i, src: u, alt: "", style: { height: 130, borderRadius: 6, flexShrink: 0 } }))),
+            React.createElement("details", { style: { fontSize: 12, color: C.inkMid, margin: "4px 0 8px" } }, React.createElement("summary", { style: { cursor: "pointer" } }, "Ver legenda"), React.createElement("div", { style: { whiteSpace: "pre-wrap", marginTop: 6 } }, p.legenda)),
+            React.createElement("div", { style: { display: "flex", gap: 8 } },
+                React.createElement(PBtn, { sm: true, disabled: !!load, onClick: () => publicar(p) }, load === p.id ? "Publicando…" : "📤 Aprovar e publicar"),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.danger, onClick: () => { const mot = prompt("Motivo da recusa (o corretor verá):", ""); if (mot !== null) marcar(p, "recusado", { motivo: mot }); } }, "Recusar")))));
+}
+
 function CampanhasPage() {
     const [camps, setCamps] = usePS("campanhas", []);
     const [meta, setMeta] = useState(null);
@@ -19550,6 +19621,7 @@ function CampanhasPage() {
                 React.createElement(PBtn, { variant: "ghost", sm: true, onClick: atualizar }, "🔄 Atualizar números"),
                 React.createElement(PBtn, { variant: "ghost", sm: true, onClick: puxar }, "⬇ Buscar leads agora"))),
         msg && React.createElement("div", { style: { fontSize: 12, color: C.inkMid } }, msg),
+        React.createElement(AprovacoesPosts, null),
         !lista.length && React.createElement("div", { style: { textAlign: "center", padding: "40px 20px", background: C.white, border: `0.5px dashed ${C.border}`, borderRadius: 12, color: C.muted, fontSize: 13, lineHeight: 1.7 } },
             "Nenhuma campanha ainda.", React.createElement("br"), "Abra um imóvel ou empreendimento e clique em ", React.createElement("b", null, "📣 Anunciar"), "."),
         lista.map(c => { const x = m[c.campanha] || {}; const ativo = (x.status || c.status) === "ACTIVE";
@@ -19564,9 +19636,9 @@ function CampanhasPage() {
                         [["Investido", brl(x.gasto)], ["Leads", x.leads || 0], ["Custo por lead", x.cpl ? brl(x.cpl) : "—"], ["Alcance", (x.alcance || 0).toLocaleString("pt-BR")], ["Cliques", (x.cliques || 0).toLocaleString("pt-BR")]].map(([k, v]) =>
                             React.createElement("div", { key: k, style: { background: C.cream, borderRadius: 8, padding: "8px 10px" } }, React.createElement("div", { style: { fontSize: 10, color: C.muted } }, k), React.createElement("div", { style: { fontSize: 16, fontWeight: 700, color: C.olive } }, v)))),
                 React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
-                    meta && meta.configurado && React.createElement(PBtn, { sm: true, variant: ativo ? "ghost" : undefined, onClick: () => alternar(c, !ativo) }, ativo ? "⏸ Pausar" : "▶ Ativar"),
+                    meta && meta.configurado && holyPode("ativarCampanha") && React.createElement(PBtn, { sm: true, variant: ativo ? "ghost" : undefined, onClick: () => alternar(c, !ativo) }, ativo ? "⏸ Pausar" : "▶ Ativar"),
                     React.createElement("a", { href: c.link, target: "_blank", rel: "noopener", style: { fontSize: 12, fontWeight: 700, color: C.blue, padding: "7px 10px" } }, "Abrir no Gerenciador"),
-                    React.createElement("button", { onClick: () => { if (confirm("Remover da lista do CRM? (a campanha continua na Meta)")) setCamps(p => p.filter(y => y.id !== c.id)); }, style: { fontSize: 11, background: "none", border: "none", color: C.muted, cursor: "pointer" } }, "Remover da lista"))); }),
+                    holyPode("ativarCampanha") && React.createElement("button", { onClick: () => { if (confirm("Remover da lista do CRM? (a campanha continua na Meta)")) setCamps(p => p.filter(y => y.id !== c.id)); }, style: { fontSize: 11, background: "none", border: "none", color: C.muted, cursor: "pointer" } }, "Remover da lista"))); }),
         React.createElement("div", { style: Object.assign(mkBox("#f2f5ec"), { fontSize: 12, color: C.inkMid, lineHeight: 1.7 }) },
             React.createElement("b", null, "Como ter leads mais quentes: "), "deixe a campanha rodar ao menos 7 dias sem mexer (fase de aprendizado); pause a variação de texto com custo por lead mais alto; responda os leads em minutos (a Helena ajuda); e marque no Funil quem virou visita ou proposta, para saber qual campanha traz compradores de verdade."));
 }
@@ -19768,7 +19840,19 @@ Dados: ${JSON.stringify(vit).slice(0, 9000)}`;
         } catch (e) { setMsg("❌ " + e.message); }
         setLoad("");
     }
+    async function enviarAprovacao() {
+        if (!confirm("Enviar para o gerente aprovar e publicar no Instagram da Holy?")) return;
+        setLoad("Enviando as artes para aprovação…"); setMsg("");
+        try {
+            const imgs = await renderTudo(0.9); const urls = [];
+            for (let i = 0; i < imgs.length; i++) urls.push(await holyEnviarDataUrl(imgs[i], `post-${i + 1}.jpg`, "posts/" + (item.id || "item")));
+            HolyStore.update("posts_aprovacao", l => [{ id: "pa" + Date.now().toString(36), item: item.nome, tipo: formato === "story" ? "story" : "carrossel", imagens: urls, legenda: legenda + (hashtags ? "\n\n" + hashtags : ""), autor: (HolyUser && HolyUser.nome) || "", autorId: (HolyUser && HolyUser.id) || "", status: "pendente", criadoEm: new Date().toISOString() }, ...(l || [])]);
+            setMsg("✅ Enviado para aprovação. O gerente vê em Campanhas e publica.");
+        } catch (e) { setMsg("❌ " + e.message); }
+        setLoad("");
+    }
     async function publicar() {
+        if (!holyPode("publicarIG")) return enviarAprovacao();
         if (!confirm(formato === "story" ? "Publicar estes stories agora no Instagram da Holy?" : "Publicar este carrossel agora no Instagram da Holy?")) return;
         setLoad("Enviando as artes e publicando no Instagram…"); setMsg("");
         try {
@@ -19800,7 +19884,7 @@ Dados: ${JSON.stringify(vit).slice(0, 9000)}`;
                 React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 } },
                     React.createElement(PBtn, { sm: true, onClick: baixarZip, disabled: !!load }, "⬇ Baixar artes + legenda (.zip)"),
                     formato === "reels" && React.createElement(PBtn, { sm: true, variant: "ghost", onClick: gerarVideo, disabled: !!load }, "🎬 Gerar vídeo do Reels"),
-                    formato !== "reels" && React.createElement(PBtn, { sm: true, variant: "ghost", onClick: publicar, disabled: !!load }, "📤 Publicar no Instagram")),
+                    formato !== "reels" && React.createElement(PBtn, { sm: true, variant: "ghost", onClick: publicar, disabled: !!load }, holyPode("publicarIG") ? "📤 Publicar no Instagram" : "📤 Enviar para aprovação")),
                 video && React.createElement("div", { style: { marginTop: 12 } },
                     React.createElement("video", { src: video.url, controls: true, style: { width: 220, borderRadius: 8, display: "block" } }),
                     React.createElement("a", { href: video.url, download: (item.nome || "reels") + "." + video.ext, style: { fontSize: 12, fontWeight: 700, color: C.olive } }, "⬇ Baixar vídeo (." + video.ext + ")"),
@@ -20156,13 +20240,177 @@ Regras:
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// EQUIPE E USUÁRIOS (perfis: admin, gerente, corretor, secretária)
+// ═══════════════════════════════════════════════════════════════════════
+const PERFIS_NOME = { admin: "Administrador", gerente: "Gerente de vendas", corretor: "Corretor", secretaria: "Secretária" };
+let _usuariosCache = null;
+function useUsuarios() {
+    const [lista, setLista] = useState(_usuariosCache || []);
+    const carregar = async () => {
+        if (!holyPode("distribuir")) return;
+        try { const r = await holyFetch("/api/usuarios"); const d = await r.json(); if (d.success) { _usuariosCache = d.usuarios; setLista(d.usuarios); } } catch (e) { }
+    };
+    useEffect(() => { carregar(); }, []);
+    return [lista, carregar];
+}
+// Data da última interação de cada cliente (timeline) e situação do atendimento
+function holyUltimas(timeline) {
+    const m = {};
+    (timeline || []).forEach(t => { if (t && t.clienteId && t.data && (!m[t.clienteId] || t.data > m[t.clienteId])) m[t.clienteId] = t.data; });
+    return m;
+}
+function holySituacao(c, ultimas, cfg) {
+    if (["Pós-venda", "Fechado"].includes(c.stage)) return "Concluído";
+    if (!c.responsavelId) return "Sem responsável";
+    const ult = (ultimas && ultimas[c.id]) || c.createdAt;
+    const dias = ult ? Math.floor((Date.now() - new Date(ult + "T12:00:00").getTime()) / 86400000) : 999;
+    const lim = c.temp === "hot" ? (+((cfg || {}).abandonoQuente) || 3) : (+((cfg || {}).abandonoDemais) || 7);
+    return dias > lim ? "Abandonado" : "Em atendimento";
+}
+const SIT_COR = { "Em atendimento": C.success, "Abandonado": C.danger, "Sem responsável": C.warn, "Concluído": C.muted };
+function diasDesde(d) { if (!d) return "—"; const n = Math.floor((Date.now() - new Date(d + "T12:00:00").getTime()) / 86400000); return n <= 0 ? "hoje" : n === 1 ? "ontem" : "há " + n + " dias"; }
+
+function ResponsavelSelect({ cliente, usuarios, onChange, sm }) {
+    const corretores = (usuarios || []).filter(u => u.ativo && ["corretor", "gerente", "admin"].includes(u.perfil));
+    return React.createElement("select", { value: cliente.responsavelId || "", onClick: e => e.stopPropagation(),
+        onChange: e => { const u = corretores.find(x => x.id === e.target.value); onChange(u ? { responsavelId: u.id, responsavelNome: u.nome } : { responsavelId: "", responsavelNome: "" }); },
+        style: { fontSize: sm ? 11 : 12, padding: sm ? "4px 6px" : "7px 10px", borderRadius: 8, border: `0.5px solid ${C.border}`, background: C.white, color: C.ink, maxWidth: 200 } },
+        React.createElement("option", { value: "" }, "— Sem responsável —"),
+        corretores.map(u => React.createElement("option", { key: u.id, value: u.id }, u.nome + (u.perfil !== "corretor" ? " (" + PERFIS_NOME[u.perfil] + ")" : ""))));
+}
+
+function EquipePage({ clientes, timeline, onEditCli }) {
+    const [usuarios] = useUsuarios();
+    const [cfg, setCfg] = usePS("equipe_config", {});
+    const [filtro, setFiltro] = useState("todos");
+    const [sit, setSit] = useState("Abandonado");
+    const c0 = cfg || {};
+    const admin = holyPode("usuarios");
+    const ult = useMemo(() => holyUltimas(timeline), [timeline]);
+    const ativos = (clientes || []).filter(c => !["Pós-venda", "Fechado"].includes(c.stage));
+    const pessoas = (usuarios || []).filter(u => u.ativo && ["corretor", "gerente", "admin"].includes(u.perfil));
+    const linhas = pessoas.map(u => {
+        const cs = ativos.filter(c => c.responsavelId === u.id);
+        const n = s => cs.filter(c => holySituacao(c, ult, c0) === s).length;
+        return { u, total: cs.length, hot: cs.filter(c => c.temp === "hot").length, warm: cs.filter(c => c.temp === "warm").length, cold: cs.filter(c => c.temp === "cold").length, atend: n("Em atendimento"), aband: n("Abandonado") };
+    }).filter(l => l.u.perfil === "corretor" || l.total);
+    const semResp = ativos.filter(c => !c.responsavelId);
+    const lista = ativos.filter(c => (filtro === "todos" || (filtro === "sem" ? !c.responsavelId : c.responsavelId === filtro)) && (sit === "todas" || holySituacao(c, ult, c0) === sit));
+    const th = { fontSize: 10, color: C.muted, fontWeight: 700, textAlign: "left", padding: "8px 10px", borderBottom: `0.5px solid ${C.border}`, whiteSpace: "nowrap" };
+    const td = { fontSize: 12, color: C.ink, padding: "9px 10px", borderBottom: `0.5px solid ${C.border}` };
+    const num = (v, cor) => React.createElement("span", { style: { fontWeight: 700, color: v ? cor : C.muted } }, v);
+    const salvarCfg = (k, v) => setCfg(Object.assign({}, c0, { [k]: v }));
+    const inp = { width: 60, padding: "6px 8px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 13 };
+    return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 } },
+            [["Leads ativos", ativos.length, C.olive], ["Em atendimento", ativos.filter(c => holySituacao(c, ult, c0) === "Em atendimento").length, C.success],
+             ["Abandonados", ativos.filter(c => holySituacao(c, ult, c0) === "Abandonado").length, C.danger], ["Sem responsável", semResp.length, C.warn]].map(([l, v, cor]) =>
+                React.createElement("div", { key: l, style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", borderLeft: `3px solid ${cor}` } },
+                    React.createElement("div", { style: { fontSize: 11, color: C.muted } }, l), React.createElement("div", { style: { fontSize: 24, fontWeight: 700, color: cor } }, v)))),
+        React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, overflowX: "auto" } },
+            React.createElement("table", { style: { width: "100%", borderCollapse: "collapse" } },
+                React.createElement("thead", null, React.createElement("tr", null, ["Corretor", "Leads", "🔴 Quentes", "🟡 Mornos", "🔵 Frios", "Em atendimento", "Abandonados"].map(h => React.createElement("th", { key: h, style: th }, h)))),
+                React.createElement("tbody", null,
+                    linhas.map(l => React.createElement("tr", { key: l.u.id, onClick: () => setFiltro(l.u.id), style: { cursor: "pointer", background: filtro === l.u.id ? C.oliveGhost : "transparent" } },
+                        React.createElement("td", { style: Object.assign({}, td, { fontWeight: 600 }) }, l.u.nome),
+                        React.createElement("td", { style: td }, l.total), React.createElement("td", { style: td }, num(l.hot, C.danger)), React.createElement("td", { style: td }, num(l.warm, C.gold)),
+                        React.createElement("td", { style: td }, num(l.cold, C.blue)), React.createElement("td", { style: td }, num(l.atend, C.success)), React.createElement("td", { style: td }, num(l.aband, C.danger)))),
+                    React.createElement("tr", { onClick: () => setFiltro("sem"), style: { cursor: "pointer", background: filtro === "sem" ? C.oliveGhost : "transparent" } },
+                        React.createElement("td", { style: Object.assign({}, td, { fontWeight: 600, color: C.warn }) }, "Sem responsável"), React.createElement("td", { style: td, colSpan: 6 }, semResp.length ? semResp.length + " lead(s) aguardando distribuição" : "nenhum")))),
+            !linhas.length && React.createElement("div", { style: { padding: 14, fontSize: 12, color: C.muted } }, "Nenhum corretor cadastrado. " + (admin ? "Crie os usuários em Usuários." : "Peça ao administrador para criar os usuários."))),
+        React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 14 } },
+            React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 } },
+                React.createElement("b", { style: { fontSize: 13, color: C.ink, marginRight: 6 } }, "Mapa de clientes"),
+                React.createElement("select", { value: filtro, onChange: e => setFiltro(e.target.value), style: { fontSize: 12, padding: "6px 8px", borderRadius: 8, border: `0.5px solid ${C.border}` } },
+                    React.createElement("option", { value: "todos" }, "Todos os corretores"), React.createElement("option", { value: "sem" }, "Sem responsável"),
+                    pessoas.map(u => React.createElement("option", { key: u.id, value: u.id }, u.nome))),
+                ["Abandonado", "Em atendimento", "Sem responsável", "todas"].map(s2 => React.createElement("button", { key: s2, onClick: () => setSit(s2), style: { fontSize: 11, padding: "5px 12px", borderRadius: 20, cursor: "pointer", background: sit === s2 ? C.olive : C.white, color: sit === s2 ? C.white : C.muted, border: `0.5px solid ${sit === s2 ? C.olive : C.border}` } }, s2 === "todas" ? "Todas" : s2))),
+            !lista.length && React.createElement("div", { style: { fontSize: 12, color: C.muted, padding: "8px 0" } }, "Nenhum cliente nesta situação."),
+            lista.slice(0, 200).map(c => { const s2 = holySituacao(c, ult, c0); return React.createElement("div", { key: c.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: `0.5px solid ${C.border}`, flexWrap: "wrap" } },
+                React.createElement(Av, { ini: c.avatar, size: 32, color: tempC[c.temp] }),
+                React.createElement("div", { style: { flex: 1, minWidth: 160 } },
+                    React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: C.ink } }, c.nome),
+                    React.createElement("div", { style: { fontSize: 11, color: C.muted } }, (tempL[c.temp] || "") + " · " + (c.stage || "") + " · última interação " + diasDesde(ult[c.id] || c.createdAt) + (c.origem ? " · " + c.origem : ""))),
+                React.createElement(Bdg, { label: s2, color: SIT_COR[s2], sm: true }),
+                React.createElement(ResponsavelSelect, { cliente: c, usuarios, sm: true, onChange: r => onEditCli(Object.assign({}, c, r)) })); })),
+        React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 14, borderLeft: `3px solid ${C.gold}` } },
+            React.createElement("b", { style: { fontSize: 13, color: C.ink } }, "Regras de atendimento"), admin ? null : React.createElement("span", { style: { fontSize: 11, color: C.muted } }, " (só o administrador altera)"),
+            React.createElement("div", { style: { display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", marginTop: 10, fontSize: 12, color: C.inkMid } },
+                React.createElement("label", null, "Abandonado: lead quente sem interação há mais de ", React.createElement("input", { type: "number", min: 1, max: 60, disabled: !admin, value: c0.abandonoQuente || 3, onChange: e => salvarCfg("abandonoQuente", Math.max(1, +e.target.value || 3)), style: inp }), " dias"),
+                React.createElement("label", null, "demais leads há mais de ", React.createElement("input", { type: "number", min: 1, max: 90, disabled: !admin, value: c0.abandonoDemais || 7, onChange: e => salvarCfg("abandonoDemais", Math.max(1, +e.target.value || 7)), style: inp }), " dias")),
+            React.createElement("div", { style: { marginTop: 12, fontSize: 12, color: C.inkMid } },
+                React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8 } }, React.createElement("input", { type: "checkbox", disabled: !admin, checked: !!c0.rodizio, onChange: e => salvarCfg("rodizio", e.target.checked) }),
+                    React.createElement("b", null, "Rodízio automático"), " · leads do site, da Meta e da Helena vão para o próximo corretor da fila"),
+                c0.rodizio && React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 } },
+                    React.createElement("span", { style: { fontSize: 11, color: C.muted } }, "Na fila (nenhum marcado = todos os corretores):"),
+                    (usuarios || []).filter(u => u.ativo && u.perfil === "corretor").map(u => { const on = (c0.rodizioIds || []).includes(u.id); return React.createElement("button", { key: u.id, disabled: !admin,
+                        onClick: () => salvarCfg("rodizioIds", on ? (c0.rodizioIds || []).filter(x => x !== u.id) : (c0.rodizioIds || []).concat(u.id)),
+                        style: { fontSize: 11, padding: "4px 10px", borderRadius: 20, cursor: admin ? "pointer" : "default", background: on ? C.olive : C.white, color: on ? C.white : C.inkMid, border: `0.5px solid ${on ? C.olive : C.border}` } }, u.nome); })))));
+}
+
+function UsuariosPage() {
+    const [lista, carregar] = useUsuarios();
+    const [novo, setNovo] = useState({ nome: "", email: "", perfil: "corretor", senha: "" });
+    const [msg, setMsg] = useState("");
+    const api = async (method, body) => { const r = await holyFetch("/api/usuarios", { method, body: JSON.stringify(body) }); const d = await r.json().catch(() => ({})); if (!d.success) throw new Error(d.error || "Erro"); return d; };
+    const criar = async () => { setMsg("Criando…"); try { await api("POST", Object.assign({ acao: "criar" }, novo)); setNovo({ nome: "", email: "", perfil: "corretor", senha: "" }); setMsg("✅ Usuário criado. Passe o e-mail e a senha inicial para a pessoa; ela pode trocar a senha em Configurações."); carregar(); } catch (e) { setMsg("❌ " + e.message); } };
+    const mudar = async (u, campos, aviso) => { if (aviso && !confirm(aviso)) return; try { await api("PATCH", Object.assign({ id: u.id }, campos)); carregar(); } catch (e) { alert(e.message); } };
+    const senha = async u => { const s = prompt("Nova senha para " + u.nome + " (mínimo 8 caracteres):"); if (s) mudar(u, { senha: s }); };
+    const inp = { padding: "9px 10px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 13, minWidth: 0 };
+    return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 16, maxWidth: 900 } },
+        React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 16, borderLeft: `3px solid ${C.olive}` } },
+            React.createElement("b", { style: { fontSize: 13, color: C.ink } }, "Novo usuário"),
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 8, marginTop: 10 } },
+                React.createElement("input", { placeholder: "Nome", value: novo.nome, onChange: e => setNovo(Object.assign({}, novo, { nome: e.target.value })), style: inp }),
+                React.createElement("input", { placeholder: "E-mail", type: "email", value: novo.email, onChange: e => setNovo(Object.assign({}, novo, { email: e.target.value })), style: inp }),
+                React.createElement("select", { value: novo.perfil, onChange: e => setNovo(Object.assign({}, novo, { perfil: e.target.value })), style: inp }, Object.entries(PERFIS_NOME).map(([k, v]) => React.createElement("option", { key: k, value: k }, v))),
+                React.createElement("input", { placeholder: "Senha inicial (8+ caracteres)", value: novo.senha, onChange: e => setNovo(Object.assign({}, novo, { senha: e.target.value })), style: inp }),
+                React.createElement(PBtn, { onClick: criar }, "Criar usuário")),
+            msg && React.createElement("div", { style: { fontSize: 12, color: C.inkMid, marginTop: 8 } }, msg)),
+        React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12 } },
+            !lista.length && React.createElement("div", { style: { padding: 16, fontSize: 12, color: C.muted } }, "Nenhum usuário ainda. Você entra com a chave mestra; crie aqui a sua conta de administrador e as da equipe."),
+            lista.map(u => React.createElement("div", { key: u.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: `0.5px solid ${C.border}`, flexWrap: "wrap", opacity: u.ativo ? 1 : 0.55 } },
+                React.createElement(Av, { ini: u.nome.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(), size: 34, color: C.olive }),
+                React.createElement("div", { style: { flex: 1, minWidth: 180 } },
+                    React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: C.ink } }, u.nome, !u.ativo && " (desativado)"),
+                    React.createElement("div", { style: { fontSize: 11, color: C.muted } }, u.email + (u.ultimo_acesso ? " · último acesso " + new Date(u.ultimo_acesso).toLocaleDateString("pt-BR") : " · nunca entrou"))),
+                React.createElement("select", { value: u.perfil, onChange: e => mudar(u, { perfil: e.target.value }), style: inp }, Object.entries(PERFIS_NOME).map(([k, v]) => React.createElement("option", { key: k, value: k }, v))),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: () => senha(u) }, "Trocar senha"),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: u.ativo ? C.danger : C.success, onClick: () => mudar(u, { ativo: !u.ativo }, u.ativo ? "Desativar " + u.nome + "? A pessoa perde o acesso na hora. Os clientes dela continuam no CRM; redistribua em Equipe." : null) }, u.ativo ? "Desativar" : "Reativar")))));
+}
+
+function MinhaConta() {
+    const [f, setF] = useState({ atual: "", nova: "" });
+    const [msg, setMsg] = useState("");
+    const trocar = async () => {
+        setMsg("Salvando…");
+        try { const r = await holyFetch("/api/usuarios", { method: "POST", body: JSON.stringify({ acao: "minhaSenha", atual: f.atual, nova: f.nova }) }); const d = await r.json(); if (!d.success) throw new Error(d.error); setMsg("✅ Senha alterada."); setF({ atual: "", nova: "" }); }
+        catch (e) { setMsg("❌ " + e.message); }
+    };
+    const sair = () => { if (confirm("Sair do CRM neste aparelho?")) { HolyStore.flush(); HolyAuth.clear(); setTimeout(() => location.reload(), 600); } };
+    const inp = { padding: "10px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 13, width: "100%", marginBottom: 8 };
+    const u = HolyUser || {};
+    return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 14, maxWidth: 480 } },
+        React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 16, borderLeft: `3px solid ${C.olive}` } },
+            React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, u.nome || ""),
+            React.createElement("div", { style: { fontSize: 12, color: C.muted } }, (u.email || "") + " · " + (PERFIS_NOME[u.perfil] || ""))),
+        !u.mestre && React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 16 } },
+            React.createElement("b", { style: { fontSize: 13, color: C.ink, display: "block", marginBottom: 10 } }, "Trocar minha senha"),
+            React.createElement("input", { type: "password", placeholder: "Senha atual", value: f.atual, onChange: e => setF(Object.assign({}, f, { atual: e.target.value })), style: inp }),
+            React.createElement("input", { type: "password", placeholder: "Nova senha (8+ caracteres)", value: f.nova, onChange: e => setF(Object.assign({}, f, { nova: e.target.value })), style: inp }),
+            React.createElement(PBtn, { onClick: trocar }, "Salvar nova senha"),
+            msg && React.createElement("div", { style: { fontSize: 12, color: C.inkMid, marginTop: 8 } }, msg)),
+        React.createElement(PBtn, { variant: "ghost", color: C.danger, onClick: sair }, "Sair deste aparelho"));
+}
+
 function App() {
     var _a;
     const [page, setPage0] = useState("dashboard");
     const [isM, setIsM] = useState(() => window.matchMedia("(max-width: 820px)").matches);
     const [menu, setMenu] = useState(false);
     useEffect(() => { const mq = window.matchMedia("(max-width: 820px)"); const f = e => { setIsM(e.matches); if (!e.matches) setMenu(false); }; mq.addEventListener("change", f); return () => mq.removeEventListener("change", f); }, []);
-    const setPage = k => { setPage0(k); setMenu(false); };
+    const setPage = k => { const ok = { campanhas: "campanhas", conversas: "conversas", equipe: "equipe", usuarios: "usuarios" }[k]; setPage0(ok && !holyPode(ok) ? "dashboard" : k); setMenu(false); };
     useEffect(() => { const f = e => setPage(e.detail); window.addEventListener("holy-go", f); return () => window.removeEventListener("holy-go", f); }, []);
     const [imoveis, setImoveis] = usePS("imoveis", SEED_IMOVEIS);
     const [clientes, setClientes] = usePS("clientes", SEED_CLIENTES);
@@ -20191,7 +20439,12 @@ function App() {
         { k: "timeline", i: "◷", l: "Timeline" },
         { k: "config", i: "\u2699\uFE0F", l: "Configura\u00E7\u00F5es" },
         { k: "voz", i: "\uD83C\uDFA4", l: "Voz" },
-    ];;
+        { k: "equipe", i: "👥", l: "Equipe" },
+        { k: "usuarios", i: "🔑", l: "Usuários" },
+    ].filter(n => ({
+        campanhas: holyPode("campanhas"), conversas: holyPode("conversas"), equipe: holyPode("equipe"), usuarios: holyPode("usuarios"),
+        matching: holyPerfil() !== "secretaria", ia: holyPerfil() !== "secretaria",
+    })[n.k] !== false).map(n => n.k === "config" && !holyPode("configCompleta") ? Object.assign({}, n, { l: "Minha conta" }) : n);
     const totC = imoveis.filter(i => i.status === "Disponível").reduce((s, i) => s + i.valor, 0);
     return React.createElement(React.Fragment, null,
         React.createElement(MarketingHost, null),
@@ -20218,11 +20471,11 @@ function App() {
                     React.createElement("span", { style: { fontSize: 12, fontWeight: page === item.k ? 600 : 400, color: page === item.k ? C.white : "#8a9080" } }, item.l))))),
                 React.createElement("div", { style: { padding: "12px 18px", borderTop: "0.5px solid rgba(255,255,255,0.07)" } },
                     React.createElement("div", { style: { display: "flex", gap: 9, alignItems: "center", marginBottom: 8 } },
-                        React.createElement(Av, { ini: "HC", size: 28, color: C.olive }),
-                        React.createElement("div", null,
-                            React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: C.white } }, "Holy Curadoria"),
-                            React.createElement("div", { style: { fontSize: 9, color: C.muted } }, "Admin \u00B7 Corretor"))),
-                    React.createElement("button", { onClick: resetData, style: { fontSize: 9, color: "rgba(255,255,255,0.2)", background: "none", border: "none", cursor: "pointer", textAlign: "left" } }, "\u21BA Reset dados"))),
+                        React.createElement(Av, { ini: ((HolyUser && HolyUser.nome) || "Holy Curadoria").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(), size: 28, color: C.olive }),
+                        React.createElement("div", { style: { minWidth: 0 } },
+                            React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: C.white, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, (HolyUser && HolyUser.nome) || "Holy Curadoria"),
+                            React.createElement("div", { style: { fontSize: 9, color: C.muted } }, PERFIS_NOME[holyPerfil()] + (HolyUser && HolyUser.mestre ? " · chave mestra" : "")))),
+                    holyPode("configCompleta") && React.createElement("button", { onClick: resetData, style: { fontSize: 9, color: "rgba(255,255,255,0.2)", background: "none", border: "none", cursor: "pointer", textAlign: "left" } }, "\u21BA Reset dados"))),
             React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 } },
                 React.createElement("div", { style: { background: C.white, borderBottom: `0.5px solid ${C.border}`, padding: isM ? "calc(8px + env(safe-area-inset-top, 0px)) 12px 8px" : "11px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0, gap: 10 } },
                     isM && React.createElement("button", { onClick: () => setMenu(true), "aria-label": "Abrir menu", style: { background: C.oliveGhost, border: `0.5px solid ${C.olivePale}`, borderRadius: 8, width: 40, height: 40, fontSize: 20, color: C.olive, cursor: "pointer", flexShrink: 0 } }, "\u2630"),
@@ -20240,7 +20493,7 @@ function App() {
                             "i"))),
                 React.createElement("div", { style: { flex: 1, overflowY: "auto", padding: isM ? "14px 12px 80px" : 22 } },
                     page === "dashboard" && React.createElement(Dashboard, { clientes: clientes, imoveis: imoveis, timeline: timeline, setPage: setPage }),
-                    page === "clientes" && React.createElement(ClientesPage, { clientes: clientes, imoveis: imoveis, timeline: timeline, onAdd: addCli, onEdit: editCli, onAddTL: addTL, onDelete: delCli }),
+                    page === "clientes" && React.createElement(ClientesPage, { clientes: clientes, imoveis: imoveis, timeline: timeline, onAdd: addCli, onEdit: editCli, onAddTL: addTL, onDelete: holyPode("excluirCliente") ? delCli : null }),
                     page === "imoveis" && React.createElement(ImoveisPage, { imoveis: imoveis, clientes: clientes, onAdd: addIm, onEdit: editIm, onDelete: id => setImoveis(p => p.filter(i => i.id !== id)) }),
                     page === "empreendimentos" && React.createElement(EmpreendimentosPage, null),
                     page === "conversas" && React.createElement(ConversasPage, null),
@@ -20251,9 +20504,11 @@ function App() {
                     page === "matching" && React.createElement(SmatchPage, { clientes: clientes, imoveis: imoveis }),
                     page === "ia" && React.createElement(AIPage, { clientes: clientes, imoveis: imoveis }),
                     page === "voz" && React.createElement(VozPage, { onAddIm: addIm, onAddCli: addCli, setPage: setPage }),
-                    page === "config" && React.createElement(React.Fragment, null,
+                    page === "config" && (holyPode("configCompleta") ? React.createElement(React.Fragment, null,
                     React.createElement("h2", { style: { margin: 0, fontSize: 14, fontWeight: 700, color: "#1a1c18", marginBottom: 20 } }, "\u2699\uFE0F Configura\u00E7\u00F5es"),
-                    React.createElement(ConfigPage)),
+                    React.createElement(ConfigPage)) : React.createElement(MinhaConta)),
+                    page === "equipe" && holyPode("equipe") && React.createElement(EquipePage, { clientes: clientes, timeline: timeline, onEditCli: editCli }),
+                    page === "usuarios" && holyPode("usuarios") && React.createElement(UsuariosPage),
                     page === "timeline" && React.createElement(React.Fragment, null,
                         React.createElement(SecT, null, "Timeline de Relacionamento"),
                         React.createElement(TimelinePage, { timeline: timeline, imoveis: imoveis }))))));

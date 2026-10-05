@@ -80,3 +80,12 @@ Regras: anúncios de imóveis sempre na Categoria Especial de Moradia (HOUSING):
 - Página Campanhas mostra o saldo da conta de anúncios e avisa antes de ativar com saldo baixo.
 - Publicação no Instagram espera cada imagem ficar pronta (corrige o erro 9007 "mídia não está pronta").
 - Logo oficial da Holy (assets/holy-logo-claro.svg, holy-logo-escuro.svg, holy-coroa.svg) no CRM e nas artes.
+
+## Atualização out/2026 (3): usuários e perfis
+- Login individual com e-mail e senha. Perfis: Administrador, Gerente de vendas, Corretor e Secretária.
+- As permissões valem no servidor: o corretor só recebe do servidor os próprios clientes, a timeline deles e as conversas deles; não exclui nada e não muda o responsável.
+- Primeiro acesso: entre com "Entrar com a chave mestra" (ADMIN_KEY), abra Usuários e crie a sua conta de administrador e as da equipe.
+- Equipe (admin e gerente): leads por corretor, mapa de temperatura, abandonados, redistribuição e rodízio automático.
+- Os prazos de "abandonado" e o rodízio são ajustados pelo administrador em Equipe > Regras de atendimento.
+- Posts do corretor vão para aprovação; admin e gerente aprovam em Campanhas.
+- As sessões duram 30 dias. Trocar a ADMIN_KEY na Vercel desconecta todos os usuários (opcional: defina SESSION_SECRET para separar as duas coisas).

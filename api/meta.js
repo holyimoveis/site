@@ -1,7 +1,8 @@
 // Integração com a Meta: campanhas de anúncios (formulário de lead), leads e publicação no Instagram.
 // Imóveis = Categoria Especial de Anúncio "HOUSING" (exigência da Meta): sem idade/gênero/CEP, sem exclusões,
 // raio mínimo nas cidades. O "público ideal" é construído dentro dessas regras.
-import { sql, ensureSchema, cors, isAdmin, body, ok, err, fail } from './_lib.js';
+import { sql, ensureSchema, cors, body, ok, err, fail } from './_lib.js';
+import { sessao, pode } from './_auth.js';
 export const maxDuration = 60;
 
 const V = () => process.env.META_API_VERSION || 'v25.0';
@@ -351,12 +352,15 @@ async function publicarIG(b) {
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
-  if (!isAdmin(req)) return err(res, 401, 'Senha do CRM inválida.');
+  const s = await sessao(req).catch(() => null);
+  if (!s) return err(res, 401, 'Senha do CRM inválida.');
   res.setHeader('Cache-Control', 'no-store');
   try {
     await ensureSchema();
     const b = req.method === 'POST' ? body(req) : (req.query || {});
     const acao = b.acao || (req.query || {}).acao;
+    const PERM = { status: 'meta.ver', metricas: 'meta.ver', puxarLeads: 'meta.ver', publicarIG: 'meta.publicar', sugerir: 'meta.campanha', criar: 'meta.campanha', statusCampanha: 'meta.campanha' };
+    if (PERM[acao] && !pode(s, PERM[acao])) return err(res, 403, 'Seu perfil não tem acesso a esta função da Meta.');
     if (acao === 'status') {
       if (!configurado()) return ok(res, { configurado: false, faltando: ['META_ACCESS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID'].filter((k) => !process.env[k]) });
       const out = { configurado: true };
