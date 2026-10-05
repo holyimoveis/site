@@ -7,6 +7,7 @@
 // só o que podem editar é aceito, nada é excluído e a resposta traz os dados atualizados.
 import { sql, ensureSchema, cors, body, ok, err, fail, atualizarDoc } from './_lib.js';
 import { sessao, ehDoUsuario, proximoResponsavel } from './_auth.js';
+import usuarios from './_usuarios.js'; // /api/usuarios é atendido aqui (limite de 12 funções do plano Hobby da Vercel)
 
 const CHAVE_OK = /^[a-z_]{1,40}$/;
 const HIST_MAX = 30; // cópias guardadas por chave (desfazer em caso de erro)
@@ -122,6 +123,7 @@ async function sincronizarLeads() {
 }
 
 export default async function handler(req, res) {
+  if ((req.query || {}).modulo === 'usuarios') return usuarios(req, res);
   if (cors(req, res)) return;
   res.setHeader('Cache-Control', 'no-store');
   try {

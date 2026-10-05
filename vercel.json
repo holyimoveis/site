@@ -36,5 +36,11 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/usuarios",
+      "destination": "/api/crm?modulo=usuarios"
+    }
   ]
 }
