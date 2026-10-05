@@ -18808,7 +18808,9 @@ const WA_PADRAO = {
     semHorario: true,
     avisoNumero: ""
 };
-const waTel = id => { const d = String(id || "").replace(/\D/g, ""); const n = d.startsWith("55") ? d.slice(2) : d; return n.length === 11 ? `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}` : n.length === 10 ? `(${n.slice(0, 2)}) ${n.slice(2, 6)}-${n.slice(6)}` : "+" + d; };
+const waCanal = id => String(id || "").startsWith("ig:") ? "instagram" : String(id || "").startsWith("fb:") ? "messenger" : "whatsapp";
+const WA_ICONE = { whatsapp: "🟢", instagram: "📷", messenger: "💬" };
+const waTel = id => { if (waCanal(id) !== "whatsapp") return waCanal(id) === "instagram" ? "Direct do Instagram" : "Messenger (Facebook)"; const d = String(id || "").replace(/\D/g, ""); const n = d.startsWith("55") ? d.slice(2) : d; return n.length === 11 ? `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}` : n.length === 10 ? `(${n.slice(0, 2)}) ${n.slice(2, 6)}-${n.slice(6)}` : "+" + d; };
 const waHora = d => { try { const x = new Date(d), h = new Date(); return x.toDateString() === h.toDateString() ? x.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : x.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + x.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } };
 
 function WaBolha({ m }) {
@@ -18951,20 +18953,35 @@ function ConversasPage() {
     const conversas = (dados && dados.conversas) || [];
     const aguardando = conversas.filter(c => c.aguardando).length;
     const ativo = cfg.ativo !== false;
-    const topo = React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between", marginBottom: 14 } },
+    const [canais, setCanais] = useState(null);
+    const [conectando, setConectando] = useState("");
+    useEffect(() => { if (holyPode("campanhas")) metaApi("statusMensagens").then(setCanais).catch(() => {}); }, []);
+    async function conectarCanais() {
+        setConectando("Conectando…");
+        try { const d = await metaApi("conectarMensagens"); setConectando("✅ " + d.passos.join(" · ")); metaApi("statusMensagens").then(setCanais).catch(() => {}); }
+        catch (e) { setConectando("❌ " + e.message); }
+    }
+    const metaOn = cfg.canaisMeta !== false;
+    const topo = React.createElement("div", { style: { marginBottom: 14 } }, React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between" } },
         React.createElement("div", { style: { display: "flex", gap: 6 } },
-            ["conversas", "config"].map(k => React.createElement("button", { key: k, onClick: () => setAba(k), style: { padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${aba === k ? C.olive : C.border}`, background: aba === k ? C.olive : C.white, color: aba === k ? "#fff" : C.inkMid } },
+            (holyPode("configCompleta") ? ["conversas", "config"] : ["conversas"]).map(k => React.createElement("button", { key: k, onClick: () => setAba(k), style: { padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${aba === k ? C.olive : C.border}`, background: aba === k ? C.olive : C.white, color: aba === k ? "#fff" : C.inkMid } },
                 k === "conversas" ? `💬 Conversas${aguardando ? " (" + aguardando + ")" : ""}` : "⚙ Configurar e testar"))),
         React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
             dados && React.createElement(Chip, { label: dados.whatsapp ? "WhatsApp conectado" + (dados.provedor ? " (" + dados.provedor + ")" : "") : "WhatsApp ainda não conectado", color: dados.whatsapp ? C.success : C.warn }),
-            React.createElement("button", { onClick: alternarGeral, style: { padding: "7px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", border: "none", background: ativo ? C.success : C.muted, color: "#fff" } }, ativo ? "● Assistente ligado" : "○ Assistente desligado")));
+            canais && React.createElement(Chip, { label: canais.messenger ? "Instagram e Messenger conectados" : "Instagram e Messenger não conectados", color: canais.messenger ? C.success : C.warn }),
+            holyPode("configCompleta") && canais && canais.messenger && React.createElement("button", { onClick: () => { const n = Object.assign({}, cfg, { canaisMeta: !metaOn }); setCfg(n); setCfgSalva(n); }, style: { padding: "7px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", border: "none", background: metaOn ? C.success : C.muted, color: "#fff" } }, metaOn ? "● Helena no Instagram/Messenger" : "○ Helena só no WhatsApp"),
+            holyPode("configCompleta") && React.createElement("button", { onClick: alternarGeral, style: { padding: "7px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", border: "none", background: ativo ? C.success : C.muted, color: "#fff" } }, ativo ? "● Assistente ligado" : "○ Assistente desligado"))),
+        holyPode("configCompleta") && canais && !canais.messenger && React.createElement("div", { style: { marginTop: 10, padding: "10px 14px", background: "#fff8e6", border: `0.5px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.inkMid, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } },
+            "Para a Helena atender também no Direct do Instagram e no Messenger da Página:",
+            React.createElement(PBtn, { sm: true, onClick: conectarCanais }, "Conectar Instagram e Messenger")),
+        conectando && React.createElement("div", { style: { marginTop: 8, fontSize: 12, color: C.inkMid } }, conectando));
     if (aba === "config") return React.createElement("div", null, topo, React.createElement(WaConfig, { cfg, setCfg, salvar: salvarCfg, salvo }));
     const lista = React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: "hidden", alignSelf: "start" } },
         !conversas.length && React.createElement("div", { style: { padding: 24, fontSize: 12, color: C.muted, lineHeight: 1.6, textAlign: "center" } },
             dados && !dados.whatsapp ? "O WhatsApp ainda não está conectado. Enquanto isso, use \"Configurar e testar\" para ajustar o tom do assistente." : "Nenhuma conversa ainda."),
         conversas.map(c => React.createElement("div", { key: c.wa_id, onClick: () => setSel(c.wa_id), style: { padding: "11px 14px", borderBottom: `0.5px solid ${C.border}`, cursor: "pointer", background: sel === c.wa_id ? C.oliveGhost : c.aguardando ? "#fff8e6" : C.white } },
             React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 8 } },
-                React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, c.nome || waTel(c.wa_id)),
+                React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, WA_ICONE[waCanal(c.wa_id)] + " " + (c.nome || waTel(c.wa_id))),
                 React.createElement("div", { style: { fontSize: 10, color: C.muted, flexShrink: 0 } }, waHora(c.ultima_msg))),
             React.createElement("div", { style: { fontSize: 11, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", margin: "2px 0 4px" } },
                 (c.ultimo_papel === "assistente" ? "Assistente: " : c.ultimo_papel === "humano" ? "Você: " : "") + (c.ultimo_texto || "")),

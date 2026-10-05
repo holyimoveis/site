@@ -350,6 +350,30 @@ async function publicarIG(b) {
   return publicados;
 }
 
+// ── Helena no Instagram e no Messenger: liga os avisos de mensagem da Página para o CRM ──
+async function conectarMensagens(req) {
+  const passos = [];
+  const ptk = await pageToken();
+  await graph(`${PAGE()}/subscribed_apps`, 'POST', { subscribed_fields: 'messages,messaging_postbacks,message_echoes' }, ptk);
+  passos.push('Página Holy Imóveis inscrita para receber mensagens (Messenger e Instagram)');
+  const appId = process.env.META_APP_ID || '1110281681853167', segredo = process.env.META_APP_SECRET, verify = process.env.WHATSAPP_VERIFY_TOKEN || '';
+  if (!segredo) throw new Error('Falta META_APP_SECRET na Vercel (Chave Secreta do app Holy CRM, em Configurações do app > Básico).');
+  if (verify.length < 12) throw new Error('Falta WHATSAPP_VERIFY_TOKEN na Vercel (mínimo 12 letras e números).');
+  const callback = site(req) + '/api/whatsapp';
+  const appToken = appId + '|' + segredo;
+  for (const [object, fields] of [['page', 'messages,messaging_postbacks,message_echoes'], ['instagram', 'messages']]) {
+    await graph(`${appId}/subscriptions`, 'POST', { object, callback_url: callback, fields, verify_token: verify, include_values: true }, appToken);
+    passos.push('Webhook do app para ' + (object === 'page' ? 'Messenger' : 'Instagram') + ' apontando para ' + callback);
+  }
+  return passos;
+}
+async function statusMensagens() {
+  const out = { messenger: false, instagram: !!(await igUser().catch(() => null)) };
+  try { const r = await graph(`${PAGE()}/subscribed_apps`, 'GET', {}, await pageToken()); const meu = (r.data || []).find((a) => String(a.id) === String(process.env.META_APP_ID || '1110281681853167')); out.messenger = !!meu; out.campos = meu ? meu.subscribed_fields : []; } catch (e) { out.erro = e.message; }
+  out.segredo = !!process.env.META_APP_SECRET;
+  return out;
+}
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
   const s = await sessao(req).catch(() => null);
@@ -359,7 +383,7 @@ export default async function handler(req, res) {
     await ensureSchema();
     const b = req.method === 'POST' ? body(req) : (req.query || {});
     const acao = b.acao || (req.query || {}).acao;
-    const PERM = { status: 'meta.ver', metricas: 'meta.ver', puxarLeads: 'meta.ver', publicarIG: 'meta.publicar', sugerir: 'meta.campanha', criar: 'meta.campanha', statusCampanha: 'meta.campanha' };
+    const PERM = { conectarMensagens: 'meta.campanha', statusMensagens: 'meta.ver', status: 'meta.ver', metricas: 'meta.ver', puxarLeads: 'meta.ver', publicarIG: 'meta.publicar', sugerir: 'meta.campanha', criar: 'meta.campanha', statusCampanha: 'meta.campanha' };
     if (PERM[acao] && !pode(s, PERM[acao])) return err(res, 403, 'Seu perfil não tem acesso a esta função da Meta.');
     if (acao === 'status') {
       if (!configurado()) return ok(res, { configurado: false, faltando: ['META_ACCESS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID'].filter((k) => !process.env[k]) });
@@ -385,6 +409,8 @@ export default async function handler(req, res) {
     if (acao === 'statusCampanha') return ok(res, { status: await mudarStatus(b) });
     if (acao === 'puxarLeads') return ok(res, { novos: configurado() ? await puxarLeads(b.forms) : 0 });
     if (acao === 'publicarIG') return ok(res, { publicados: await publicarIG(b) });
+    if (acao === 'conectarMensagens') return ok(res, { passos: await conectarMensagens(req) });
+    if (acao === 'statusMensagens') return ok(res, await statusMensagens());
     return err(res, 400, 'Ação desconhecida.');
   } catch (e) {
     if (e && e.message === 'DB_NAO_CONFIGURADO') return fail(res, e);

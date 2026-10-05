@@ -89,3 +89,11 @@ Regras: anúncios de imóveis sempre na Categoria Especial de Moradia (HOUSING):
 - Os prazos de "abandonado" e o rodízio são ajustados pelo administrador em Equipe > Regras de atendimento.
 - Posts do corretor vão para aprovação; admin e gerente aprovam em Campanhas.
 - As sessões duram 30 dias. Trocar a ADMIN_KEY na Vercel desconecta todos os usuários (opcional: defina SESSION_SECRET para separar as duas coisas).
+
+## Atualização out/2026 (4): Helena no Instagram e no Messenger
+- A Helena responde também o Direct do Instagram e o Messenger da Página, com o mesmo cérebro e as mesmas regras do WhatsApp.
+- Conversas desses canais aparecem em Conversas com 📷 (Instagram) ou 💬 (Messenger). Clientes novos entram com origem Instagram ou Facebook.
+- Nesses canais a Helena pede o WhatsApp do cliente quando a conversa evolui, e grava no cadastro.
+- Se você responder pelo app do Instagram ou pelo Business Suite, a Helena pausa naquela conversa.
+- Variáveis na Vercel: META_APP_SECRET (Chave Secreta do app Holy CRM). O token META_ACCESS_TOKEN precisa incluir pages_messaging e instagram_manage_messages.
+- Depois de publicar: Conversas > "Conectar Instagram e Messenger" (só administrador).

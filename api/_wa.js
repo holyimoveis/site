@@ -89,7 +89,49 @@ async function postar(payload) {
   if (!r.ok) throw new Error('WhatsApp recusou: ' + (j.error && (j.error.message || j.error.title) || r.status));
   return j;
 }
+// ── Instagram e Messenger (Página da Holy pela API da Meta) ─────────────
+// As conversas usam o id com prefixo: "ig:<id>" (Instagram) e "fb:<id>" (Messenger). Sem prefixo = WhatsApp.
+export const canalDe = (id) => (String(id).startsWith('ig:') ? 'instagram' : String(id).startsWith('fb:') ? 'messenger' : 'whatsapp');
+export const NOME_CANAL = { whatsapp: 'WhatsApp', instagram: 'Instagram', messenger: 'Messenger (Facebook)' };
+const GRAPH = 'https://graph.facebook.com/v21.0';
+let _ptk = null;
+async function tokenPagina() {
+  if (_ptk && _ptk.exp > Date.now()) return _ptk.t;
+  if (!process.env.META_ACCESS_TOKEN || !process.env.META_PAGE_ID) throw new Error('Meta não configurada (META_ACCESS_TOKEN e META_PAGE_ID).');
+  const r = await fetch(`${GRAPH}/${process.env.META_PAGE_ID}?fields=access_token&access_token=${encodeURIComponent(process.env.META_ACCESS_TOKEN)}`);
+  const j = await r.json();
+  if (!j.access_token) throw new Error('Não consegui o acesso da Página: ' + ((j.error && j.error.message) || r.status));
+  _ptk = { t: j.access_token, exp: Date.now() + 30 * 60000 };
+  return _ptk.t;
+}
+async function enviarMeta(id, texto) {
+  const canal = canalDe(id), alvo = String(id).slice(3), max = canal === 'instagram' ? 950 : 1900;
+  const ptk = await tokenPagina();
+  let t = String(texto || '').trim(), ultimo = null;
+  while (t) {
+    let i = t.length <= max ? t.length : (t.lastIndexOf('\n', max) > 300 ? t.lastIndexOf('\n', max) : (t.lastIndexOf(' ', max) > 300 ? t.lastIndexOf(' ', max) : max));
+    const parte = t.slice(0, i).trim(); t = t.slice(i).trim();
+    if (!parte) continue;
+    const r = await fetch(`${GRAPH}/${process.env.META_PAGE_ID}/messages?access_token=${encodeURIComponent(ptk)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient: { id: alvo }, messaging_type: 'RESPONSE', message: { text: parte } }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error(NOME_CANAL[canal] + ' recusou: ' + ((j.error && j.error.message) || r.status));
+    ultimo = j.message_id || null;
+  }
+  return ultimo;
+}
+// Nome público de quem escreveu (Messenger: nome; Instagram: nome ou @usuário)
+export async function perfilMeta(id) {
+  try {
+    const canal = canalDe(id), ptk = await tokenPagina();
+    const r = await fetch(`${GRAPH}/${String(id).slice(3)}?fields=${canal === 'instagram' ? 'name,username' : 'name'}&access_token=${encodeURIComponent(ptk)}`);
+    const j = await r.json();
+    return j.name || (j.username ? '@' + j.username : '');
+  } catch (e) { return ''; }
+}
 export async function enviarTexto(waId, texto) {
+  if (canalDe(waId) !== 'whatsapp') return enviarMeta(waId, texto);
   const partes = [];
   let t = String(texto || '').trim();
   while (t.length > 3800) { const i = t.lastIndexOf('\n', 3800) > 1000 ? t.lastIndexOf('\n', 3800) : 3800; partes.push(t.slice(0, i)); t = t.slice(i).trim(); }
@@ -99,6 +141,7 @@ export async function enviarTexto(waId, texto) {
   return ultimo && ultimo.messages && ultimo.messages[0] ? ultimo.messages[0].id : null;
 }
 export async function marcarLida(wamid) {
+  if (!wamid || /^(m_|ig_|mid\.)/.test(String(wamid))) return; // Instagram/Messenger não usam este aviso
   try { await postar({ status: 'read', message_id: wamid }); } catch (e) { /* não é crítico */ }
 }
 
@@ -149,8 +192,9 @@ const FERRAMENTA = {
   input_schema: {
     type: 'object',
     properties: {
-      resposta: { type: 'string', description: 'Mensagem de WhatsApp para o cliente, em português do Brasil.' },
+      resposta: { type: 'string', description: 'Mensagem para o cliente (WhatsApp, Instagram ou Messenger), em português do Brasil.' },
       nome_cliente: { type: 'string', description: 'Nome do cliente, se ele informou. Vazio se não souber.' },
+      telefone_cliente: { type: 'string', description: 'WhatsApp/telefone que o cliente informou na conversa (Instagram e Messenger). Vazio se não informou.' },
       perfil: {
         type: 'object',
         properties: {
@@ -182,7 +226,9 @@ function prompt(cfg, cat) {
   const hora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
   const semPromessa = cfg.semHorario !== false || !String(cfg.retorno || '').trim();
   const dentro = semPromessa || noHorario(cfg, agora);
-  return `Você é a ${cfg.nomeAssistente}, que atende pelo WhatsApp da Holy Curadoria Imobiliária. Hoje é ${hoje}, ${hora} (horário de Brasília).
+  const canal = cfg._canal || 'whatsapp';
+  const extraCanal = canal === 'whatsapp' ? '' : `\n\nCANAL: ${NOME_CANAL[canal]}\n- Você está respondendo uma mensagem direta no ${NOME_CANAL[canal]} da Holy. Escreva mensagens curtas, próprias de chat${canal === 'instagram' ? ' (no Instagram, no máximo 2 parágrafos curtos)' : ''}.\n- Aqui não temos o telefone do cliente. Quando a conversa evoluir (interesse real, visita, proposta ou passagem para o Édipo), peça de forma natural o WhatsApp dele para o Édipo continuar o atendimento, e registre em telefone_cliente.`;
+  return `Você é a ${cfg.nomeAssistente}, que atende pelo ${NOME_CANAL[canal]} da Holy Curadoria Imobiliária. Hoje é ${hoje}, ${hora} (horário de Brasília).${extraCanal}
 
 IDENTIDADE
 - Você é a ${cfg.apresentacao || cfg.nomeAssistente}. Apresente-se assim, de forma natural, na primeira resposta da conversa, e confirme que é uma assistente virtual sempre que perguntarem. Nunca afirme ser o Édipo ou uma pessoa.
@@ -276,24 +322,28 @@ const hojeISO = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Americ
 const agoraHM = () => new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
 
 async function sincronizarCRM(waId, conv, out, nomePerfil) {
-  const tel = telefoneBR(waId), fim8 = String(waId).replace(/\D/g, '').slice(-8);
+  const canal = canalDe(waId);
+  const telInformado = String(out.telefone_cliente || '').replace(/\D/g, '');
+  const tel = canal === 'whatsapp' ? telefoneBR(waId) : (telInformado.length >= 10 ? telefoneBR(telInformado) : '');
+  const fim8 = (canal === 'whatsapp' ? String(waId) : telInformado).replace(/\D/g, '').slice(-8);
   const p = out.perfil || {};
   const perfilTxt = [['Objetivo', p.objetivo], ['Desejos', p.desejos], ['Objeções', p.objecoes], ['Cidades', p.cidades], ['Tipo', p.tipo_imovel], ['Faixa de valor', p.faixa_valor], ['Quartos', p.quartos], ['Prazo', p.prazo], ['Pagamento', p.pagamento], ['Interesse', p.interesse_em]]
     .filter((x) => x[1]).map((x) => x[0] + ': ' + x[1]).join(' · ');
-  const bloco = '[WhatsApp] ' + (out.resumo || '') + (perfilTxt ? '\n' + perfilTxt : '');
+  const bloco = '[WhatsApp] ' + (canal !== 'whatsapp' ? '(' + NOME_CANAL[canal] + ') ' : '') + (out.resumo || '') + (perfilTxt ? '\n' + perfilTxt : '');
   let clienteId = conv.cliente_id, novo = false, nomeFinal = '';
   await atualizarDoc('clientes', async (lista) => {
     lista = Array.isArray(lista) ? lista : [];
-    let c = lista.find((x) => x.id === clienteId) || lista.find((x) => String(x.celular || x.tel || '').replace(/\D/g, '').slice(-8) === fim8);
+    let c = lista.find((x) => x.id === clienteId) || (fim8.length === 8 ? lista.find((x) => String(x.celular || x.tel || '').replace(/\D/g, '').slice(-8) === fim8) : null);
     if (!c) {
       novo = true;
-      const nome = (out.nome_cliente || nomePerfil || 'Contato WhatsApp ' + tel.slice(-4)).trim();
-      c = { id: 'cl' + rid(), nome, avatar: nome.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2), email: '', celular: tel, tel: '', cpf: '', nascimento: '', profissao: '', empresa: '', renda: 0, patrimonioEst: 0, origem: 'WhatsApp', stage: 'Prospecção', temp: 'warm', obs: '', interesses: [], interacoes: [], createdAt: hojeISO() };
+      const nome = (out.nome_cliente || nomePerfil || (canal === 'whatsapp' ? 'Contato WhatsApp ' + tel.slice(-4) : 'Contato ' + NOME_CANAL[canal].split(' ')[0])).trim();
+      c = { id: 'cl' + rid(), nome, avatar: nome.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2), email: '', celular: tel, tel: '', cpf: '', nascimento: '', profissao: '', empresa: '', renda: 0, patrimonioEst: 0, origem: canal === 'whatsapp' ? 'WhatsApp' : canal === 'instagram' ? 'Instagram' : 'Facebook', stage: 'Prospecção', temp: 'warm', obs: '', interesses: [], interacoes: [], createdAt: hojeISO() };
       const resp = await proximoResponsavel().catch(() => null); // rodízio entre corretores (se ligado)
       if (resp) { c.responsavelId = resp.id; c.responsavelNome = resp.nome; }
       lista.unshift(c);
     }
-    if (out.nome_cliente && /^Contato WhatsApp/.test(c.nome)) { c.nome = out.nome_cliente.trim(); c.avatar = c.nome.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2); }
+    if (tel && !c.celular) c.celular = tel;
+    if (out.nome_cliente && /^(Contato WhatsApp|Contato Instagram|Contato Messenger|@)/.test(c.nome)) { c.nome = out.nome_cliente.trim(); c.avatar = c.nome.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2); }
     const iAtual = ETAPAS.indexOf(c.stage), iNova = ETAPAS.indexOf(out.etapa_funil);
     if (iNova > iAtual && iNova <= 3) c.stage = out.etapa_funil; // só avança, nunca volta; Pós-venda fica com você
     if (TEMP[out.temperatura]) c.temp = TEMP[out.temperatura];
@@ -304,7 +354,7 @@ async function sincronizarCRM(waId, conv, out, nomePerfil) {
   });
   if (!conv.cliente_id || conv.cliente_id !== clienteId) await sql.query('UPDATE wa_conversas SET cliente_id = $2 WHERE wa_id = $1', [waId, clienteId]);
   const eventos = [];
-  if (novo) eventos.push({ id: 'int' + rid(), tipo: 'WhatsApp', data: hojeISO(), hora: agoraHM(), desc: 'Primeiro contato pelo WhatsApp (assistente virtual). ' + (out.resumo || ''), imovelId: '', clienteId, cliente: nomeFinal });
+  if (novo) eventos.push({ id: 'int' + rid(), tipo: canal === 'whatsapp' ? 'WhatsApp' : NOME_CANAL[canal].split(' ')[0], data: hojeISO(), hora: agoraHM(), desc: 'Primeiro contato pelo ' + NOME_CANAL[canal] + ' (assistente virtual). ' + (out.resumo || ''), imovelId: '', clienteId, cliente: nomeFinal, autor: 'Helena' });
   if (out.transferir) eventos.push({ id: 'int' + rid(), tipo: 'Nota interna', data: hojeISO(), hora: agoraHM(), desc: '🔔 Assistente passou o atendimento para você: ' + (MOTIVOS[out.motivo_transferencia] || MOTIVOS.outro) + '. ' + (out.resumo || ''), imovelId: '', clienteId, cliente: nomeFinal });
   if (eventos.length) await atualizarDoc('timeline', (t) => eventos.concat(Array.isArray(t) ? t : []));
 }
@@ -320,7 +370,9 @@ export async function processarConversa(waId, site, nomePerfil) {
   const meu = ultCli[0].id;
 
   const cfg = await lerConfig();
+  cfg._canal = canalDe(waId);
   const conv = (await sql.query('SELECT * FROM wa_conversas WHERE wa_id = $1', [waId]))[0] || {};
+  if (cfg._canal !== 'whatsapp' && cfg.canaisMeta === false) return; // Helena desligada no Instagram/Messenger
   if (cfg.ativo === false || conv.pausado) return;
 
   const enviadas = await sql.query("SELECT count(*)::int n FROM wa_mensagens WHERE wa_id = $1 AND papel = 'assistente' AND criado_em > now() - interval '1 hour'", [waId]);
@@ -349,7 +401,7 @@ export async function processarConversa(waId, site, nomePerfil) {
   if (out.transferir) {
     await sql.query('UPDATE wa_conversas SET pausado = true, aguardando = true, motivo = $2 WHERE wa_id = $1',
       [waId, MOTIVOS[out.motivo_transferencia] || MOTIVOS.outro]);
-    try { await avisarEdipo(cfg, { nome: out.nome_cliente || nomePerfil || '', telefone: telefoneBR(waId), motivo: MOTIVOS[out.motivo_transferencia] || MOTIVOS.outro, resumo: out.resumo || '' }); }
+    try { await avisarEdipo(cfg, { nome: out.nome_cliente || nomePerfil || '', telefone: cfg._canal === 'whatsapp' ? telefoneBR(waId) : ((out.telefone_cliente || 'sem telefone') + ' · via ' + NOME_CANAL[cfg._canal]), motivo: MOTIVOS[out.motivo_transferencia] || MOTIVOS.outro, resumo: out.resumo || '' }); }
     catch (e) { console.error('Aviso ao Édipo falhou', e); }
   }
   try { await sincronizarCRM(waId, conv, out, nomePerfil); } catch (e) { console.error('CRM falhou', e); }
