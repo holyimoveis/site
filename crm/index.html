@@ -17279,6 +17279,7 @@ function holyTrocarUsuario(u) {
     try { Object.keys(localStorage).forEach(function (k) { if (/^hly_(base_)?[a-z_]+$/.test(k) && !/^hly_(token|admin_key|user|api_url|api_key|anthropic_key)$/.test(k)) localStorage.removeItem(k); }); } catch (e) {}
   }
   HolyUser = u; try { localStorage.setItem('hly_user', JSON.stringify(u)); } catch (e) {}
+  return antes !== (u && u.id);
 }
 function holyFetch(path, opts) {
   opts = opts || {};
@@ -17366,7 +17367,9 @@ var HolyStore = (function () {
       var doc = d.docs[k]; if (!doc) return;
       get(k, []);
       if (doc.versao === 0) { if (Array.isArray(vals[k]) && vals[k].length) { pending[k] = true; schedule(k, 100); } return; }
-      if (doc.versao === versao[k]) return;
+      // mesma versão: não baixa de novo, a não ser que a cópia do aparelho esteja vazia e a da nuvem não (autocorreção)
+      var vazioAqui = Array.isArray(vals[k]) && !vals[k].length && Array.isArray(doc.data) && doc.data.length && !pending[k];
+      if (doc.versao === versao[k] && !vazioAqui) return;
       if (pending[k]) {
         var merged = merge3(base[k], vals[k], doc.data);
         versao[k] = doc.versao; base[k] = clone(doc.data); lsSet('hly_base_' + k, base[k]);
@@ -17580,8 +17583,9 @@ function holyBoot(render) {
     var r = await holyFetch('/api/usuarios?me=1');
     if (r.status === 401) throw new Error('401');
     var d = await r.json().catch(function () { return {}; });
-    if (d.success && d.usuario) holyTrocarUsuario(d.usuario);
-    else holyTrocarUsuario({ id: 'admin', nome: 'Administrador', perfil: 'admin', perfilNome: 'Administrador', mestre: true });
+    var trocou = d.success && d.usuario ? holyTrocarUsuario(d.usuario) : holyTrocarUsuario({ id: 'admin', nome: 'Administrador', perfil: 'admin', perfilNome: 'Administrador', mestre: true });
+    // Outro usuário neste aparelho: recarrega para não misturar os dados guardados do anterior
+    if (trocou) { location.reload(); await new Promise(function () {}); }
   }
   function carregar() { return HolyStore.pullAll(); }
   function iniciar() {
