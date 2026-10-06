@@ -19862,6 +19862,145 @@ function mkPadrao(v, formato) {
     if (formato === "story") return [g, Object.assign({}, d, { tipo: "desejo" }), { tipo: "enquete", titulo: "O que mais pesa na sua escolha?", itens: ["Localização", "Lazer"] }, c];
     return [g, d, l, p, o, c].filter(s => s.tipo !== "lazer" || laz.length).filter(s => s.tipo !== "prova" || (s.itens || []).length);
 }
+// ── Kit Marketplace ─────────────────────────────────────────────────
+// Não há API para publicar no Marketplace (só parceiros da Meta) e as mensagens de lá caem no perfil pessoal.
+// O kit prepara tudo no formato do anúncio de imóvel e leva o interessado para a Holy (Helena).
+const MP_WHATS = "5549988454873", MP_PAGINA = "674806769054623";
+function mpPreco(item, kind) {
+    if (kind === "im") return +item.valor || 0;
+    const t = String(item.preco || "").toLowerCase().replace(/r\$/g, "");
+    const m = t.match(/(\d[\d.]*(?:,\d+)?)\s*(milh[õo]es|milh[ãa]o|mi\b|mil)?/);
+    if (!m) return 0;
+    let n = parseFloat(m[1].replace(/\./g, "").replace(",", "."));
+    if (m[2] && /^mi/.test(m[2]) && m[2] !== "mil") n *= 1e6; else if (m[2] === "mil") n *= 1e3;
+    return Math.round(n);
+}
+function mpTipo(t) {
+    const x = String(t || "").toLowerCase();
+    if (/apart|cobertura|studio|loft|flat|garden|duplex/.test(x)) return "Apartamento";
+    if (/sobrado|geminad/.test(x)) return "Casa geminada";
+    if (/casa/.test(x)) return "Casa";
+    return t || "Apartamento";
+}
+function mpLink(destino, nome) {
+    return destino === "whatsapp"
+        ? "https://wa.me/" + MP_WHATS + "?text=" + encodeURIComponent("Olá! Vi no Marketplace o anúncio: " + nome)
+        : "https://m.me/" + MP_PAGINA + "?ref=marketplace";
+}
+function MarketplaceKit({ item, kind, vit, fotos }) {
+    const im = kind === "im";
+    const area = im ? (+item.areaPrivativa || +item.areaUtil || +item.area || "") : "";
+    const [f, setF] = useState(() => ({
+        anuncio: im && /loca|alug/i.test(item.finalidade || "") ? "Aluguel" : "Venda",
+        tipo: mpTipo(im ? item.tipo : (item.tipoLabel || "Apartamento")),
+        preco: mpPreco(item, kind) || "",
+        quartos: im ? (+item.quartos || "") : "",
+        banheiros: im ? ((+item.suites || 0) + (+item.banheiros || 0) || "") : "",
+        area: area,
+        local: [im ? item.bairro : "", String(item.cidade || "").replace(/-SC$/i, "")].filter(Boolean).join(", ") + " - SC",
+        titulo: "", descricao: "",
+    }));
+    const [destino, setDestino] = useState("messenger");
+    const [ordem, setOrdem] = useState(() => fotos.slice(0, 20));
+    const [load, setLoad] = useState(""); const [msg, setMsg] = useState("");
+    const F = (k, v) => setF(p => Object.assign({}, p, { [k]: v }));
+    const link = mpLink(destino, item.nome || "imóvel da Holy");
+    const rodape = "\n\n━━━━━━━━━━\nFale com a Holy Curadoria Imobiliária e receba fotos, plantas e condições:\n" + link + "\nRef. Holy: " + (item.ref || item.id || "");
+    const textoFinal = (f.descricao || "").trim() + rodape;
+    const brl = v => v ? "R$ " + Number(v).toLocaleString("pt-BR") : "";
+    function modelo() {
+        const linhas = [];
+        const cab = (f.tipo + (f.quartos ? " com " + f.quartos + " quarto" + (+f.quartos > 1 ? "s" : "") : "") + (f.area ? ", " + f.area + " m²" : "") + " · " + f.local);
+        const itens = [].concat(im ? [item.suites ? item.suites + " suíte(s)" : "", item.vagas ? item.vagas + " vaga(s) de garagem" : "", item.lavabos ? item.lavabos + " lavabo(s)" : ""] : (vit.destaques || []).map(d => d.n + " " + d.l))
+            .concat((vit.diferenciais || []).slice(0, 6)).filter(Boolean);
+        linhas.push((item.nome || cab));
+        linhas.push(""); linhas.push(cab);
+        if (itens.length) { linhas.push(""); itens.forEach(t => linhas.push("• " + t)); }
+        if ((vit.lazer || []).length) { linhas.push(""); linhas.push("Lazer: " + vit.lazer.slice(0, 8).join(", ") + "."); }
+        linhas.push(""); linhas.push((f.anuncio === "Aluguel" ? "Aluguel: " : "Valor: ") + (im ? brl(f.preco) : (item.preco || brl(f.preco))));
+        return { titulo: (f.tipo + (f.quartos ? " " + f.quartos + " quartos" : "") + " · " + f.local).slice(0, 100), descricao: linhas.join("\n") };
+    }
+    useEffect(() => { const m = modelo(); setF(p => Object.assign({}, p, { titulo: p.titulo || m.titulo, descricao: p.descricao || m.descricao })); }, []);
+    async function gerarIA() {
+        setLoad("A IA está escrevendo o anúncio…"); setMsg("");
+        const sys = "Você escreve anúncios de imóveis para o Facebook Marketplace para a Holy Curadoria Imobiliária (Santa Catarina). Texto simples, sem markdown, sem asteriscos, sem hashtags, frases curtas, português impecável, tom elegante e direto. Use '•' para listas. PROIBIDO: 'top', 'perfeito', 'imperdível', 'oportunidade única', 'sonho', 'incrível', caixa alta, excesso de exclamações, promessa de valorização. Use SOMENTE os dados fornecidos; nunca invente valores, metragens, prazos ou itens. Nunca informe endereço, rua ou número: só bairro e cidade. Não inclua telefone nem link (eles são adicionados depois). Responda APENAS com JSON válido.";
+        const prompt = `Anúncio de ${f.anuncio === "Aluguel" ? "aluguel" : "venda"} no Marketplace.
+JSON: {"titulo":"até 90 caracteres: tipo, quartos ou diferencial principal e bairro/cidade","descricao":"700 a 1200 caracteres: 1ª linha com o diferencial mais forte; um parágrafo curto de estilo de vida; lista com • dos principais itens; localização (bairro e cidade); valor exatamente como fornecido; última linha convidando a falar com a Holy pelo link abaixo"}
+Dados: ${JSON.stringify(Object.assign({}, vit, { precoAnuncio: f.preco, tipoAnuncio: f.tipo, local: f.local })).slice(0, 8000)}`;
+        const r = await holyIA(prompt, 1400, sys);
+        if (r.error) { setMsg("❌ " + r.error); setLoad(""); return; }
+        try {
+            const j = JSON.parse(String(r.text).replace(/```json|```/g, "").trim().replace(/^[^{]*/, "").replace(/[^}]*$/, ""));
+            setF(p => Object.assign({}, p, { titulo: String(j.titulo || p.titulo).slice(0, 100), descricao: String(j.descricao || p.descricao).replace(/\*+/g, "") }));
+            setMsg("✅ Anúncio escrito. Revise e ajuste o que quiser.");
+        } catch (e) { setMsg("❌ Não consegui ler a resposta da IA. Tente de novo."); }
+        setLoad("");
+    }
+    function copiar(t, nome) { try { navigator.clipboard.writeText(String(t)); setMsg("📋 " + nome + " copiado."); } catch (e) { setMsg("Copie manualmente: " + t); } }
+    const mover = (i, d) => setOrdem(o => { const n = o.slice(); const j = i + d; if (j < 0 || j >= n.length) return n; [n[i], n[j]] = [n[j], n[i]]; return n; });
+    async function baixarFotos() {
+        if (!ordem.length) return setMsg("❌ Este cadastro não tem fotos na nuvem.");
+        setLoad("Preparando as fotos na ordem do anúncio…"); setMsg("");
+        try {
+            if (!window.JSZip) await new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+            const z = new window.JSZip(); const base = (item.nome || "imovel").normalize("NFD").replace(/[^\w]+/g, "-").toLowerCase();
+            let n = 0;
+            for (let i = 0; i < ordem.length; i++) {
+                const img = await mkImg(ordem[i]); if (!img) continue;
+                const k = Math.min(1, 2048 / Math.max(img.width, img.height)); const cv = document.createElement("canvas");
+                cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k); cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+                z.file(`${String(i + 1).padStart(2, "0")}-${base}.jpg`, cv.toDataURL("image/jpeg", 0.9).split(",")[1], { base64: true }); n++;
+            }
+            z.file("anuncio-marketplace.txt", "TÍTULO\n" + f.titulo + "\n\nPREÇO\n" + f.preco + "\n\nTIPO\n" + f.anuncio + " · " + f.tipo + "\nQuartos: " + f.quartos + " · Banheiros: " + f.banheiros + " · Área: " + f.area + " m²\nLocal: " + f.local + "\n\nDESCRIÇÃO\n" + textoFinal);
+            const blob = await z.generateAsync({ type: "blob" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = base + "-marketplace.zip"; a.click();
+            setMsg("✅ " + n + " fotos baixadas na ordem (01 é a capa) + texto do anúncio.");
+        } catch (e) { setMsg("❌ " + e.message); }
+        setLoad("");
+    }
+    const linhaCampo = (rot, k, tipo) => React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center" } },
+        React.createElement("div", { style: { width: 92, fontSize: 11, color: C.muted, flexShrink: 0 } }, rot),
+        React.createElement("input", { style: mkInput, type: tipo || "text", value: f[k], onChange: e => F(k, e.target.value) }),
+        React.createElement("button", { onClick: () => copiar(f[k], rot), title: "Copiar", style: { border: `0.5px solid ${C.border}`, background: C.white, borderRadius: 8, padding: "7px 9px", cursor: "pointer", flexShrink: 0 } }, "📋"));
+    const passo = (n, t) => React.createElement("div", { style: { display: "flex", gap: 8, fontSize: 12, color: C.inkMid, lineHeight: 1.5, marginBottom: 6 } },
+        React.createElement("div", { style: { width: 20, height: 20, borderRadius: 10, background: C.olive, color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, n), React.createElement("div", null, t));
+    return React.createElement("div", null,
+        (load || msg) && React.createElement("div", { style: { fontSize: 12, color: msg.startsWith("❌") ? C.danger : C.olive, marginBottom: 10 } }, load ? "⏳ " + load : msg),
+        React.createElement("div", { className: "mk-grid", style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1.1fr)", gap: 18 } },
+            React.createElement("div", null,
+                mkLbl("Como publicar"),
+                React.createElement("div", { style: Object.assign(mkBox(), { marginBottom: 12 }) },
+                    passo(1, "Baixe as fotos (já na ordem; a 01 é a capa)."),
+                    passo(2, "Abra o anúncio de imóvel no Marketplace com o botão abaixo, logado no seu Facebook."),
+                    passo(3, "Escolha " + f.anuncio + " e preencha os campos copiando daqui (📋). No endereço, use só bairro e cidade."),
+                    passo(4, "Cole a descrição inteira: o link no fim leva o interessado para a Holy" + (destino === "messenger" ? ", onde a Helena já atende." : ".")),
+                    passo(5, "Mensagens no Marketplace chegam no seu Messenger pessoal: responda com o mesmo link para a conversa seguir com a Holy."),
+                    React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 } },
+                        React.createElement(PBtn, { sm: true, onClick: baixarFotos, disabled: !!load }, "⬇ Baixar fotos + texto (.zip)"),
+                        React.createElement("a", { href: "https://www.facebook.com/marketplace/create/rental", target: "_blank", rel: "noopener", style: { padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, color: C.olive, border: `0.5px solid ${C.olive}`, textDecoration: "none" } }, "↗ Abrir anúncio no Marketplace"))),
+                mkLbl("Fotos na ordem do anúncio (" + ordem.length + ")"),
+                !ordem.length ? React.createElement("div", { style: { fontSize: 12, color: C.danger } }, "Este cadastro não tem fotos na nuvem.") :
+                React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(96px,1fr))", gap: 8 } },
+                    ordem.map((u, i) => React.createElement("div", { key: u + i, style: { position: "relative" } },
+                        React.createElement("img", { src: "/api/img?url=" + encodeURIComponent(u), alt: "", style: { width: "100%", aspectRatio: "4/3", objectFit: "cover", borderRadius: 6, border: `${i === 0 ? 2 : 0.5}px solid ${i === 0 ? C.gold : C.border}`, display: "block" } }),
+                        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, color: C.muted, marginTop: 2 } },
+                            React.createElement("button", { onClick: () => mover(i, -1), style: { border: "none", background: "none", cursor: "pointer", color: C.olive } }, "◀"),
+                            i === 0 ? "capa" : String(i + 1).padStart(2, "0"),
+                            React.createElement("button", { onClick: () => mover(i, 1), style: { border: "none", background: "none", cursor: "pointer", color: C.olive } }, "▶"),
+                            React.createElement("button", { onClick: () => setOrdem(o => o.filter((_, x) => x !== i)), title: "Tirar do anúncio", style: { border: "none", background: "none", cursor: "pointer", color: C.danger } }, "✕")))))),
+            React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, mkLbl("Campos do anúncio"),
+                    React.createElement(PBtn, { sm: true, onClick: gerarIA, loading: !!load && load.startsWith("A IA") }, "✦ Escrever com IA")),
+                React.createElement("div", { style: { display: "flex", gap: 6 } }, ["Venda", "Aluguel"].map(k => React.createElement("button", { key: k, onClick: () => F("anuncio", k), style: { padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${f.anuncio === k ? C.olive : C.border}`, background: f.anuncio === k ? C.olive : C.white, color: f.anuncio === k ? "#fff" : C.inkMid } }, k))),
+                linhaCampo("Tipo", "tipo"), linhaCampo("Preço (R$)", "preco", "number"), linhaCampo("Quartos", "quartos", "number"), linhaCampo("Banheiros", "banheiros", "number"), linhaCampo("Área (m²)", "area", "number"), linhaCampo("Local", "local"), linhaCampo("Título", "titulo"),
+                !im && React.createElement("div", { style: { fontSize: 11, color: C.muted } }, "Empreendimento: o Marketplace pede um preço único. Use o valor de entrada e diga na descrição que é \"a partir de\"."),
+                mkLbl("Levar o interessado para"),
+                React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+                    [["messenger", "Messenger da Holy (Helena atende)"], ["whatsapp", "WhatsApp da Holy"]].map(([k, l]) => React.createElement("button", { key: k, onClick: () => setDestino(k), style: { padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${destino === k ? C.olive : C.border}`, background: destino === k ? C.olive : C.white, color: destino === k ? "#fff" : C.inkMid } }, l))),
+                mkLbl("Descrição"),
+                React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 220 }), value: f.descricao, onChange: e => F("descricao", e.target.value) }),
+                React.createElement("div", { style: { fontSize: 11, color: C.muted, whiteSpace: "pre-wrap", background: C.cream, borderRadius: 8, padding: "8px 10px" } }, "Vai no fim automaticamente:" + rodape),
+                React.createElement("button", { onClick: () => copiar(textoFinal, "Descrição"), style: { alignSelf: "flex-start", fontSize: 12, background: C.olive, color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontWeight: 700 } }, "📋 Copiar descrição completa"))));
+}
 function PostStudio({ item, kind, onClose }) {
     const vit = mktVitrine(item, kind);
     const fotos = mktFotos(item);
@@ -19882,7 +20021,7 @@ function PostStudio({ item, kind, onClose }) {
         for (let i = 0; i < slides.length; i++) { const cv = document.createElement("canvas"); cv.width = W; cv.height = H; mkSlide(cv.getContext("2d"), W, H, slides[i], await mkImg(fotoDe(i)), 1, i, slides.length, formato); out.push(cv.toDataURL("image/jpeg", q || 0.9)); }
         return out;
     }
-    useEffect(() => { let vivo = true; const t = setTimeout(async () => { const r = await renderTudo(0.7); if (vivo) setPrev(r); }, 400); return () => { vivo = false; clearTimeout(t); }; }, [slides, fotoIdx, formato]);
+    useEffect(() => { if (formato === "marketplace") return; let vivo = true; const t = setTimeout(async () => { const r = await renderTudo(0.7); if (vivo) setPrev(r); }, 400); return () => { vivo = false; clearTimeout(t); }; }, [slides, fotoIdx, formato]);
     async function gerarIA() {
         setLoad("A IA está escrevendo o roteiro de venda…"); setMsg("");
         const estrutura = formato === "feed" ? "carrossel de 6 slides, tipos nesta ordem: gancho, desejo, lazer, prova, oferta, cta"
@@ -19960,9 +20099,10 @@ Dados: ${JSON.stringify(vit).slice(0, 9000)}`;
     return React.createElement(Modal, { onClose, width: 1080, z: 2600 },
         React.createElement(MHead, { title: "📸 Criar post: " + item.nome, sub: "Instagram · feed, stories e reels na identidade da Holy", onClose }),
         React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 } },
-            [["feed", "Feed (carrossel)"], ["story", "Stories"], ["reels", "Reels (vídeo)"]].map(([k, l]) => React.createElement("button", { key: k, onClick: () => setFormato(k), style: { padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${formato === k ? C.olive : C.border}`, background: formato === k ? C.olive : C.white, color: formato === k ? "#fff" : C.inkMid } }, l)),
+            [["feed", "Feed (carrossel)"], ["story", "Stories"], ["reels", "Reels (vídeo)"], ["marketplace", "🏷 Marketplace (kit)"]].map(([k, l]) => React.createElement("button", { key: k, onClick: () => setFormato(k), style: { padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${formato === k ? C.olive : C.border}`, background: formato === k ? C.olive : C.white, color: formato === k ? "#fff" : C.inkMid } }, l)),
             React.createElement("div", { style: { flex: 1 } }),
-            React.createElement(PBtn, { sm: true, onClick: gerarIA, loading: load.startsWith("A IA") }, "✦ Gerar roteiro de venda com IA")),
+            formato !== "marketplace" && React.createElement(PBtn, { sm: true, onClick: gerarIA, loading: load.startsWith("A IA") }, "✦ Gerar roteiro de venda com IA")),
+        formato === "marketplace" ? React.createElement(MarketplaceKit, { item, kind, vit, fotos }) : React.createElement(React.Fragment, null,
         (load || msg) && React.createElement("div", { style: { fontSize: 12, color: msg.startsWith("❌") ? C.danger : C.olive, marginBottom: 10 } }, load ? "⏳ " + load : msg),
         !fotos.length && React.createElement("div", { style: { fontSize: 12, color: C.danger, marginBottom: 10 } }, "Este cadastro não tem fotos na nuvem; as artes saem com fundo da marca."),
         React.createElement("div", { className: "mk-grid", style: { display: "grid", gridTemplateColumns: "minmax(0,1.1fr) minmax(0,1fr)", gap: 18 } },
@@ -19995,7 +20135,7 @@ Dados: ${JSON.stringify(vit).slice(0, 9000)}`;
                 React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 120 }), value: legenda, placeholder: "Gere com IA ou escreva a legenda", onChange: e => setLegenda(e.target.value) }),
                 React.createElement("input", { style: mkInput, value: hashtags, placeholder: "#imoveis #itapema …", onChange: e => setHashtags(e.target.value) }),
                 formato === "reels" && React.createElement(React.Fragment, null, mkLbl("Narração do Reels (opcional)"), React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 80 }), value: narracao, onChange: e => setNarracao(e.target.value) })),
-                React.createElement("button", { onClick: () => { navigator.clipboard && navigator.clipboard.writeText(legenda + "\n\n" + hashtags); setMsg("Legenda copiada."); }, style: { alignSelf: "flex-start", fontSize: 12, background: "none", border: `0.5px solid ${C.border}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.olive } }, "📋 Copiar legenda"))));
+                React.createElement("button", { onClick: () => { navigator.clipboard && navigator.clipboard.writeText(legenda + "\n\n" + hashtags); setMsg("Legenda copiada."); }, style: { alignSelf: "flex-start", fontSize: 12, background: "none", border: `0.5px solid ${C.border}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.olive } }, "📋 Copiar legenda")))));
 }
 
 function ConfigPage() {
