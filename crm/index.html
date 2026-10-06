@@ -18955,6 +18955,11 @@ function ConversasPage() {
     const ativo = cfg.ativo !== false;
     const [canais, setCanais] = useState(null);
     const [conectando, setConectando] = useState("");
+    const [diag, setDiag] = useState(null);
+    async function rodarDiagnostico() {
+        setDiag({ carregando: true });
+        try { setDiag(await metaApi("diagnosticoMensagens")); } catch (e) { setDiag({ erro: e.message }); }
+    }
     useEffect(() => { if (holyPode("campanhas")) metaApi("statusMensagens").then(setCanais).catch(() => {}); }, []);
     async function conectarCanais() {
         setConectando("Conectando…");
@@ -18970,11 +18975,13 @@ function ConversasPage() {
             dados && React.createElement(Chip, { label: dados.whatsapp ? "WhatsApp conectado" + (dados.provedor ? " (" + dados.provedor + ")" : "") : "WhatsApp ainda não conectado", color: dados.whatsapp ? C.success : C.warn }),
             canais && React.createElement(Chip, { label: canais.messenger ? "Instagram e Messenger conectados" : "Instagram e Messenger não conectados", color: canais.messenger ? C.success : C.warn }),
             holyPode("configCompleta") && canais && canais.messenger && React.createElement("button", { onClick: () => { const n = Object.assign({}, cfg, { canaisMeta: !metaOn }); setCfg(n); setCfgSalva(n); }, style: { padding: "7px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", border: "none", background: metaOn ? C.success : C.muted, color: "#fff" } }, metaOn ? "● Helena no Instagram/Messenger" : "○ Helena só no WhatsApp"),
+            holyPode("configCompleta") && React.createElement("button", { onClick: rodarDiagnostico, style: { padding: "7px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${C.border}`, background: C.white, color: C.inkMid } }, "🔍 Diagnóstico Instagram/Messenger"),
             holyPode("configCompleta") && React.createElement("button", { onClick: alternarGeral, style: { padding: "7px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", border: "none", background: ativo ? C.success : C.muted, color: "#fff" } }, ativo ? "● Assistente ligado" : "○ Assistente desligado"))),
         holyPode("configCompleta") && canais && !canais.messenger && React.createElement("div", { style: { marginTop: 10, padding: "10px 14px", background: "#fff8e6", border: `0.5px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.inkMid, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } },
             "Para a Helena atender também no Direct do Instagram e no Messenger da Página:",
             React.createElement(PBtn, { sm: true, onClick: conectarCanais }, "Conectar Instagram e Messenger")),
-        conectando && React.createElement("div", { style: { marginTop: 8, fontSize: 12, color: C.inkMid } }, conectando));
+        conectando && React.createElement("div", { style: { marginTop: 8, fontSize: 12, color: C.inkMid } }, conectando),
+        diag && React.createElement(DiagMensagens, { diag, fechar: () => setDiag(null), rodar: rodarDiagnostico }));
     if (aba === "config") return React.createElement("div", null, topo, React.createElement(WaConfig, { cfg, setCfg, salvar: salvarCfg, salvo }));
     const lista = React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: "hidden", alignSelf: "start" } },
         !conversas.length && React.createElement("div", { style: { padding: 24, fontSize: 12, color: C.muted, lineHeight: 1.6, textAlign: "center" } },
@@ -19414,6 +19421,36 @@ function Dashboard({ clientes, imoveis, timeline, setPage }) {
 // MARKETING: anúncios na Meta (campanhas de leads) e criador de posts
 // ═══════════════════════════════════════════════════════════════════════
 const abrirMkt = (modo, item, kind) => window.dispatchEvent(new CustomEvent("holy-mkt", { detail: { modo, item, kind } }));
+// Painel do Diagnóstico da Helena no Instagram/Messenger (Conversas > topo)
+function DiagMensagens({ diag, fechar, rodar }) {
+    const caixa = { marginTop: 10, padding: "14px 16px", background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, fontSize: 12, color: C.inkMid, lineHeight: 1.55 };
+    const hora = t => { try { return new Date(t).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }); } catch (e) { return t; } };
+    const cab = React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 } },
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.ink } }, "🔍 Diagnóstico: Helena no Instagram e Messenger"),
+        React.createElement("div", { style: { display: "flex", gap: 6 } },
+            React.createElement("button", { onClick: rodar, style: { padding: "5px 10px", borderRadius: 14, fontSize: 11, cursor: "pointer", border: `0.5px solid ${C.border}`, background: C.white, color: C.inkMid } }, "↻ Rodar de novo"),
+            React.createElement("button", { onClick: fechar, style: { padding: "5px 10px", borderRadius: 14, fontSize: 11, cursor: "pointer", border: `0.5px solid ${C.border}`, background: C.white, color: C.inkMid } }, "Fechar")));
+    if (diag.carregando) return React.createElement("div", { style: caixa }, cab, "Conferindo com a Meta…");
+    if (diag.erro) return React.createElement("div", { style: caixa }, cab, "❌ " + diag.erro);
+    const icone = ok => ok === true ? "✅" : ok === false ? "❌" : "ℹ️";
+    const sec = t => React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: C.ink, textTransform: "uppercase", letterSpacing: ".04em", margin: "12px 0 4px" } }, t);
+    return React.createElement("div", { style: caixa }, cab,
+        React.createElement("div", { style: { padding: "10px 12px", background: "#fff8e6", borderRadius: 8, color: C.ink, fontWeight: 600, marginBottom: 6 } }, "Conclusão: " + diag.conclusao),
+        sec("Configuração"),
+        (diag.itens || []).map((i, k) => React.createElement("div", { key: k, style: { padding: "4px 0", borderBottom: `0.5px solid ${C.border}` } },
+            icone(i.ok) + " ", React.createElement("b", null, i.titulo), i.detalhe ? " · " + i.detalhe : "",
+            i.acao ? React.createElement("div", { style: { fontSize: 11, color: C.muted, marginLeft: 22 } }, "→ " + i.acao) : null)),
+        sec("Últimas chegadas da Meta (mais recente primeiro)"),
+        (diag.chegadas || []).length
+            ? diag.chegadas.map((c, k) => React.createElement("div", { key: k, style: { padding: "3px 0", fontFamily: "monospace", fontSize: 11 } },
+                hora(c.em) + " · " + (c.object === "instagram" ? "Instagram" : c.object === "page" ? "Messenger" : (c.object || "?")) + " · " + c.status + " · " + ((c.eventos || []).join(", ") || c.motivo || "")))
+            : React.createElement("div", { style: { color: C.muted } }, "Nenhuma chegada registrada desde a instalação deste diagnóstico. Mande uma mensagem de teste e rode de novo."),
+        sec("Conversas do Instagram e Messenger"),
+        (diag.conversas || []).length
+            ? diag.conversas.map((c, k) => React.createElement("div", { key: k, style: { padding: "3px 0" } },
+                (c.wa_id.startsWith("ig:") ? "📸 " : "💬 ") + (c.nome || c.wa_id) + " · cliente: " + c.do_cliente + " · Helena: " + c.da_helena + (c.pausado ? " · pausada: " + (c.motivo || "") : "")))
+            : React.createElement("div", { style: { color: C.muted } }, "Nenhuma conversa do Instagram ou Messenger salva."));
+}
 async function metaApi(acao, data) {
     const r = await holyFetch("/api/meta", { method: "POST", body: JSON.stringify(Object.assign({ acao }, data || {})) });
     const d = await r.json().catch(() => ({}));

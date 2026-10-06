@@ -1,4 +1,5 @@
-// Webhook do WhatsApp: recebe as mensagens dos clientes e aciona o assistente.
+// Webhook do WhatsApp, Instagram e Messenger: recebe as mensagens dos clientes e aciona a Helena.
+// Cada chegada fica registrada (últimas 30) para o Diagnóstico em Conversas, e aparece nos Logs da Vercel como [webhook].
 // Endereço para cadastrar na Meta/360dialog: https://SEU-SITE/api/whatsapp?k=WHATSAPP_VERIFY_TOKEN
 import crypto from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
@@ -22,6 +23,43 @@ function assinaturaOk(req, bruto) {
     const esperado = 'sha256=' + crypto.createHmac('sha256', segredo).update(bruto, 'utf8').digest('hex');
     return esperado.length === sig.length && crypto.timingSafeEqual(Buffer.from(esperado), Buffer.from(sig));
   });
+}
+// Diário do webhook: guarda as últimas 30 chegadas (sem o texto das mensagens) para o Diagnóstico do CRM
+async function registrar(item) {
+  const reg = { em: new Date().toISOString(), ...item };
+  console.log('[webhook]', JSON.stringify(reg));
+  try {
+    await ensureSchema();
+    await sql.query(`INSERT INTO crm_docs (chave, valor, versao) VALUES ('webhook_log', jsonb_build_array($1::jsonb), 1)
+      ON CONFLICT (chave) DO UPDATE SET atualizado_em = now(), valor = (
+        SELECT COALESCE(jsonb_agg(t.x ORDER BY t.n), '[]'::jsonb)
+        FROM jsonb_array_elements(jsonb_build_array($1::jsonb) || CASE WHEN jsonb_typeof(crm_docs.valor) = 'array' THEN crm_docs.valor ELSE '[]'::jsonb END) WITH ORDINALITY AS t(x, n)
+        WHERE t.n <= 30)`, [JSON.stringify(reg)]);
+  } catch (e) { console.error('[webhook] não consegui registrar', e && e.message); }
+}
+// O que veio numa entrega (para o diário): tipo de evento por entrada, sem conteúdo
+function resumoEntrega(body) {
+  const ev = [];
+  for (const entry of body.entry || []) {
+    for (const e of entry.messaging || []) ev.push(e.message ? (e.message.is_echo ? 'eco' : 'mensagem') : e.read ? 'leitura' : e.delivery ? 'entrega' : e.postback ? 'botão' : e.reaction ? 'reação' : 'outro');
+    for (const e of entry.standby || []) ev.push(e.message ? (e.message.is_echo ? 'standby-eco' : 'standby-mensagem') : 'standby-outro');
+    for (const c of entry.changes || []) ev.push('changes:' + c.field);
+  }
+  return ev;
+}
+// Eco de mensagem enviada pela conta da Holy (Instagram nem sempre informa o app que enviou).
+// Espera a Helena gravar o que enviou; se o eco for dela, ignora. Se não, foi você pelo app -> Helena pausa.
+async function tratarEco(conv, m) {
+  await new Promise((r) => setTimeout(r, 3500));
+  const texto = String(textoMeta(m) || '').trim();
+  if (m.mid && (await sql.query('SELECT 1 FROM wa_mensagens WHERE wamid = $1', [m.mid])).length) return;
+  if (texto) {
+    const recentes = await sql.query("SELECT texto FROM wa_mensagens WHERE wa_id = $1 AND papel = 'assistente' AND criado_em > now() - interval '5 minutes' ORDER BY id DESC LIMIT 5", [conv]);
+    const norm = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+    if (recentes.some((r) => norm(r.texto).includes(norm(texto)))) return; // era a própria Helena (resposta em partes)
+  }
+  const id = await salvarMensagem(conv, 'humano', texto || '[mensagem]', m.mid);
+  if (id) await sql.query("UPDATE wa_conversas SET pausado = true, aguardando = false, motivo = 'Você assumiu pelo app' WHERE wa_id = $1", [conv]);
 }
 // Instagram e Messenger: texto de uma mensagem direta
 function textoMeta(m) {
@@ -73,8 +111,14 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const bruto = await corpoBruto(req);
-  if (!kapsoOk(req, bruto) && !assinaturaOk(req, bruto) && !chaveOk(req)) return res.status(401).json({ ok: false });
-  let body; try { body = JSON.parse(bruto || '{}'); } catch { return res.status(400).json({ ok: false }); }
+  if (!kapsoOk(req, bruto) && !assinaturaOk(req, bruto) && !chaveOk(req)) {
+    let obj = ''; try { obj = JSON.parse(bruto || '{}').object || ''; } catch {}
+    const temSig = !!req.headers['x-hub-signature-256'];
+    await registrar({ status: 401, object: obj, motivo: temSig ? 'assinatura não confere: META_APP_SECRET na Vercel diferente da Chave Secreta do app (ou faltou Redeploy)' : 'chegou sem assinatura', tamanho: bruto.length });
+    return res.status(401).json({ ok: false });
+  }
+  let body; try { body = JSON.parse(bruto || '{}'); } catch { await registrar({ status: 400, motivo: 'corpo não é JSON', tamanho: bruto.length }); return res.status(400).json({ ok: false }); }
+  if (body.object === 'instagram' || body.object === 'page') await registrar({ status: 200, object: body.object, eventos: resumoEntrega(body) });
 
   const site = process.env.SITE_URL || ('https://' + (req.headers['x-forwarded-host'] || req.headers.host));
   const tarefas = [];
@@ -92,8 +136,7 @@ export default async function handler(req, res) {
             // mensagem enviada pela própria Holy: se não foi este sistema, foi você pelo app/Business Suite -> Helena pausa
             const cli = ev.recipient && ev.recipient.id; if (!cli) continue;
             if (nossoApp && String(m.app_id || '') === nossoApp) continue;
-            const id = await salvarMensagem(pre + cli, 'humano', textoMeta(m) || '[mensagem]', m.mid);
-            if (id) await sql.query("UPDATE wa_conversas SET pausado = true, aguardando = false, motivo = 'Você assumiu pelo app' WHERE wa_id = $1", [pre + cli]);
+            tarefas.push(tratarEco(pre + cli, m));
             continue;
           }
           const de = ev.sender && ev.sender.id;

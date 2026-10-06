@@ -374,6 +374,92 @@ async function statusMensagens() {
   return out;
 }
 
+// ── Diagnóstico da Helena no Instagram/Messenger: confere tudo de uma vez ──
+async function diagnosticoMensagens() {
+  const appId = String(process.env.META_APP_ID || '1110281681853167');
+  const segredo = process.env.META_APP_SECRET || '';
+  const appToken = appId + '|' + segredo;
+  const itens = [];
+  const add = (ok, titulo, detalhe = '', acao = '') => itens.push({ ok, titulo, detalhe, acao });
+
+  add(!!segredo, 'META_APP_SECRET na Vercel', segredo ? 'cadastrada' : 'faltando', segredo ? '' : 'Cadastrar a Chave Secreta do app Holy CRM e fazer Redeploy');
+  const vt = process.env.WHATSAPP_VERIFY_TOKEN || '';
+  add(vt.length >= 12, 'WHATSAPP_VERIFY_TOKEN na Vercel', vt.length >= 12 ? 'cadastrada' : 'faltando ou com menos de 12 caracteres');
+
+  let segredoOk = false;
+  if (segredo) {
+    try {
+      const d = (await graph('debug_token', 'GET', { input_token: TOKEN() }, appToken)).data || {};
+      segredoOk = true;
+      add(true, 'Chave Secreta do app confere', 'a Meta aceitou a META_APP_SECRET (as assinaturas do webhook vão bater)');
+      const scopes = d.scopes || [];
+      const faltam = ['pages_messaging', 'instagram_manage_messages', 'instagram_basic', 'pages_manage_metadata', 'pages_show_list'].filter((p) => !scopes.includes(p));
+      add(!!d.is_valid && !faltam.length, 'Token (META_ACCESS_TOKEN)',
+        d.is_valid ? (faltam.length ? 'faltam permissões: ' + faltam.join(', ') : 'válido · ' + scopes.length + ' permissões, incluindo as de mensagens') : 'inválido' + (d.error ? ': ' + d.error.message : ''),
+        d.is_valid && !faltam.length ? '' : 'Gerar token novo do usuário do sistema marcando as permissões que faltam');
+      if (d.app_id && String(d.app_id) !== appId) add(false, 'Token é de outro app', 'app do token: ' + d.app_id, 'Gerar o token escolhendo o app Holy CRM');
+    } catch (e) {
+      add(false, 'Chave Secreta do app confere', e.message, /secret|signature|client/i.test(e.message) ? 'A META_APP_SECRET na Vercel não é a Chave Secreta do app Holy CRM: copiar de novo (Configurações do app > Básico) e fazer Redeploy' : '');
+    }
+  }
+
+  if (segredoOk) {
+    try {
+      const subs = (await graph(`${appId}/subscriptions`, 'GET', {}, appToken)).data || [];
+      for (const [obj, nome] of [['page', 'Messenger'], ['instagram', 'Instagram']]) {
+        const s = subs.find((x) => x.object === obj);
+        const campos = s ? (s.fields || []).map((f) => f.name || f) : [];
+        const urlOk = !!(s && /\/api\/whatsapp/.test(s.callback_url || ''));
+        add(!!(s && s.active !== false && urlOk && campos.includes('messages')), 'Webhook do app para o ' + nome,
+          s ? `${s.active === false ? 'INATIVO · ' : ''}${s.callback_url} · campos: ${campos.join(', ') || 'nenhum'}` : 'não cadastrado',
+          s && urlOk && campos.includes('messages') ? '' : 'Clicar em "Conectar Instagram e Messenger" de novo');
+      }
+    } catch (e) { add(false, 'Webhooks do app', e.message); }
+  }
+
+  try {
+    const r = await graph(`${PAGE()}/subscribed_apps`, 'GET', {}, await pageToken());
+    const lista = r.data || [];
+    const meu = lista.find((a) => String(a.id) === appId);
+    add(!!(meu && (meu.subscribed_fields || []).includes('messages')), 'Página Holy Imóveis inscrita no app', meu ? 'campos: ' + (meu.subscribed_fields || []).join(', ') : 'o app Holy CRM não está inscrito', meu ? '' : 'Clicar em "Conectar Instagram e Messenger"');
+    const outros = lista.filter((a) => String(a.id) !== appId).map((a) => (a.name || 'app') + ' (' + a.id + ')' + ((a.subscribed_fields || []).includes('messages') ? ' · recebe mensagens' : ''));
+    if (outros.length) add(null, 'Outros apps inscritos na Página', outros.join(' · '), 'Só importa se as mensagens chegarem como "standby" no diário abaixo');
+  } catch (e) { add(false, 'Página inscrita no app', e.message); }
+
+  try {
+    const j = await graph(PAGE(), 'GET', { fields: 'instagram_business_account{id,username}' });
+    const ig = j.instagram_business_account;
+    add(!!ig, 'Instagram ligado à Página', ig ? '@' + ig.username + ' · ' + ig.id : 'nenhuma conta do Instagram ligada à Página');
+  } catch (e) { add(false, 'Instagram ligado à Página', e.message); }
+
+  const cfgR = (await sql.query("SELECT valor FROM crm_docs WHERE chave = 'wa_config'"))[0];
+  const cfg = (cfgR && cfgR.valor) || {};
+  add(cfg.ativo !== false && cfg.canaisMeta !== false, 'Helena ligada no CRM',
+    cfg.ativo === false ? 'o assistente está desligado' : cfg.canaisMeta === false ? 'está em "Helena só no WhatsApp"' : 'ligada para Instagram e Messenger',
+    cfg.ativo === false || cfg.canaisMeta === false ? 'Ligar nos botões verdes do topo de Conversas' : '');
+
+  const logR = (await sql.query("SELECT valor FROM crm_docs WHERE chave = 'webhook_log'"))[0];
+  const chegadas = (Array.isArray(logR && logR.valor) ? logR.valor : []).filter((c) => c.object === 'page' || c.object === 'instagram' || c.status !== 200);
+  const conversas = await sql.query(`SELECT c.wa_id, c.nome, c.pausado, c.motivo, c.ultima_msg,
+      (SELECT count(*)::int FROM wa_mensagens m WHERE m.wa_id = c.wa_id AND m.papel = 'cliente') AS do_cliente,
+      (SELECT count(*)::int FROM wa_mensagens m WHERE m.wa_id = c.wa_id AND m.papel = 'assistente') AS da_helena
+    FROM wa_conversas c WHERE c.wa_id LIKE 'ig:%' OR c.wa_id LIKE 'fb:%' ORDER BY c.ultima_msg DESC LIMIT 10`);
+
+  // Conclusão em português simples
+  let conclusao;
+  const vermelho = itens.find((i) => i.ok === false);
+  const evs = chegadas.flatMap((c) => c.eventos || []);
+  if (vermelho) conclusao = 'Corrigir primeiro: ' + vermelho.titulo + (vermelho.acao ? ' → ' + vermelho.acao : '') + '.';
+  else if (chegadas.some((c) => c.status === 401)) conclusao = 'A Meta está entregando, mas a assinatura não confere: a META_APP_SECRET na Vercel não é a do app Holy CRM, ou faltou Redeploy depois de trocá-la.';
+  else if (evs.some((e) => e.startsWith('standby'))) conclusao = 'As mensagens chegam como "standby": outro app (ou a caixa de entrada da Meta com automação) está no controle das conversas da Página. É preciso tornar o Holy CRM o app principal em Página > Configurações > Mensagens avançadas.';
+  else if (!evs.some((e) => e === 'mensagem')) conclusao = 'Tudo configurado, mas nenhuma mensagem de cliente chegou. Causa mais provável: as permissões de mensagens do app estão com Acesso Padrão; assim a Meta só entrega mensagens de quem tem função no app Holy CRM. Teste mandando de uma conta que seja administradora/testadora do app, ou solicite o Acesso Avançado.';
+  else if (conversas.some((c) => c.pausado && /não conseguiu responder/.test(c.motivo || ''))) conclusao = 'As mensagens chegam, mas a Helena falhou ao responder. Veja o motivo na conversa abaixo.';
+  else if (conversas.some((c) => c.da_helena > 0)) conclusao = 'Funcionando: mensagens chegaram e a Helena respondeu.';
+  else conclusao = 'As mensagens chegam. Se a Helena não respondeu, veja o motivo nas conversas abaixo (pausada, desligada etc.).';
+
+  return { itens, chegadas: chegadas.slice(0, 15), conversas, conclusao };
+}
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
   const s = await sessao(req).catch(() => null);
@@ -383,7 +469,7 @@ export default async function handler(req, res) {
     await ensureSchema();
     const b = req.method === 'POST' ? body(req) : (req.query || {});
     const acao = b.acao || (req.query || {}).acao;
-    const PERM = { conectarMensagens: 'meta.campanha', statusMensagens: 'meta.ver', status: 'meta.ver', metricas: 'meta.ver', puxarLeads: 'meta.ver', publicarIG: 'meta.publicar', sugerir: 'meta.campanha', criar: 'meta.campanha', statusCampanha: 'meta.campanha' };
+    const PERM = { diagnosticoMensagens: 'meta.campanha', conectarMensagens: 'meta.campanha', statusMensagens: 'meta.ver', status: 'meta.ver', metricas: 'meta.ver', puxarLeads: 'meta.ver', publicarIG: 'meta.publicar', sugerir: 'meta.campanha', criar: 'meta.campanha', statusCampanha: 'meta.campanha' };
     if (PERM[acao] && !pode(s, PERM[acao])) return err(res, 403, 'Seu perfil não tem acesso a esta função da Meta.');
     if (acao === 'status') {
       if (!configurado()) return ok(res, { configurado: false, faltando: ['META_ACCESS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID'].filter((k) => !process.env[k]) });
@@ -411,6 +497,7 @@ export default async function handler(req, res) {
     if (acao === 'publicarIG') return ok(res, { publicados: await publicarIG(b) });
     if (acao === 'conectarMensagens') return ok(res, { passos: await conectarMensagens(req) });
     if (acao === 'statusMensagens') return ok(res, await statusMensagens());
+    if (acao === 'diagnosticoMensagens') return ok(res, await diagnosticoMensagens());
     return err(res, 400, 'Ação desconhecida.');
   } catch (e) {
     if (e && e.message === 'DB_NAO_CONFIGURADO') return fail(res, e);
