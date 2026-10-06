@@ -3,6 +3,7 @@
 // raio mínimo nas cidades. O "público ideal" é construído dentro dessas regras.
 import { sql, ensureSchema, cors, body, ok, err, fail } from './_lib.js';
 import { sessao, pode } from './_auth.js';
+import { tokenPaginaSalvo, infoTokenPagina, salvarTokenPagina, apagarTokenPagina } from './_metatoken.js';
 export const maxDuration = 60;
 
 const V = () => process.env.META_API_VERSION || 'v25.0';
@@ -33,6 +34,8 @@ async function graph(path, method = 'GET', params = {}, token) {
 }
 let _pageToken = null, _igId = undefined;
 async function pageToken() {
+  const salvo = await tokenPaginaSalvo(); // Plano B: token da Página pelo login do Édipo
+  if (salvo) return salvo;
   if (_pageToken) return _pageToken;
   const j = await graph(PAGE(), 'GET', { fields: 'access_token,name' });
   _pageToken = j.access_token || TOKEN();
@@ -41,7 +44,7 @@ async function pageToken() {
 async function igUser() {
   if (process.env.META_IG_USER_ID) return process.env.META_IG_USER_ID;
   if (_igId !== undefined) return _igId;
-  try { const j = await graph(PAGE(), 'GET', { fields: 'instagram_business_account' }); _igId = j.instagram_business_account ? j.instagram_business_account.id : null; }
+  try { const j = await graph(PAGE(), 'GET', { fields: 'instagram_business_account' }, (await tokenPaginaSalvo()) || undefined); _igId = j.instagram_business_account ? j.instagram_business_account.id : null; }
   catch (e) { _igId = null; }
   return _igId;
 }
@@ -386,20 +389,36 @@ async function diagnosticoMensagens() {
   const vt = process.env.WHATSAPP_VERIFY_TOKEN || '';
   add(vt.length >= 12, 'WHATSAPP_VERIFY_TOKEN na Vercel', vt.length >= 12 ? 'cadastrada' : 'faltando ou com menos de 12 caracteres');
 
+  // Chave Secreta: o próprio app responde com o token do app?
   let segredoOk = false;
   if (segredo) {
+    try { await graph(appId, 'GET', { fields: 'name' }, appToken); segredoOk = true; add(true, 'Chave Secreta do app confere', 'a Meta aceitou a META_APP_SECRET (as assinaturas do webhook vão bater)'); }
+    catch (e) { add(false, 'Chave Secreta do app confere', e.message, 'A META_APP_SECRET na Vercel não é a Chave Secreta do app Holy CRM: copiar de novo (Configurações do app > Básico) e fazer Redeploy'); }
+  }
+
+  // Token da Página pelo seu login (Plano B)
+  const salvo = await tokenPaginaSalvo();
+  let paginaOk = false;
+  if (salvo && segredoOk) {
+    try {
+      const d = (await graph('debug_token', 'GET', { input_token: salvo }, appToken)).data || {};
+      const info = (await infoTokenPagina()) || {};
+      const faltam = ['pages_messaging', 'instagram_manage_messages'].filter((p) => !(d.scopes || []).includes(p));
+      paginaOk = !!d.is_valid && !faltam.length;
+      add(paginaOk, 'Token da Página pelo seu login', d.is_valid ? (faltam.length ? 'faltam permissões: ' + faltam.join(', ') : `válido · ${info.origem || ''}${info.salvo_em ? ' em ' + new Date(info.salvo_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : ''} · expira: ${d.expires_at ? new Date(d.expires_at * 1000).toLocaleDateString('pt-BR') : 'nunca'}`) : 'inválido (senha trocada ou acesso removido?)', paginaOk ? '' : 'Colar um token novo em "Token da Página"');
+    } catch (e) { add(false, 'Token da Página pelo seu login', e.message, 'Colar um token novo em "Token da Página"'); }
+  } else if (!salvo) {
+    add(null, 'Token da Página pelo seu login', 'não cadastrado', 'Se o token do usuário do sistema estiver bloqueado, cadastre em "Token da Página" (botão no topo de Conversas)');
+  }
+
+  // Token do usuário do sistema (META_ACCESS_TOKEN): anúncios, leads e, sem o Plano B, mensagens
+  if (segredoOk) {
     try {
       const d = (await graph('debug_token', 'GET', { input_token: TOKEN() }, appToken)).data || {};
-      segredoOk = true;
-      add(true, 'Chave Secreta do app confere', 'a Meta aceitou a META_APP_SECRET (as assinaturas do webhook vão bater)');
-      const scopes = d.scopes || [];
-      const faltam = ['pages_messaging', 'instagram_manage_messages', 'instagram_basic', 'pages_manage_metadata', 'pages_show_list'].filter((p) => !scopes.includes(p));
-      add(!!d.is_valid && !faltam.length, 'Token (META_ACCESS_TOKEN)',
-        d.is_valid ? (faltam.length ? 'faltam permissões: ' + faltam.join(', ') : 'válido · ' + scopes.length + ' permissões, incluindo as de mensagens') : 'inválido' + (d.error ? ': ' + d.error.message : ''),
-        d.is_valid && !faltam.length ? '' : 'Gerar token novo do usuário do sistema marcando as permissões que faltam');
-      if (d.app_id && String(d.app_id) !== appId) add(false, 'Token é de outro app', 'app do token: ' + d.app_id, 'Gerar o token escolhendo o app Holy CRM');
+      await graph(PAGE(), 'GET', { fields: 'name' }); // testa o uso real (pega o "API access blocked")
+      add(!!d.is_valid, 'Token do usuário do sistema (META_ACCESS_TOKEN)', d.is_valid ? 'válido · ' + (d.scopes || []).length + ' permissões' : 'inválido');
     } catch (e) {
-      add(false, 'Chave Secreta do app confere', e.message, /secret|signature|client/i.test(e.message) ? 'A META_APP_SECRET na Vercel não é a Chave Secreta do app Holy CRM: copiar de novo (Configurações do app > Básico) e fazer Redeploy' : '');
+      add(paginaOk ? null : false, 'Token do usuário do sistema (META_ACCESS_TOKEN)', e.message, paginaOk ? 'Anúncios e leads ficam parados até a Meta liberar; a Helena usa o token da Página' : 'Cadastrar o token da Página pelo seu login (Plano B) ou resolver a restrição na Meta');
     }
   }
 
@@ -427,7 +446,7 @@ async function diagnosticoMensagens() {
   } catch (e) { add(false, 'Página inscrita no app', e.message); }
 
   try {
-    const j = await graph(PAGE(), 'GET', { fields: 'instagram_business_account{id,username}' });
+    const j = await graph(PAGE(), 'GET', { fields: 'instagram_business_account{id,username}' }, await pageToken());
     const ig = j.instagram_business_account;
     add(!!ig, 'Instagram ligado à Página', ig ? '@' + ig.username + ' · ' + ig.id : 'nenhuma conta do Instagram ligada à Página');
   } catch (e) { add(false, 'Instagram ligado à Página', e.message); }
@@ -469,7 +488,7 @@ export default async function handler(req, res) {
     await ensureSchema();
     const b = req.method === 'POST' ? body(req) : (req.query || {});
     const acao = b.acao || (req.query || {}).acao;
-    const PERM = { diagnosticoMensagens: 'meta.campanha', conectarMensagens: 'meta.campanha', statusMensagens: 'meta.ver', status: 'meta.ver', metricas: 'meta.ver', puxarLeads: 'meta.ver', publicarIG: 'meta.publicar', sugerir: 'meta.campanha', criar: 'meta.campanha', statusCampanha: 'meta.campanha' };
+    const PERM = { salvarTokenPagina: 'meta.campanha', apagarTokenPagina: 'meta.campanha', diagnosticoMensagens: 'meta.campanha', conectarMensagens: 'meta.campanha', statusMensagens: 'meta.ver', status: 'meta.ver', metricas: 'meta.ver', puxarLeads: 'meta.ver', publicarIG: 'meta.publicar', sugerir: 'meta.campanha', criar: 'meta.campanha', statusCampanha: 'meta.campanha' };
     if (PERM[acao] && !pode(s, PERM[acao])) return err(res, 403, 'Seu perfil não tem acesso a esta função da Meta.');
     if (acao === 'status') {
       if (!configurado()) return ok(res, { configurado: false, faltando: ['META_ACCESS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID'].filter((k) => !process.env[k]) });
@@ -498,6 +517,8 @@ export default async function handler(req, res) {
     if (acao === 'conectarMensagens') return ok(res, { passos: await conectarMensagens(req) });
     if (acao === 'statusMensagens') return ok(res, await statusMensagens());
     if (acao === 'diagnosticoMensagens') return ok(res, await diagnosticoMensagens());
+    if (acao === 'salvarTokenPagina') return ok(res, { info: await salvarTokenPagina(b.token, s.nome || s.email || '') });
+    if (acao === 'apagarTokenPagina') { await apagarTokenPagina(); return ok(res); }
     return err(res, 400, 'Ação desconhecida.');
   } catch (e) {
     if (e && e.message === 'DB_NAO_CONFIGURADO') return fail(res, e);

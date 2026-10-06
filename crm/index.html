@@ -18956,6 +18956,7 @@ function ConversasPage() {
     const [canais, setCanais] = useState(null);
     const [conectando, setConectando] = useState("");
     const [diag, setDiag] = useState(null);
+    const [tokPag, setTokPag] = useState(false);
     async function rodarDiagnostico() {
         setDiag({ carregando: true });
         try { setDiag(await metaApi("diagnosticoMensagens")); } catch (e) { setDiag({ erro: e.message }); }
@@ -18975,12 +18976,14 @@ function ConversasPage() {
             dados && React.createElement(Chip, { label: dados.whatsapp ? "WhatsApp conectado" + (dados.provedor ? " (" + dados.provedor + ")" : "") : "WhatsApp ainda não conectado", color: dados.whatsapp ? C.success : C.warn }),
             canais && React.createElement(Chip, { label: canais.messenger ? "Instagram e Messenger conectados" : "Instagram e Messenger não conectados", color: canais.messenger ? C.success : C.warn }),
             holyPode("configCompleta") && canais && canais.messenger && React.createElement("button", { onClick: () => { const n = Object.assign({}, cfg, { canaisMeta: !metaOn }); setCfg(n); setCfgSalva(n); }, style: { padding: "7px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", border: "none", background: metaOn ? C.success : C.muted, color: "#fff" } }, metaOn ? "● Helena no Instagram/Messenger" : "○ Helena só no WhatsApp"),
+            holyPode("configCompleta") && React.createElement("button", { onClick: () => setTokPag(!tokPag), style: { padding: "7px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${C.border}`, background: C.white, color: C.inkMid } }, "🔑 Token da Página"),
             holyPode("configCompleta") && React.createElement("button", { onClick: rodarDiagnostico, style: { padding: "7px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${C.border}`, background: C.white, color: C.inkMid } }, "🔍 Diagnóstico Instagram/Messenger"),
             holyPode("configCompleta") && React.createElement("button", { onClick: alternarGeral, style: { padding: "7px 12px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", border: "none", background: ativo ? C.success : C.muted, color: "#fff" } }, ativo ? "● Assistente ligado" : "○ Assistente desligado"))),
         holyPode("configCompleta") && canais && !canais.messenger && React.createElement("div", { style: { marginTop: 10, padding: "10px 14px", background: "#fff8e6", border: `0.5px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.inkMid, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } },
             "Para a Helena atender também no Direct do Instagram e no Messenger da Página:",
             React.createElement(PBtn, { sm: true, onClick: conectarCanais }, "Conectar Instagram e Messenger")),
         conectando && React.createElement("div", { style: { marginTop: 8, fontSize: 12, color: C.inkMid } }, conectando),
+        tokPag && React.createElement(TokenPaginaBox, { fechar: () => setTokPag(false), depois: () => { metaApi("statusMensagens").then(setCanais).catch(() => {}); rodarDiagnostico(); } }),
         diag && React.createElement(DiagMensagens, { diag, fechar: () => setDiag(null), rodar: rodarDiagnostico }));
     if (aba === "config") return React.createElement("div", null, topo, React.createElement(WaConfig, { cfg, setCfg, salvar: salvarCfg, salvo }));
     const lista = React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: "hidden", alignSelf: "start" } },
@@ -19421,6 +19424,38 @@ function Dashboard({ clientes, imoveis, timeline, setPage }) {
 // MARKETING: anúncios na Meta (campanhas de leads) e criador de posts
 // ═══════════════════════════════════════════════════════════════════════
 const abrirMkt = (modo, item, kind) => window.dispatchEvent(new CustomEvent("holy-mkt", { detail: { modo, item, kind } }));
+// Token da Página pelo login do Édipo (Plano B quando o usuário do sistema da Meta está bloqueado)
+function TokenPaginaBox({ fechar, depois }) {
+    const [tok, setTok] = useState("");
+    const [msg, setMsg] = useState("");
+    const [ocupado, setOcupado] = useState(false);
+    async function salvar() {
+        setOcupado(true); setMsg("Conferindo com a Meta…");
+        try { const d = await metaApi("salvarTokenPagina", { token: tok }); setTok(""); setMsg("✅ Token salvo para a Página " + (d.info.pagina || "") + " · expira: " + d.info.expira); depois && depois(); }
+        catch (e) { setMsg("❌ " + e.message); }
+        setOcupado(false);
+    }
+    async function apagar() {
+        if (!confirm("Apagar o token da Página? A Helena volta a usar o token do usuário do sistema.")) return;
+        try { await metaApi("apagarTokenPagina"); setMsg("Token apagado."); depois && depois(); } catch (e) { setMsg("❌ " + e.message); }
+    }
+    const passo = t => React.createElement("li", { style: { marginBottom: 3 } }, t);
+    return React.createElement("div", { style: { marginTop: 10, padding: "14px 16px", background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, fontSize: 12, color: C.inkMid, lineHeight: 1.55 } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.ink } }, "🔑 Token da Página (pelo seu login)"),
+            React.createElement("button", { onClick: fechar, style: { padding: "5px 10px", borderRadius: 14, fontSize: 11, cursor: "pointer", border: `0.5px solid ${C.border}`, background: C.white, color: C.inkMid } }, "Fechar")),
+        React.createElement("div", { style: { marginBottom: 6 } }, "Usado pela Helena no Instagram e Messenger quando o usuário do sistema da Meta está bloqueado. O token fica só no servidor e não aparece para ninguém."),
+        React.createElement("ol", { style: { margin: "0 0 8px 18px", padding: 0 } },
+            passo("developers.facebook.com/tools/explorer · App da Meta: Holy CRM · Usuário ou Página: Token do usuário."),
+            passo("Permissões: pages_show_list, pages_read_engagement, pages_manage_metadata, pages_messaging, instagram_basic, instagram_manage_messages, instagram_content_publish, business_management."),
+            passo("Generate Access Token · autorize marcando a Página Holy Imóveis e o Instagram."),
+            passo("Copie o token (ícone ao lado do campo) e cole aqui.")),
+        React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+            React.createElement("input", { type: "password", value: tok, onChange: e => setTok(e.target.value), placeholder: "Cole aqui o token (EAA…)", autoComplete: "off", style: { flex: 1, minWidth: 220, padding: "8px 10px", borderRadius: 8, border: `0.5px solid ${C.border}`, fontSize: 12 } }),
+            React.createElement(PBtn, { sm: true, onClick: salvar, disabled: ocupado || tok.length < 50 }, ocupado ? "Salvando…" : "Salvar token"),
+            React.createElement("button", { onClick: apagar, style: { padding: "6px 10px", borderRadius: 8, fontSize: 11, cursor: "pointer", border: `0.5px solid ${C.border}`, background: C.white, color: C.muted } }, "Apagar token")),
+        msg && React.createElement("div", { style: { marginTop: 8, color: C.ink } }, msg));
+}
 // Painel do Diagnóstico da Helena no Instagram/Messenger (Conversas > topo)
 function DiagMensagens({ diag, fechar, rodar }) {
     const caixa = { marginTop: 10, padding: "14px 16px", background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, fontSize: 12, color: C.inkMid, lineHeight: 1.55 };
