@@ -407,6 +407,10 @@ export async function processarConversa(waId, site, nomePerfil) {
     try { await avisarEdipo(cfg, { nome: out.nome_cliente || nomePerfil || '', telefone: cfg._canal === 'whatsapp' ? telefoneBR(waId) : ((out.telefone_cliente || 'sem telefone') + ' · via ' + NOME_CANAL[cfg._canal]), motivo: MOTIVOS[out.motivo_transferencia] || MOTIVOS.outro, resumo: out.resumo || '' }); }
     catch (e) { console.error('Aviso ao Édipo falhou', e); }
   }
+  // Instagram/Messenger nem sempre informam o nome do perfil: usa o nome que o cliente disse à Helena
+  if (out.nome_cliente && String(out.nome_cliente).trim()) {
+    try { await sql.query('UPDATE wa_conversas SET nome = $2 WHERE wa_id = $1 AND (nome IS NULL OR nome = \'\')', [waId, String(out.nome_cliente).trim().slice(0, 80)]); } catch (e) { /* não é crítico */ }
+  }
   try { await sincronizarCRM(waId, conv, out, nomePerfil); } catch (e) { console.error('CRM falhou', e); }
 }
 
