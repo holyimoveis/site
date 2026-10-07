@@ -19328,6 +19328,109 @@ function TimelinePage({ timeline, imoveis }) {
                     React.createElement("div", { style: { fontSize: 13, color: C.inkMid, lineHeight: 1.6 } }, t.desc))));
         }));
 }
+// ── Dashboard de leads: origem, funil de conversão e tempo de atendimento ──
+const LD_ORIGENS = ["Site", "Meta Ads", "Instagram", "Messenger", "WhatsApp", "Indicação", "Outros"];
+function ldOrigem(o) {
+    const x = String(o || "").toLowerCase();
+    if (/^meta/.test(x)) return "Meta Ads";
+    if (/site|landing/.test(x)) return "Site";
+    if (/insta/.test(x)) return "Instagram";
+    if (/facebook|messenger/.test(x)) return "Messenger";
+    if (/whats/.test(x)) return "WhatsApp";
+    if (/indica/.test(x)) return "Indicação";
+    return "Outros";
+}
+const ldDur = s => s == null ? "—" : s < 90 ? Math.round(s) + " s" : s < 5400 ? Math.round(s / 60) + " min" : s < 172800 ? (s / 3600).toFixed(1).replace(".", ",") + " h" : Math.round(s / 86400) + " dias";
+const ldDia = d => { const t = new Date(String(d || "").slice(0, 10) + "T12:00:00"); return isNaN(t) ? null : t; };
+function LdBarras({ linhas, total, cor }) {
+    const max = Math.max(1, ...linhas.map(l => l.v));
+    return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+        linhas.map(l => React.createElement("div", { key: l.k, title: `${l.k}: ${l.v}${total ? " (" + Math.round(l.v / total * 100) + "%)" : ""}${l.extra ? " · " + l.extra : ""}`, style: { display: "grid", gridTemplateColumns: "100px 1fr 118px", gap: 10, alignItems: "center", fontSize: 12 } },
+            React.createElement("div", { style: { color: C.inkMid, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, l.k),
+            React.createElement("div", { style: { background: C.oliveGhost || "#eef1e8", borderRadius: 4, height: 14, position: "relative" } },
+                React.createElement("div", { style: { width: Math.max(l.v ? 2 : 0, l.v / max * 100) + "%", height: "100%", background: cor || C.olive, borderRadius: "0 4px 4px 0" } })),
+            React.createElement("div", { style: { color: C.ink, fontFamily: "'DM Mono',monospace", fontSize: 12, textAlign: "right" } }, l.v + (total ? " · " + Math.round(l.v / total * 100) + "%" : ""), l.extra && React.createElement("div", { style: { fontSize: 10, color: C.muted, fontFamily: "inherit" } }, l.extra)))));
+}
+function LeadsDashboard({ clientes, timeline }) {
+    const [dias, setDias] = useState(30);
+    const [met, setMet] = useState(null);
+    useEffect(() => {
+        if (!holyPode("conversas")) return;
+        setMet(null);
+        holyFetch("/api/conversas?metricas=1&dias=" + (dias || 3650)).then(r => r.json()).then(d => setMet(d.success ? d : { erro: d.error })).catch(() => setMet({ erro: "sem conexão" }));
+    }, [dias]);
+    const hoje = new Date();
+    const desde = dias ? new Date(hoje.getTime() - dias * 86400000) : null;
+    const leads = clientes.filter(c => { const d = ldDia(c.createdAt); return !desde || (d && d >= desde); });
+    const N = leads.length;
+    const humano = t => t && t.tipo !== "Nota interna" && !["Helena", "Sistema"].includes(t.autor);
+    const primeiroContato = {};
+    (timeline || []).forEach(t => { if (!humano(t) || !t.clienteId) return; const d = ldDia(t.data); if (d && (!primeiroContato[t.clienteId] || d < primeiroContato[t.clienteId])) primeiroContato[t.clienteId] = d; });
+    const semContato = leads.filter(c => !primeiroContato[c.id] && c.stage === "Prospecção");
+    const diasAteContato = leads.map(c => { const a = ldDia(c.createdAt), b = primeiroContato[c.id]; return a && b && b >= a ? (b - a) / 86400000 : null; }).filter(v => v != null);
+    const mediaContato = diasAteContato.length ? diasAteContato.reduce((s, v) => s + v, 0) / diasAteContato.length : null;
+    const idx = st => Math.max(0, KANBAN_STAGES.indexOf(st));
+    const avancados = leads.filter(c => idx(c.stage) >= 2).length;
+    // Origem
+    const porOrigem = LD_ORIGENS.map(k => { const g = leads.filter(c => ldOrigem(c.origem) === k); const av = g.filter(c => idx(c.stage) >= 2).length; return { k, v: g.length, extra: g.length ? Math.round(av / g.length * 100) + "% viram proposta" : "" }; }).filter(l => l.v > 0).sort((a, b) => b.v - a.v);
+    // Funil (o cliente só avança; conta quem chegou a cada etapa)
+    const funil = KANBAN_STAGES.map((st, i) => ({ k: st, v: leads.filter(c => idx(c.stage) >= i).length }));
+    // Semanas
+    const nSem = dias && dias <= 30 ? 6 : 12;
+    const semanas = Array.from({ length: nSem }, (_, i) => { const fim = new Date(hoje.getTime() - i * 7 * 86400000), ini = new Date(fim.getTime() - 7 * 86400000); return { ini, fim, v: clientes.filter(c => { const d = ldDia(c.createdAt); return d && d > ini && d <= fim; }).length }; }).reverse();
+    const maxSem = Math.max(1, ...semanas.map(s => s.v));
+    // Corretores
+    const porResp = {};
+    leads.forEach(c => { const k = c.responsavelNome || "Sem responsável"; const o = porResp[k] || (porResp[k] = { k, v: 0, q: 0, n: 0, sc: 0 }); o.v++; if (c.temp === "hot") o.q++; if (idx(c.stage) >= 3) o.n++; if (!primeiroContato[c.id] && c.stage === "Prospecção") o.sc++; });
+    const resp = Object.values(porResp).sort((a, b) => b.v - a.v);
+    const caixa = { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" };
+    const filtro = React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+        [[7, "7 dias"], [30, "30 dias"], [90, "90 dias"], [0, "Tudo"]].map(([v, l]) => React.createElement("button", { key: l, onClick: () => setDias(v), style: { padding: "7px 13px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${dias === v ? C.olive : C.border}`, background: dias === v ? C.olive : C.white, color: dias === v ? "#fff" : C.inkMid } }, l)));
+    const helena = met && !met.erro ? met : null;
+    return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 18 } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 } },
+            React.createElement("div", { style: { fontSize: 12, color: C.muted } }, holyPerfil() === "corretor" ? "Seus leads" : "Leads de toda a equipe", " · entrada no CRM ", dias ? "nos últimos " + dias + " dias" : "desde o início"),
+            filtro),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 } },
+            React.createElement(SC, { label: "Novos leads", value: N, sub: porOrigem[0] ? "mais de " + porOrigem[0].k : "" }),
+            React.createElement(SC, { label: "Chegaram à proposta", value: N ? Math.round(avancados / N * 100) + "%" : "—", sub: avancados + " leads", color: C.gold }),
+            React.createElement(SC, { label: "Quentes", value: leads.filter(c => c.temp === "hot").length, color: C.danger }),
+            React.createElement(SC, { label: "Sem atendimento", value: semContato.length, sub: "em prospecção, sem contato registrado", color: C.warn }),
+            React.createElement(SC, { label: "1º contato da equipe", value: mediaContato == null ? "—" : mediaContato < 1 ? "no dia" : mediaContato.toFixed(1).replace(".", ",") + " dias", sub: "média, pela timeline", color: C.oliveMid }),
+            holyPode("conversas") && React.createElement(SC, { label: "Resposta da Helena", value: helena ? ldDur(helena.respostaHelena) : "…", sub: helena ? helena.conversas + " conversas" : (met && met.erro) || "carregando", color: C.blue })),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 14 } },
+            React.createElement("div", { style: caixa }, React.createElement(SecT, null, "Origem dos leads"),
+                porOrigem.length ? React.createElement(LdBarras, { linhas: porOrigem, total: N }) : React.createElement("div", { style: { fontSize: 12, color: C.muted } }, "Nenhum lead no período.")),
+            React.createElement("div", { style: caixa }, React.createElement(SecT, null, "Funil de conversão"),
+                React.createElement(LdBarras, { linhas: funil, total: N, cor: C.oliveMid }),
+                React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 10 } }, "Quantos leads do período chegaram a cada etapa (o cliente só avança no funil)."))),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 14 } },
+            React.createElement("div", { style: caixa }, React.createElement(SecT, null, "Novos leads por semana"),
+                React.createElement("div", { style: { display: "flex", alignItems: "flex-end", gap: 6, height: 130, paddingTop: 16 } },
+                    semanas.map((s, i) => React.createElement("div", { key: i, title: `${s.ini.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} a ${s.fim.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}: ${s.v} leads`, style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", gap: 4 } },
+                        React.createElement("div", { style: { fontSize: 10, color: C.muted, fontFamily: "'DM Mono',monospace" } }, s.v || ""),
+                        React.createElement("div", { style: { width: "70%", maxWidth: 28, height: Math.max(s.v ? 3 : 1, s.v / maxSem * 90) + "px", background: s.v ? C.olive : C.border, borderRadius: "4px 4px 0 0" } }),
+                        React.createElement("div", { style: { fontSize: 9, color: C.muted } }, s.fim.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })))))),
+            holyPode("conversas") && React.createElement("div", { style: caixa }, React.createElement(SecT, null, "Helena e equipe nas conversas"),
+                !helena ? React.createElement("div", { style: { fontSize: 12, color: C.muted } }, met && met.erro ? "Não consegui carregar: " + met.erro : "Carregando…") :
+                React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10, fontSize: 12, color: C.inkMid } },
+                    React.createElement("div", null, "Primeira resposta da Helena: ", React.createElement("b", { style: { color: C.ink } }, ldDur(helena.respostaHelena)), " em média"),
+                    React.createElement("div", null, "Primeira resposta da equipe (quando assumiu): ", React.createElement("b", { style: { color: C.ink } }, ldDur(helena.respostaEquipe))),
+                    React.createElement("div", null, "Atendidas só pela Helena: ", React.createElement("b", { style: { color: C.ink } }, helena.soHelena), " · com a equipe: ", React.createElement("b", { style: { color: C.ink } }, helena.comEquipe)),
+                    Object.keys(helena.porCanal || {}).length ? React.createElement(LdBarras, { linhas: Object.entries(helena.porCanal).map(([k, o]) => ({ k, v: o.conversas, extra: o.comEquipe + " com a equipe" })), total: helena.conversas, cor: C.blue }) : React.createElement("div", { style: { color: C.muted } }, "Nenhuma conversa no período.")))),
+        holyPerfil() !== "corretor" && resp.length > 0 && React.createElement("div", { style: caixa }, React.createElement(SecT, null, "Por corretor"),
+            React.createElement("div", { style: { overflowX: "auto" } },
+                React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
+                    React.createElement("thead", null, React.createElement("tr", null, ["Responsável", "Leads", "Quentes", "Negociação+", "Sem atendimento"].map(h => React.createElement("th", { key: h, style: { textAlign: h === "Responsável" ? "left" : "right", padding: "6px 8px", color: C.muted, fontWeight: 600, fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", borderBottom: `0.5px solid ${C.border}` } }, h)))),
+                    React.createElement("tbody", null, resp.map(r => React.createElement("tr", { key: r.k }, [r.k, r.v, r.q, r.n, r.sc].map((v, i) => React.createElement("td", { key: i, style: { textAlign: i ? "right" : "left", padding: "7px 8px", borderBottom: `0.5px solid ${C.border}`, color: i === 4 && v ? C.danger : C.ink, fontFamily: i ? "'DM Mono',monospace" : "inherit" } }, v)))))))),
+        semContato.length > 0 && React.createElement("div", { style: caixa }, React.createElement(SecT, null, "Leads aguardando o primeiro contato"),
+            semContato.slice(0, 12).map(c => React.createElement("div", { key: c.id, style: { display: "flex", gap: 10, alignItems: "center", padding: "7px 0", borderBottom: `0.5px solid ${C.border}`, fontSize: 12, flexWrap: "wrap" } },
+                React.createElement("b", { style: { color: C.ink, minWidth: 140 } }, c.nome),
+                React.createElement(Bdg, { label: ldOrigem(c.origem), sm: true }),
+                React.createElement("span", { style: { color: C.muted } }, "entrou em " + (ldDia(c.createdAt) ? ldDia(c.createdAt).toLocaleDateString("pt-BR") : "—")),
+                holyPerfil() !== "corretor" && React.createElement("span", { style: { color: C.muted, marginLeft: "auto" } }, c.responsavelNome || "sem responsável"))),
+            semContato.length > 12 && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 8 } }, "+ " + (semContato.length - 12) + " outros em Clientes.")));
+}
 function Dashboard({ clientes, imoveis, timeline, setPage }) {
     const totC = imoveis.filter(i => i.status === "Disponível").reduce((s, i) => s + i.valor, 0);
     const hj = today();
@@ -20667,6 +20770,7 @@ function App() {
     }
     const nav = [
         { k: "dashboard", i: "⌂", l: "Dashboard" },
+        { k: "leads", i: "📊", l: "Leads" },
         { k: "clientes", i: "◎", l: "Clientes" },
         { k: "conversas", i: "💬", l: "Conversas" },
         { k: "campanhas", i: "📣", l: "Campanhas" },
@@ -20682,7 +20786,7 @@ function App() {
         { k: "usuarios", i: "🔑", l: "Usuários" },
     ].filter(n => ({
         campanhas: holyPode("campanhas"), conversas: holyPode("conversas"), equipe: holyPode("equipe"), usuarios: holyPode("usuarios"),
-        matching: holyPerfil() !== "secretaria", ia: holyPerfil() !== "secretaria",
+        matching: holyPerfil() !== "secretaria", ia: holyPerfil() !== "secretaria", leads: holyPerfil() !== "secretaria",
     })[n.k] !== false).map(n => n.k === "config" && !holyPode("configCompleta") ? Object.assign({}, n, { l: "Minha conta" }) : n);
     const totC = imoveis.filter(i => i.status === "Disponível").reduce((s, i) => s + i.valor, 0);
     return React.createElement(React.Fragment, null,
@@ -20733,6 +20837,7 @@ function App() {
                             "i"))),
                 React.createElement("div", { style: { flex: 1, overflowY: "auto", padding: isM ? "14px 12px 80px" : 22 } },
                     page === "dashboard" && React.createElement(Dashboard, { clientes: clientes, imoveis: imoveis, timeline: timeline, setPage: setPage }),
+                    page === "leads" && React.createElement(LeadsDashboard, { clientes: clientes, timeline: timeline }),
                     page === "clientes" && React.createElement(ClientesPage, { clientes: clientes, imoveis: imoveis, timeline: timeline, onAdd: addCli, onEdit: editCli, onAddTL: addTL, onDelete: holyPode("excluirCliente") ? delCli : null }),
                     page === "imoveis" && React.createElement(ImoveisPage, { imoveis: imoveis, clientes: clientes, onAdd: addIm, onEdit: editIm, onDelete: id => setImoveis(p => p.filter(i => i.id !== id)) }),
                     page === "empreendimentos" && React.createElement(EmpreendimentosPage, null),

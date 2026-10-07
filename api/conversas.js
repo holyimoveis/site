@@ -25,6 +25,32 @@ export default async function handler(req, res) {
       return !!(c && c.cliente_id && meus.has(c.cliente_id));
     };
     if (req.method === 'GET') {
+      // Métricas para o Dashboard de leads: tempo de resposta da Helena e da equipe, por canal
+      if (q.metricas) {
+        const dias = Math.min(Math.max(parseInt(q.dias, 10) || 30, 1), 3650);
+        const rows = await sql.query(`SELECT m.wa_id, c.cliente_id, c.pausado,
+            min(m.criado_em) FILTER (WHERE m.papel = 'cliente') AS c1,
+            min(m.criado_em) FILTER (WHERE m.papel = 'assistente') AS a1,
+            min(m.criado_em) FILTER (WHERE m.papel = 'humano') AS h1,
+            count(*) FILTER (WHERE m.papel = 'cliente')::int AS nc
+          FROM wa_mensagens m LEFT JOIN wa_conversas c ON c.wa_id = m.wa_id
+          WHERE m.wa_id IN (SELECT wa_id FROM wa_mensagens WHERE papel = 'cliente' GROUP BY wa_id HAVING min(criado_em) > now() - ($1 || ' days')::interval)
+          GROUP BY m.wa_id, c.cliente_id, c.pausado`, [String(dias)]);
+        const lista = meus ? rows.filter((r) => r.cliente_id && meus.has(r.cliente_id)) : rows;
+        const canal = (id) => (String(id).startsWith('ig:') ? 'Instagram' : String(id).startsWith('fb:') ? 'Messenger' : 'WhatsApp');
+        const seg = (a, b) => (a && b && new Date(b) > new Date(a) ? (new Date(b) - new Date(a)) / 1000 : null);
+        const media = (v) => { const x = v.filter((n) => n != null); return x.length ? Math.round(x.reduce((s, n) => s + n, 0) / x.length) : null; };
+        const porCanal = {};
+        for (const r of lista) {
+          const k = canal(r.wa_id); const o = porCanal[k] || (porCanal[k] = { conversas: 0, soHelena: 0, comEquipe: 0 });
+          o.conversas++; if (r.h1) o.comEquipe++; else if (r.a1) o.soHelena++;
+        }
+        return ok(res, { dias, conversas: lista.length, porCanal,
+          respostaHelena: media(lista.map((r) => seg(r.c1, r.a1))),
+          respostaEquipe: media(lista.map((r) => seg(r.c1, r.h1))),
+          soHelena: lista.filter((r) => r.a1 && !r.h1).length,
+          comEquipe: lista.filter((r) => r.h1).length });
+      }
       if (q.wa_id) {
         if (!(await permitida(q.wa_id))) return err(res, 403, 'Esta conversa não é de um cliente seu.');
         const msgs = (await sql.query('SELECT id, papel, texto, criado_em FROM wa_mensagens WHERE wa_id = $1 ORDER BY id DESC LIMIT 300', [String(q.wa_id)])).reverse();
