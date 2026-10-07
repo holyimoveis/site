@@ -18243,6 +18243,7 @@ ${imovel.exclusividade ? `<div style="font-size:10px;padding:5px 12px;background
                 React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: () => onEdit(imovel) }, "\u270F\uFE0F Editar"),
                 holyPode("anunciar") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.blue, onClick: () => abrirMkt("campanha", imovel, "im") }, "📣 Anunciar"),
                 holyPode("post") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, onClick: () => abrirMkt("post", imovel, "im") }, "📸 Post"),
+                holyPode("post") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.oliveMid, onClick: () => abrirMkt("marketplace", imovel, "im") }, "🏷 Marketplace"),
                 holyPode("excluirImovel") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.danger, onClick: () => { if (window.confirm("Excluir \"" + imovel.nome + "\"?\n\nEsta a\u00E7\u00E3o n\u00E3o pode ser desfeita.")) onDelete(imovel.id); } }, "\uD83D\uDDD1\uFE0F Excluir"),
                 React.createElement("button", { onClick: onClose, style: { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.muted } }, "\u00D7"))),
         ((_c = imovel.fotos) === null || _c === void 0 ? void 0 : _c.length) > 0
@@ -18699,9 +18700,87 @@ function EmprForm({ initial, onSave, onClose }) {
             React.createElement(PBtn, { onClick: salvar }, "💾 Salvar empreendimento")));
 }
 
+// Ficha do empreendimento: as mesmas ferramentas de venda dos imóveis
+function EmprDetalhe({ e, onClose, onEdit }) {
+    const linhas = v => Array.isArray(v) ? v.filter(Boolean) : String(v || "").split("\n").map(x => x.trim()).filter(Boolean);
+    const fotos = (e.fotos || []).map(f => f && f.url).filter(Boolean);
+    const lazer = linhas(e.lazer), difs = linhas(e.diferenciais), ficha = linhas(e.ficha);
+    const link = location.origin + "/#empreendimento-" + e.id;
+    const [msg, setMsg] = useState("");
+    const [copy, setCopy] = useState(e.descricao || "");
+    const [aiL, setAiL] = useState(false);
+    const esc = t => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    async function gerarCopy() {
+        setAiL(true);
+        const r = await holyIA("Escreva uma descrição de venda elegante e objetiva (até 160 palavras) para o empreendimento abaixo, em português do Brasil, tom sóbrio de alto padrão, sem 'top', 'perfeito', 'imperdível' nem exclamações. Use SOMENTE os dados fornecidos.\n" + JSON.stringify(mktVitrine(e, "em")).slice(0, 7000), 700);
+        setAiL(false);
+        if (r.error) return setMsg("❌ " + r.error);
+        setCopy(String(r.text || "").trim());
+    }
+    function dossie() {
+        const w = window.open("", "_blank");
+        w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(e.nome)} · Holy</title><style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,700;1,400&family=DM+Mono:wght@400&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Cormorant Garamond',serif;color:#1a1c18}
+.page{max-width:760px;margin:0 auto;padding:52px}.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #4a5c2f;padding-bottom:20px;margin-bottom:28px}
+.hero{width:100%;height:260px;object-fit:cover;border-radius:12px;margin-bottom:8px}.thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:26px}.thumb{width:100%;height:95px;object-fit:cover;border-radius:8px}
+.tit{font-size:32px;font-weight:700;line-height:1.1;margin-bottom:6px}.sub{font-size:15px;color:#6b7c47;font-style:italic;margin-bottom:22px}
+.dest{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;background:#f2f5ec;border-radius:10px;padding:16px;margin-bottom:22px}.dn{font-size:18px;font-weight:700;font-family:'DM Mono',monospace}.dl{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#7a7d72}
+.txt{font-size:15px;line-height:1.8;color:#3d4237;margin-bottom:18px}.h{font-size:11px;text-transform:uppercase;letter-spacing:.15em;color:#4a5c2f;margin:18px 0 8px}
+.tags{display:flex;flex-wrap:wrap;gap:5px}.tag{font-size:11px;padding:3px 10px;border-radius:20px;background:#4a5c2f18;color:#4a5c2f;border:.5px solid #4a5c2f40}
+.ficha div{font-size:13px;padding:4px 0;border-bottom:.5px solid #e4e7dd}.val{margin-top:22px;background:#4a5c2f;color:#fff;padding:15px 24px;border-radius:10px;display:flex;justify-content:space-between;align-items:center}
+.vn{font-size:22px;font-weight:700;font-family:'DM Mono',monospace}.ft{margin-top:32px;border-top:1px solid #d6dfc8;padding-top:14px;font-size:11px;color:#7a7d72;text-align:center}</style></head><body><div class="page">
+<div class="hd"><img src="${location.origin}/assets/holy-logo-escuro.svg" style="width:120px"><div style="text-align:right;font-size:11px;color:#7a7d72">Dossiê Exclusivo<br>${new Date().toLocaleDateString("pt-BR")}</div></div>
+${fotos[0] ? `<img class="hero" src="${fotos[0]}">` : ""}${fotos.length > 1 ? `<div class="thumbs">${fotos.slice(1, 4).map(u => `<img class="thumb" src="${u}">`).join("")}</div>` : ""}
+<div class="tit">${esc(e.nome)}</div><div class="sub">${esc([e.cidade, e.tipoLabel, e.status].filter(Boolean).join(" · "))}</div>
+${(e.destaques || []).length ? `<div class="dest">${e.destaques.slice(0, 4).map(d => `<div><div class="dn">${esc(d.n)}</div><div class="dl">${esc(d.l)}</div></div>`).join("")}</div>` : ""}
+${copy ? `<div class="txt">${esc(copy).replace(/\n/g, "<br>")}</div>` : ""}
+${difs.length ? `<div class="h">Diferenciais</div><div class="tags">${difs.map(d => `<span class="tag">${esc(d)}</span>`).join("")}</div>` : ""}
+${lazer.length ? `<div class="h">Lazer</div><div class="tags">${lazer.map(d => `<span class="tag">${esc(d)}</span>`).join("")}</div>` : ""}
+${ficha.length ? `<div class="h">Ficha técnica</div><div class="ficha">${ficha.map(d => `<div>${esc(d)}</div>`).join("")}</div>` : ""}
+${e.preco ? `<div class="val"><div style="font-size:10px;letter-spacing:.15em;text-transform:uppercase;opacity:.7">Valores</div><div class="vn">${esc(e.preco)}</div></div>` : ""}
+<div class="ft">Holy Curadoria Imobiliária · holyimoveis.com · ${esc(link)}</div></div>\x3cscript>window.onload=()=>setTimeout(()=>window.print(),600)\x3c/script></body></html>`);
+        w.document.close();
+    }
+    const copiar = (t, n) => { try { navigator.clipboard.writeText(t); setMsg("📋 " + n + " copiado."); } catch (er) { setMsg(t); } };
+    const zap = "https://wa.me/?text=" + encodeURIComponent(`${e.nome}${e.cidade ? " · " + e.cidade : ""}\n${e.preco || ""}\n\nVeja fotos, plantas e detalhes: ${link}`);
+    return React.createElement(Modal, { onClose, width: 820 },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 14 } },
+            React.createElement("div", null,
+                React.createElement("h2", { style: { margin: 0, fontSize: 22, fontWeight: 700, color: C.ink, fontFamily: "'Cormorant Garamond',serif" } }, e.nome),
+                React.createElement("div", { style: { fontSize: 13, color: C.muted, marginTop: 2 } }, [e.cidade, e.tipoLabel, e.complexo].filter(Boolean).join(" · ")),
+                React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" } },
+                    e.status && React.createElement(Bdg, { label: e.status, color: EMP_STC[e.status] || C.muted }),
+                    React.createElement(Bdg, { label: e.publicarSite === false ? "Oculto no site" : "No site", color: e.publicarSite === false ? C.muted : C.blue }))),
+            React.createElement("button", { onClick: onClose, style: { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.muted } }, "×")),
+        React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 } },
+            holyPode("editarEmpr") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: onEdit }, "✏️ Editar"),
+            holyPode("anunciar") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.blue, onClick: () => abrirMkt("campanha", e, "em") }, "📣 Anunciar / impulsionar"),
+            holyPode("post") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, onClick: () => abrirMkt("post", e, "em") }, "📸 Post"),
+            holyPode("post") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.oliveMid, onClick: () => abrirMkt("marketplace", e, "em") }, "🏷 Marketplace"),
+            React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: dossie }, "🖨️ Dossiê PDF"),
+            React.createElement(PBtn, { sm: true, variant: "ghost", color: C.success, onClick: () => window.open(zap, "_blank") }, "💬 Enviar no WhatsApp"),
+            React.createElement(PBtn, { sm: true, variant: "ghost", color: C.inkMid, onClick: () => copiar(link, "Link da página") }, "🔗 Copiar link")),
+        msg && React.createElement("div", { style: { fontSize: 12, color: msg.startsWith("❌") ? C.danger : C.olive, marginBottom: 10 } }, msg),
+        fotos.length > 0 && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 6, marginBottom: 14 } },
+            fotos.slice(0, 3).map((u, i) => React.createElement("div", { key: i, style: { height: i ? 140 : 140, borderRadius: 10, background: `url(${u}) center/cover` } }))),
+        (e.destaques || []).length > 0 && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 8, marginBottom: 14 } },
+            e.destaques.map((d, i) => React.createElement("div", { key: i, style: { background: C.oliveGhost, borderRadius: 8, padding: "9px 12px" } },
+                React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.ink, fontFamily: "'DM Mono',monospace" } }, d.n),
+                React.createElement("div", { style: { fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: ".06em" } }, d.l)))),
+        e.preco && React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: C.olive, marginBottom: 12 } }, e.preco),
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
+            mkLbl("Texto de venda"),
+            React.createElement(PBtn, { sm: true, onClick: gerarCopy, loading: aiL }, "✦ Gerar descrição IA")),
+        React.createElement("textarea", { value: copy, onChange: ev => setCopy(ev.target.value), placeholder: "Gere com IA ou escreva. Esse texto vai no dossiê.", style: Object.assign({}, mkInput, { minHeight: 110, marginBottom: 12 }) }),
+        (difs.length > 0 || lazer.length > 0) && React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 } },
+            difs.concat(lazer).slice(0, 30).map((d, i) => React.createElement(Chip, { key: i, label: d, color: C.olive }))),
+        ficha.length > 0 && React.createElement("div", { style: { fontSize: 12, color: C.inkMid, lineHeight: 1.7 } }, ficha.map((l, i) => React.createElement("div", { key: i }, l))));
+}
 function EmpreendimentosPage() {
     const [lista, setLista] = usePS("empreendimentos", []);
     const [edit, setEdit] = useState(null);
+    const [ver, setVer] = useState(null);
     const [imp, setImp] = useState("");
     const ord = [...lista].sort((a, b) => (+a.ordem || 0) - (+b.ordem || 0));
     const renumera = arr => arr.map((e, i) => Object.assign({}, e, { ordem: i }));
@@ -18757,6 +18836,7 @@ function EmpreendimentosPage() {
     const btnP = (t, onClick, cor, titulo) => React.createElement("button", { onClick, title: titulo || t, style: { padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", background: C.white, color: cor || C.inkMid, border: `0.5px solid ${C.border}` } }, t);
     return React.createElement("div", null,
         edit && React.createElement(EmprForm, { initial: edit === "novo" ? null : edit, onSave: salvar, onClose: () => setEdit(null) }),
+        ver && React.createElement(EmprDetalhe, { e: ver, onClose: () => setVer(null), onEdit: () => { setEdit(ver); setVer(null); } }),
         React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 } },
             React.createElement("div", { style: { fontSize: 12, color: C.muted } }, `${lista.length} empreendimento(s) · ${nSite} no site · a ordem abaixo é a ordem do carrossel`),
             holyPode("editarEmpr") && React.createElement("div", { style: { display: "flex", gap: 8 } },
@@ -18772,22 +18852,24 @@ function EmpreendimentosPage() {
             "Clique em ", React.createElement("b", null, "⬇ Trazer os atuais do site"), " para gerenciar tudo por aqui."),
         React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 14 } },
             ord.map((e, i) => React.createElement("div", { key: e.id, style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: "hidden", opacity: e.publicarSite === false ? 0.6 : 1 } },
-                React.createElement("div", { onClick: () => holyPode("editarEmpr") && setEdit(e), style: { height: 150, background: empCapa(e) ? `url(${empCapa(e)}) center/cover` : C.ink, cursor: "pointer", position: "relative" } },
+                React.createElement("div", { onClick: () => setVer(e), title: "Abrir ficha e ferramentas de venda", style: { height: 150, background: empCapa(e) ? `url(${empCapa(e)}) center/cover` : C.ink, cursor: "pointer", position: "relative" } },
                     React.createElement("span", { style: { position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 4 } }, "#" + (i + 1)),
                     !empCapa(e) && React.createElement("div", { style: { color: C.oliveLt, fontSize: 12, display: "flex", height: "100%", alignItems: "center", justifyContent: "center" } }, "Sem foto")),
                 React.createElement("div", { style: { padding: 14 } },
                     React.createElement("div", { style: { display: "flex", gap: 5, marginBottom: 6, flexWrap: "wrap" } },
                         React.createElement(Chip, { label: e.status, color: EMP_STC[e.status] || C.muted }),
                         React.createElement(Chip, { label: e.publicarSite === false ? "Oculto" : "🌐 No site", color: e.publicarSite === false ? C.muted : C.blue })),
-                    React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, e.nome),
+                    React.createElement("div", { onClick: () => setVer(e), style: { fontSize: 15, fontWeight: 700, color: C.ink, cursor: "pointer" } }, e.nome),
                     React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: e.complexo ? 4 : 12 } }, [e.cidade, e.tipoLabel].filter(Boolean).join(" · ")),
                     e.complexo && React.createElement("div", { style: { fontSize: 10, color: C.gold, fontWeight: 700, marginBottom: 12 } }, "🏘️ " + e.complexo + (e.principal ? " · página principal" : "")),
                     React.createElement("div", { style: { display: "flex", gap: 5, flexWrap: "wrap" } },
                         holyPode("editarEmpr") && btnP("◀", () => mover(e.id, -1), null, "Mover para antes"),
                         holyPode("editarEmpr") && btnP("▶", () => mover(e.id, 1), null, "Mover para depois"),
                         holyPode("editarEmpr") && btnP("Editar", () => setEdit(e), C.olive),
+                        btnP("🚀 Vender", () => setVer(e), C.olive, "Ficha com Anunciar, Post, Marketplace, Dossiê e WhatsApp"),
                         holyPode("anunciar") && btnP("📣 Anunciar", () => abrirMkt("campanha", e, "em"), C.blue),
                         holyPode("post") && btnP("📸 Post", () => abrirMkt("post", e, "em"), C.gold),
+                        holyPode("post") && btnP("🏷 Marketplace", () => abrirMkt("marketplace", e, "em"), C.oliveMid),
                         holyPode("editarEmpr") && btnP(e.publicarSite === false ? "Mostrar" : "Ocultar", () => alternar(e.id), C.blue),
                         holyPode("editarEmpr") && btnP("Excluir", () => excluir(e), C.danger)))))));
 }
@@ -19619,7 +19701,7 @@ function MarketingHost() {
     useEffect(() => { const f = e => setSt(e.detail); window.addEventListener("holy-mkt", f); return () => window.removeEventListener("holy-mkt", f); }, []);
     if (!st) return null;
     const fechar = () => setSt(null);
-    return st.modo === "campanha" ? React.createElement(CampanhaWizard, { item: st.item, kind: st.kind, onClose: fechar }) : React.createElement(PostStudio, { item: st.item, kind: st.kind, onClose: fechar });
+    return st.modo === "campanha" ? React.createElement(CampanhaWizard, { item: st.item, kind: st.kind, onClose: fechar }) : React.createElement(PostStudio, { item: st.item, kind: st.kind, onClose: fechar, formatoInicial: st.modo === "marketplace" ? "marketplace" : "feed" });
 }
 
 // ── Assistente de campanha ─────────────────────────────────────────────
@@ -20104,11 +20186,11 @@ Dados: ${JSON.stringify(Object.assign({}, vit, { precoAnuncio: f.preco, tipoAnun
                 React.createElement("div", { style: { fontSize: 11, color: C.muted, whiteSpace: "pre-wrap", background: C.cream, borderRadius: 8, padding: "8px 10px" } }, "Vai no fim automaticamente:" + rodape),
                 React.createElement("button", { onClick: () => copiar(textoFinal, "Descrição"), style: { alignSelf: "flex-start", fontSize: 12, background: C.olive, color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontWeight: 700 } }, "📋 Copiar descrição completa"))));
 }
-function PostStudio({ item, kind, onClose }) {
+function PostStudio({ item, kind, onClose, formatoInicial }) {
     const vit = mktVitrine(item, kind);
     const fotos = mktFotos(item);
-    const [formato, setFormato] = useState("feed");
-    const [slides, setSlides] = useState(() => mkPadrao(vit, "feed"));
+    const [formato, setFormato] = useState(formatoInicial || "feed");
+    const [slides, setSlides] = useState(() => mkPadrao(vit, formatoInicial === "marketplace" ? "feed" : (formatoInicial || "feed")));
     const [fotoIdx, setFotoIdx] = useState({});
     const [legenda, setLegenda] = useState("");
     const [hashtags, setHashtags] = useState("");
