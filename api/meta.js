@@ -33,13 +33,19 @@ async function graph(path, method = 'GET', params = {}, token) {
   return j;
 }
 let _pageToken = null, _igId = undefined;
+// Token da Página: primeiro o do usuário do sistema (tem pages_manage_ads e leads_retrieval, usados em
+// formulários, anúncios e leads); se ele estiver bloqueado, usa o token salvo pelo login do Édipo (Plano B).
 async function pageToken() {
-  const salvo = await tokenPaginaSalvo(); // Plano B: token da Página pelo login do Édipo
-  if (salvo) return salvo;
   if (_pageToken) return _pageToken;
-  const j = await graph(PAGE(), 'GET', { fields: 'access_token,name' });
-  _pageToken = j.access_token || TOKEN();
-  return _pageToken;
+  try {
+    const j = await graph(PAGE(), 'GET', { fields: 'access_token,name' });
+    if (j.access_token) { _pageToken = j.access_token; return _pageToken; }
+  } catch (e) {
+    const salvo = await tokenPaginaSalvo();
+    if (salvo) return salvo;
+    throw e;
+  }
+  return (await tokenPaginaSalvo()) || TOKEN();
 }
 async function igUser() {
   if (process.env.META_IG_USER_ID) return process.env.META_IG_USER_ID;
