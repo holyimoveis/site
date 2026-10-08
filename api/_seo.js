@@ -60,7 +60,8 @@ export async function pagina(req, kind, id) {
   const titulo = kind === 'im'
     ? `${it.tipo}${it.quartos ? ' com ' + it.quartos + ' quartos' : ''}${it.bairro ? ' no ' + it.bairro : ''}, ${cidade} | ${it.nome}`
     : `${it.nome} · ${it.tipoLabel || 'Empreendimento'} em ${cidade}`;
-  const resumo = (String(it.descricao || '').replace(/\s+/g, ' ').trim() || `${it.nome} em ${cidade}. ${preco || ''}`).slice(0, 158);
+  const resumoInteiro = String(it.descricao || '').replace(/\s+/g, ' ').trim() || `${it.nome} em ${cidade}. ${preco || ''}`;
+  const resumo = resumoInteiro.length <= 158 ? resumoInteiro : resumoInteiro.slice(0, 155).replace(/\s+\S*$/, '').replace(/[,;:.!\-–\s]+$/, '') + '…';
   const ref = kind === 'im' ? (it.ref || it.id) : it.nome;
   const waTxt = encodeURIComponent(`Olá! Vi no site o ${kind === 'im' ? 'imóvel' : 'empreendimento'} ${it.nome} (ref. ${ref}) e quero mais informações.`);
   const ld = kind === 'im' ? {

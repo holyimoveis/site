@@ -19854,6 +19854,23 @@ function RelatorioSemana({ clientes, timeline, ranking, visitas, onClose }) {
 // ── SEO, Google Ads e navegação no site ──
 const vSlug = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70);
 const vPagina = (item, kind) => location.origin + "/" + (kind === "im" ? "imovel" : "empreendimento") + "/" + encodeURIComponent(item.id) + "/" + vSlug(item.nome);
+function AvisoPessoalConfig() {
+    const [st, setSt] = useState(null); const [msg, setMsg] = useState("");
+    useEffect(() => { holyFetch("/api/crm", { method: "POST", body: JSON.stringify({ acao: "avisoStatus" }) }).then(r => r.json()).then(j => setSt(j.success ? !!j.configurado : false)).catch(() => setSt(false)); }, []);
+    async function testar() { setMsg("Enviando…"); try { const r = await holyFetch("/api/crm", { method: "POST", body: JSON.stringify({ acao: "testarAvisoPessoal" }) }); const j = await r.json(); setMsg(j.success ? "✅ Enviado! Confira seu WhatsApp." : "⚠️ " + (j.error || "Não foi")); } catch (e) { setMsg("⚠️ " + e.message); } }
+    const passo = (n, t) => React.createElement("div", { style: { fontSize: 12, color: C.ink, lineHeight: 1.6, marginBottom: 4 } }, React.createElement("b", null, n + ". "), t);
+    return React.createElement("div", { style: { padding: "16px 18px", background: "#fff", borderRadius: 12, border: "0.5px solid #dde0d6", borderLeft: "3px solid #2e7d32" } },
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 6 } }, "🔔 Aviso de lead novo no meu WhatsApp ", st === true ? React.createElement("span", { style: { color: C.success, fontSize: 12 } }, "· ligado") : st === false ? React.createElement("span", { style: { color: C.muted, fontSize: 12 } }, "· desligado") : null),
+        React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 10 } }, "A cada lead novo (anúncio da Meta, site, Google ou Helena) chega no seu WhatsApp pessoal: nome, telefone com link, imóvel, respostas e o link do CRM. Grátis, pelo CallMeBot, até o WhatsApp oficial da Holy ser liberado."),
+        st !== true && React.createElement("div", { style: { marginBottom: 10 } },
+            passo(1, "No seu celular, salve o contato +34 623 91 22 04 (CallMeBot)."),
+            passo(2, "Mande para ele, pelo WhatsApp: I allow callmebot to send me messages"),
+            passo(3, "Ele responde com a sua APIKEY. Na Vercel (Settings > Environment Variables) crie AVISO_WHATSAPP = seu número com +55 e DDD, e AVISO_CALLMEBOT_KEY = a chave. Não mande a chave por mensagem."),
+            passo(4, "Faça Redeploy na Vercel e volte aqui para testar.")),
+        React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+            React.createElement(PBtn, { sm: true, onClick: testar, color: C.success }, "Enviar aviso de teste"),
+            msg && React.createElement("span", { style: { fontSize: 12, color: C.muted } }, msg)));
+}
 function RastreamentoConfig() {
     const [cfg, setCfg] = usePS("site_config", {});
     const t = (cfg && cfg.rastreamento) || {};
@@ -21109,6 +21126,7 @@ function ConfigPage() {
         slot('holy', 'A Holy', 'https://images.unsplash.com/photo-1760204741315-abfc98ce3bf5?auto=format&fit=crop&w=600&q=70'),
         slot('venda', 'Venda seu imóvel', 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=600&q=70'))),
     holyPode('configCompleta') && React.createElement(RastreamentoConfig, null),
+    holyPode('configCompleta') && React.createElement(AvisoPessoalConfig, null),
     React.createElement('div', { style: box('#4a5c2f') },
       h('☁ Conexão com a nuvem'),
       p('Seus dados ficam salvos na nuvem e aparecem em qualquer computador ou celular onde você entrar com a senha do CRM.'),

@@ -3,6 +3,8 @@
 // GET/PATCH/DELETE (só com X-Admin-Key): o CRM busca os leads e atualiza a etapa
 import { sql, ensureSchema, cors, body, ok, err, fail, ipHash, str } from './_lib.js';
 import { sessao, pode } from './_auth.js';
+import { waitUntil } from '@vercel/functions';
+import { sincronizarLeads } from './_sync.js';
 
 let _rastreio = false;
 export async function esquemaRastreio() {
@@ -51,6 +53,8 @@ export default async function handler(req, res) {
         `INSERT INTO leads (tipo, nome, email, telefone, interesse, mensagem, origem, pagina, imovel, ip_hash, visitante, utm)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb) RETURNING id`,
         [tipo, nome, email, telefone, str(b.interesse, 160), str(b.mensagem, 2000), str(b.origem, 120), str(b.pagina, 200), str(b.imovel, 160), ih, vis, utm]);
+      // leva para o CRM na hora e avisa no WhatsApp pessoal (sem atrasar a resposta ao visitante)
+      if (tipo === 'formulario') waitUntil(esquemaRastreio().then(() => sincronizarLeads()).catch((e) => console.error('[leads] sincronizar', e.message)));
       return ok(res, { id: r[0].id }, 201);
     }
 

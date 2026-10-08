@@ -210,7 +210,8 @@ async function criar(b, req) {
       name: `${nome} | ${sufixo}`.slice(0, 100), locale: 'pt_BR',
       questions: perguntas, is_optimized_for_quality: true,
       privacy_policy: { url: site(req) + '/privacidade.html', link_text: 'Política de privacidade da Holy' },
-      thank_you_page: { title: 'Recebemos seu interesse!', body: String(b.agradecimento || 'Um consultor da Holy vai falar com você pelo WhatsApp em breve.').slice(0, 300), button_type: 'VIEW_WEBSITE', button_text: 'Ver o imóvel', website_url: linkPagina },
+      // botão final abre a conversa com a Helena no Messenger (ela atende na hora); o link do imóvel segue no texto
+      thank_you_page: { title: 'Recebemos seu interesse!', body: (String(b.agradecimento || 'Um consultor da Holy vai falar com você pelo WhatsApp em breve.').slice(0, 220) + ' Quer adiantar? Toque em Falar agora.').slice(0, 300), button_type: 'VIEW_WEBSITE', button_text: 'Falar agora', website_url: 'https://m.me/' + PAGE() + '?ref=lead' },
     }, ptk);
     criados.form = form.id;
     passos.push('Formulário de alta intenção criado');
@@ -288,7 +289,7 @@ async function mudarStatus(b) {
   for (const id of [...(b.anuncios || []), b.conjunto, b.campanha].filter(Boolean)) await graph(id, 'POST', { status: st });
   return st;
 }
-async function puxarLeads(forms) {
+export async function puxarLeads(forms) {
   await sql.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS meta_id TEXT');
   await sql.query('CREATE UNIQUE INDEX IF NOT EXISTS leads_meta_idx ON leads (meta_id)');
   const ptk = await pageToken();
@@ -370,14 +371,14 @@ async function publicarIG(b) {
 async function conectarMensagens(req) {
   const passos = [];
   const ptk = await pageToken();
-  await graph(`${PAGE()}/subscribed_apps`, 'POST', { subscribed_fields: 'messages,messaging_postbacks,message_echoes' }, ptk);
-  passos.push('Página Holy Imóveis inscrita para receber mensagens (Messenger e Instagram)');
+  await graph(`${PAGE()}/subscribed_apps`, 'POST', { subscribed_fields: 'messages,messaging_postbacks,message_echoes,leadgen' }, ptk);
+  passos.push('Página Holy Imóveis inscrita para receber mensagens (Messenger e Instagram) e leads dos formulários na hora');
   const appId = process.env.META_APP_ID || '1110281681853167', segredo = process.env.META_APP_SECRET, verify = process.env.WHATSAPP_VERIFY_TOKEN || '';
   if (!segredo) throw new Error('Falta META_APP_SECRET na Vercel (Chave Secreta do app Holy CRM, em Configurações do app > Básico).');
   if (verify.length < 12) throw new Error('Falta WHATSAPP_VERIFY_TOKEN na Vercel (mínimo 12 letras e números).');
   const callback = site(req) + '/api/whatsapp';
   const appToken = appId + '|' + segredo;
-  for (const [object, fields] of [['page', 'messages,messaging_postbacks,message_echoes'], ['instagram', 'messages']]) {
+  for (const [object, fields] of [['page', 'messages,messaging_postbacks,message_echoes,leadgen'], ['instagram', 'messages']]) {
     await graph(`${appId}/subscriptions`, 'POST', { object, callback_url: callback, fields, verify_token: verify, include_values: true }, appToken);
     passos.push('Webhook do app para ' + (object === 'page' ? 'Messenger' : 'Instagram') + ' apontando para ' + callback);
   }

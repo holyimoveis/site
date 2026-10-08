@@ -5,6 +5,21 @@ import crypto from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { sql, ensureSchema, fail } from './_lib.js';
 import { salvarMensagem, processarConversa, marcarLida, perfilMeta, retomadas } from './_wa.js';
+import { puxarLeads } from './meta.js';
+import { sincronizarLeads } from './_sync.js';
+
+// Lead de formulário da Meta chegou: busca na hora, leva para Clientes e avisa no WhatsApp pessoal
+async function leadNaHora(formIds) {
+  try {
+    let item = {};
+    try {
+      const r = await sql.query("SELECT valor FROM crm_docs WHERE chave = 'campanhas'");
+      (Array.isArray(r[0] && r[0].valor) ? r[0].valor : []).forEach((c) => { if (c && c.formulario) item[String(c.formulario)] = c.itemNome; });
+    } catch (e) {}
+    const novos = await puxarLeads(formIds.map((id) => ({ id, item: item[String(id)] })));
+    if (novos) await sincronizarLeads();
+  } catch (e) { console.error('[leadgen]', e.message); }
+}
 
 export const maxDuration = 60;
 
@@ -148,6 +163,11 @@ export default async function handler(req, res) {
           if (id) tarefas.push(processarConversa(conv, site, nome));
         }
       }
+    }
+    // Leads dos formulários instantâneos (campo leadgen da Página)
+    if (body.object === 'page') {
+      const forms = [...new Set((body.entry || []).flatMap((e) => (e.changes || []).filter((c) => c.field === 'leadgen' && c.value && c.value.form_id).map((c) => String(c.value.form_id))))];
+      if (forms.length) tarefas.push(leadNaHora(forms));
     }
     for (const entry of body.entry || []) {
       for (const ch of entry.changes || []) {

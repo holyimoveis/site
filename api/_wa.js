@@ -1,6 +1,7 @@
 // Motor do assistente de WhatsApp da Holy
 // Funciona com a API oficial direto da Meta ou via parceiro oficial 360dialog (necessário para Coexistência).
 import { proximoResponsavel } from './_auth.js';
+import { avisarHelena } from './_avisos.js';
 import { sql, ensureSchema, atualizarDoc } from './_lib.js';
 import { tokenPaginaSalvo } from './_metatoken.js';
 import { paraSite as imovelSite } from './imoveis.js';
@@ -414,6 +415,8 @@ async function sincronizarCRM(waId, conv, out, nomePerfil) {
   if (novo) eventos.push({ id: 'int' + rid(), tipo: canal === 'whatsapp' ? 'WhatsApp' : NOME_CANAL[canal].split(' ')[0], data: hojeISO(), hora: agoraHM(), desc: 'Primeiro contato pelo ' + NOME_CANAL[canal] + ' (assistente virtual). ' + (out.resumo || ''), imovelId: '', clienteId, cliente: nomeFinal, autor: 'Helena' });
   if (out.transferir) eventos.push({ id: 'int' + rid(), tipo: 'Nota interna', data: hojeISO(), hora: agoraHM(), desc: '🔔 Assistente passou o atendimento para você: ' + (MOTIVOS[out.motivo_transferencia] || MOTIVOS.outro) + '. ' + (out.resumo || '') + (out.maturidade && out.maturidade !== 'indefinido' ? '\nMaturidade: ' + ({ pronto: '🟢 pronto para comprar', morno: '🟡 morno', frio: '🔴 frio' }[out.maturidade] || out.maturidade) : '') + (perfilTxt ? '\n' + perfilTxt : ''), imovelId: '', clienteId, cliente: nomeFinal });
   if (eventos.length) await atualizarDoc('timeline', (t) => eventos.concat(Array.isArray(t) ? t : []));
+  // aviso no WhatsApp pessoal do Édipo: contato novo ou atendimento passado para ele
+  if (novo || out.transferir) await avisarHelena({ nome: nomeFinal, canal: NOME_CANAL[canal], telefone: tel, resumo: out.resumo, motivo: out.transferir ? (MOTIVOS[out.motivo_transferencia] || MOTIVOS.outro) : '', ficha: out.transferir ? [out.maturidade && out.maturidade !== 'indefinido' ? 'Maturidade: ' + ({ pronto: '🟢 pronto', morno: '🟡 morno', frio: '🔴 frio' }[out.maturidade] || out.maturidade) : '', perfilTxt.replace(/ · /g, '\n')].filter(Boolean).join('\n') : '' }).catch(() => null);
 }
 
 // ── Fluxo principal ────────────────────────────────────────────────────
