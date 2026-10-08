@@ -17455,7 +17455,7 @@ var HolySite = (function () {
     if (!HolyAuth.get()) return;
     try {
       try { var cps = holyPode('campanhas') ? HolyStore.get('campanhas', []).filter(function (c) { return c && c.formulario; }) : [];
-        if (cps.length && Date.now() - (sync._meta || 0) > 300000) { sync._meta = Date.now(); await holyFetch('/api/meta', { method: 'POST', body: JSON.stringify({ acao: 'puxarLeads', forms: cps.map(function (c) { return { id: c.formulario, item: c.itemNome }; }) }) }); }
+        if (cps.length && Date.now() - (sync._meta || 0) > 300000) { sync._meta = Date.now(); await holyFetch('/api/meta', { method: 'POST', body: JSON.stringify({ acao: 'puxarLeads', forms: cps.reduce(function (a, c) { [c.formulario].concat(c.formulariosAntigos || []).forEach(function (id) { if (id) a.push({ id: id, item: c.itemNome }); }); return a; }, []) }) }); }
       } catch (e) {}
       // Contatos do site e da Meta viram clientes no servidor (com rodízio entre corretores, se ligado)
       var antes = {}; (HolyStore.get('clientes', []) || []).forEach(function (c) { antes[c.id] = 1; });
@@ -20626,9 +20626,18 @@ function CampanhasPage() {
         try { await metaApi("statusCampanha", { ativo, campanha: c.campanha, conjunto: c.conjunto, anuncios: c.anuncios }); setCamps(p => p.map(x => x.id === c.id ? Object.assign({}, x, { status: ativo ? "ACTIVE" : "PAUSED" }) : x)); setTimeout(atualizar, 1500); }
         catch (e) { setMsg("❌ " + e.message); }
     }
+    async function novoFormulario(c) {
+        if (!confirm(`Atualizar "${c.itemNome}" para o formulário novo?\n\nA Meta não deixa editar formulários: o CRM cria um igual (mesmas perguntas) com o botão "Falar agora", que abre a conversa com a Helena, e troca nos anúncios. Os anúncios passam por revisão de novo (alguns minutos) e o aprendizado pode oscilar 1 ou 2 dias.`)) return;
+        setMsg("Atualizando formulário de " + c.itemNome + "…");
+        try { const d = await metaApi("atualizarFormulario", { formulario: c.formulario, anuncios: c.anuncios });
+            if (!d.jaAtualizado) setCamps(p => p.map(x => x.id === c.id ? Object.assign({}, x, { formulario: d.formulario, formulariosAntigos: (x.formulariosAntigos || []).concat(d.antigo ? [d.antigo] : []), formularioV2: true }) : x));
+            else setCamps(p => p.map(x => x.id === c.id ? Object.assign({}, x, { formularioV2: true }) : x));
+            setMsg("✅ " + (d.passos || []).join(" · ")); }
+        catch (e) { setMsg("❌ " + e.message); }
+    }
     async function puxar() {
         setMsg("Buscando leads na Meta…");
-        try { const d = await metaApi("puxarLeads", { forms: lista.map(c => ({ id: c.formulario, item: c.itemNome })) }); await HolySite.sync(); setMsg(d.novos ? `✅ ${d.novos} lead(s) novo(s) foram para Clientes.` : "Nenhum lead novo agora."); }
+        try { const d = await metaApi("puxarLeads", { forms: lista.flatMap(c => [c.formulario].concat(c.formulariosAntigos || []).filter(Boolean).map(id => ({ id, item: c.itemNome }))) }); await HolySite.sync(); setMsg(d.novos ? `✅ ${d.novos} lead(s) novo(s) foram para Clientes.` : "Nenhum lead novo agora."); }
         catch (e) { setMsg("❌ " + e.message); }
     }
     const brl = v => "R$ " + (+v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -20666,6 +20675,7 @@ function CampanhasPage() {
                             React.createElement("div", { key: k, style: { background: C.cream, borderRadius: 8, padding: "8px 10px" } }, React.createElement("div", { style: { fontSize: 10, color: C.muted } }, k), React.createElement("div", { style: { fontSize: 16, fontWeight: 700, color: C.olive } }, v)))),
                 React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
                     meta && meta.configurado && holyPode("ativarCampanha") && React.createElement(PBtn, { sm: true, variant: ativo ? "ghost" : undefined, onClick: () => alternar(c, !ativo) }, ativo ? "⏸ Pausar" : "▶ Ativar"),
+                    meta && meta.configurado && holyPode("ativarCampanha") && c.formulario && !c.formularioV2 && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: () => novoFormulario(c) }, "💬 Formulário novo (Falar agora)"),
                     React.createElement("a", { href: c.link, target: "_blank", rel: "noopener", style: { fontSize: 12, fontWeight: 700, color: C.blue, padding: "7px 10px" } }, "Abrir no Gerenciador"),
                     holyPode("ativarCampanha") && React.createElement("button", { onClick: () => { if (confirm("Remover da lista do CRM? (a campanha continua na Meta)")) setCamps(p => p.filter(y => y.id !== c.id)); }, style: { fontSize: 11, background: "none", border: "none", color: C.muted, cursor: "pointer" } }, "Remover da lista"))); }),
         React.createElement("div", { style: Object.assign(mkBox("#f2f5ec"), { fontSize: 12, color: C.inkMid, lineHeight: 1.7 }) },

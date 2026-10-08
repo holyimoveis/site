@@ -14,7 +14,7 @@ async function leadNaHora(formIds) {
     let item = {};
     try {
       const r = await sql.query("SELECT valor FROM crm_docs WHERE chave = 'campanhas'");
-      (Array.isArray(r[0] && r[0].valor) ? r[0].valor : []).forEach((c) => { if (c && c.formulario) item[String(c.formulario)] = c.itemNome; });
+      (Array.isArray(r[0] && r[0].valor) ? r[0].valor : []).forEach((c) => { if (c) [c.formulario].concat(c.formulariosAntigos || []).forEach((id) => { if (id) item[String(id)] = c.itemNome; }); });
     } catch (e) {}
     const novos = await puxarLeads(formIds.map((id) => ({ id, item: item[String(id)] })));
     if (novos) await sincronizarLeads();

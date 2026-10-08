@@ -284,6 +284,42 @@ async function metricas(ids) {
   }
   return out;
 }
+// Troca o formulário de uma campanha que já está rodando pelo modelo novo (botão "Falar agora" -> Helena no Messenger).
+// A Meta não deixa editar formulário: cria um igual, com as mesmas perguntas, e troca nos anúncios (criativo novo, mesmo texto e imagem).
+const FIM_FORM = (corpo) => ({ title: 'Recebemos seu interesse!', body: (String(corpo || 'Um consultor da Holy vai falar com você pelo WhatsApp em breve.').replace(/\s*Quer adiantar\?.*$/, '').slice(0, 220) + ' Quer adiantar? Toque em Falar agora.').slice(0, 300), button_type: 'VIEW_WEBSITE', button_text: 'Falar agora', website_url: 'https://m.me/' + PAGE() + '?ref=lead' });
+async function atualizarFormulario(b, req) {
+  const ptk = await pageToken();
+  if (!b.formulario || !Array.isArray(b.anuncios) || !b.anuncios.length) throw new Error('Campanha sem formulário ou anúncios registrados no CRM.');
+  const velho = await graph(String(b.formulario), 'GET', { fields: 'name,locale,questions{key,label,type,options{key,value}},thank_you_page{title,body,button_type},privacy_policy_url' }, ptk);
+  const tp = velho.thank_you_page || {};
+  if (tp.button_type === 'VIEW_WEBSITE' && /Falar agora/.test(String(tp.body || ''))) return { formulario: b.formulario, jaAtualizado: true, passos: ['Este formulário já está no modelo novo.'] };
+  const perguntas = (velho.questions || []).map((q) => q.type === 'CUSTOM'
+    ? { type: 'CUSTOM', key: q.key, label: q.label, options: (q.options || []).map((o) => ({ key: o.key, value: o.value })) }
+    : { type: q.type });
+  const novo = await graph(`${PAGE()}/leadgen_forms`, 'POST', {
+    name: (String(velho.name || 'Formulário Holy').replace(/ · v\d+$/, '') + ' · v2').slice(0, 100), locale: velho.locale || 'pt_BR',
+    questions: perguntas, is_optimized_for_quality: true,
+    privacy_policy: { url: velho.privacy_policy_url || (site(req) + '/privacidade.html'), link_text: 'Política de privacidade da Holy' },
+    thank_you_page: FIM_FORM(tp.body),
+  }, ptk);
+  const passos = ['Formulário novo criado com as mesmas perguntas e o botão "Falar agora"'];
+  const trocados = [];
+  for (const adId of b.anuncios.slice(0, 10)) {
+    const ad = await graph(String(adId), 'GET', { fields: 'name,creative{name,object_story_spec}' });
+    const spec = ad.creative && ad.creative.object_story_spec;
+    if (!spec) { passos.push('Anúncio ' + adId + ': sem criativo editável, mantido'); continue; }
+    const novoSpec = JSON.parse(JSON.stringify(spec));
+    const blocos = [novoSpec.link_data, novoSpec.video_data].filter(Boolean);
+    let achou = false;
+    for (const bl of blocos) { const cta = bl.call_to_action; if (cta && cta.value) { cta.value.lead_gen_form_id = novo.id; achou = true; } }
+    if (!achou) { passos.push('Anúncio ' + (ad.name || adId) + ': não usa formulário, mantido'); continue; }
+    const cr = await graph(`${ACT()}/adcreatives`, 'POST', { name: String((ad.creative.name || ad.name || 'Criativo') + ' · v2').slice(0, 100), object_story_spec: novoSpec });
+    await graph(String(adId), 'POST', { creative: { creative_id: cr.id } });
+    trocados.push(adId);
+  }
+  passos.push(trocados.length + ' anúncio(s) agora usam o formulário novo (a Meta revisa de novo em alguns minutos)');
+  return { formulario: novo.id, antigo: b.formulario, trocados, passos };
+}
 async function mudarStatus(b) {
   const st = b.ativo ? 'ACTIVE' : 'PAUSED';
   for (const id of [...(b.anuncios || []), b.conjunto, b.campanha].filter(Boolean)) await graph(id, 'POST', { status: st });
@@ -502,7 +538,7 @@ export default async function handler(req, res) {
     await ensureSchema();
     const b = req.method === 'POST' ? body(req) : (req.query || {});
     const acao = b.acao || (req.query || {}).acao;
-    const PERM = { salvarTokenPagina: 'meta.campanha', apagarTokenPagina: 'meta.campanha', diagnosticoMensagens: 'meta.campanha', conectarMensagens: 'meta.campanha', statusMensagens: 'meta.ver', status: 'meta.ver', metricas: 'meta.ver', puxarLeads: 'meta.ver', publicarIG: 'meta.publicar', sugerir: 'meta.campanha', criar: 'meta.campanha', statusCampanha: 'meta.campanha' };
+    const PERM = { salvarTokenPagina: 'meta.campanha', apagarTokenPagina: 'meta.campanha', diagnosticoMensagens: 'meta.campanha', conectarMensagens: 'meta.campanha', statusMensagens: 'meta.ver', status: 'meta.ver', metricas: 'meta.ver', puxarLeads: 'meta.ver', publicarIG: 'meta.publicar', sugerir: 'meta.campanha', criar: 'meta.campanha', statusCampanha: 'meta.campanha', atualizarFormulario: 'meta.campanha' };
     if (PERM[acao] && !pode(s, PERM[acao])) return err(res, 403, 'Seu perfil não tem acesso a esta função da Meta.');
     if (acao === 'status') {
       if (!configurado()) return ok(res, { configurado: false, faltando: ['META_ACCESS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID'].filter((k) => !process.env[k]) });
@@ -526,6 +562,7 @@ export default async function handler(req, res) {
     if (acao === 'criar') return ok(res, await criar(b, req));
     if (acao === 'metricas') return ok(res, { metricas: await metricas(b.ids) });
     if (acao === 'statusCampanha') return ok(res, { status: await mudarStatus(b) });
+    if (acao === 'atualizarFormulario') return ok(res, await atualizarFormulario(b, req));
     if (acao === 'puxarLeads') return ok(res, { novos: configurado() ? await puxarLeads(b.forms) : 0 });
     if (acao === 'publicarIG') return ok(res, { publicados: await publicarIG(b) });
     if (acao === 'conectarMensagens') return ok(res, { passos: await conectarMensagens(req) });
