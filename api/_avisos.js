@@ -3,6 +3,7 @@
 //   1) salve +34 623 91 22 04 nos contatos e mande "I allow callmebot to send me messages";
 //   2) na Vercel crie AVISO_WHATSAPP (seu número com DDI, ex.: +5549999999999) e AVISO_CALLMEBOT_KEY (a chave que o bot respondeu).
 // O aviso nunca bloqueia nada: se falhar, só registra no log.
+import { linkContato } from './_contato.js';
 const SITE = () => process.env.SITE_URL || 'https://www.holyimoveis.com';
 let ultimo = 0;
 
@@ -38,13 +39,14 @@ export async function avisarLead(a) {
     a.imovel ? '🏠 ' + a.imovel : '',
     a.respostas ? '📝 ' + String(a.respostas).replace(/\s*\|\s*/g, '\n• ') : '',
     a.responsavel ? '👤 Responsável: ' + a.responsavel : '',
+    a.clienteId && linkContato(a.clienteId) ? '📇 Salvar contato: ' + linkContato(a.clienteId) : '',
     '➡️ ' + SITE() + '/crm',
   ].filter(Boolean);
   await enviarAviso(linhas.join('\n'));
 }
 
 // Helena: cliente novo na conversa ou conversa passada para o Édipo
-export async function avisarHelena({ nome, canal, motivo, resumo, ficha, telefone }) {
+export async function avisarHelena({ nome, canal, motivo, resumo, ficha, telefone, clienteId }) {
   if (!avisoConfigurado()) return;
   const wa = fone(telefone);
   await enviarAviso([
@@ -54,6 +56,7 @@ export async function avisarHelena({ nome, canal, motivo, resumo, ficha, telefon
     wa ? '📱 ' + wa + '  https://wa.me/' + wa.replace('+', '') : '',
     resumo ? '📝 ' + resumo : '',
     ficha ? String(ficha).slice(0, 700) : '',
+    wa && clienteId && linkContato(clienteId) ? '📇 Salvar contato: ' + linkContato(clienteId) : '',
     '➡️ ' + SITE() + '/crm',
   ].filter(Boolean).join('\n'));
 }

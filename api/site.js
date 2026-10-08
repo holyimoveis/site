@@ -2,6 +2,7 @@
 import { sql, ensureSchema, cors, ok, err, fail } from './_lib.js';
 import { abrirLink } from './_links.js';
 import { pagina, sitemap, robots } from './_seo.js';
+import { vcardDoToken } from './_contato.js';
 const https = (u) => typeof u === 'string' && /^https:\/\//.test(u);
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -18,6 +19,15 @@ export default async function handler(req, res) {
     if (!html) { res.setHeader('Cache-Control', 'no-store'); return res.status(404).send('<!DOCTYPE html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/#portfolio"><title>Imóvel indisponível</title><p>Este imóvel não está mais disponível. <a href="/#portfolio">Ver outros</a></p>'); }
     res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
     return res.status(200).send(html);
+  }
+  if ((req.query || {}).c) { // contato de um toque (link do aviso no WhatsApp)
+    res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Robots-Tag', 'noindex');
+    const v = await vcardDoToken(String(req.query.c)).catch(() => null);
+    if (!v) { res.setHeader('Content-Type', 'text/plain; charset=utf-8'); return res.status(404).send('Link de contato inválido ou expirado. Abra o cliente no CRM.'); }
+    const arq = String(v.nome || 'lead').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').slice(0, 40) || 'lead';
+    res.setHeader('Content-Type', 'text/vcard; charset=utf-8');
+    res.setHeader('Content-Disposition', 'inline; filename="' + arq + '.vcf"');
+    return res.status(200).send(v.vcf);
   }
   if ((req.query || {}).l) {
     const destino = await abrirLink(String(req.query.l), req).catch(() => null);

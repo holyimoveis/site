@@ -49,7 +49,7 @@ export async function sincronizarLeads() {
           ...(r ? { responsavelId: r.id, responsavelNome: r.nome } : {}) };
         lista.unshift(c);
         nomes.push(nome);
-        avisos.push({ nome, telefone: l.telefone, email: l.email, origem: deMeta ? 'Anúncio Meta' + (camp ? ' · ' + camp : '') : deGoogle ? 'Google Ads' : 'Site', imovel: l.imovel || '', respostas: deMeta ? l.mensagem : [l.interesse, l.mensagem].filter(Boolean).join(' · '), responsavel: c.responsavelNome || '' });
+        avisos.push({ nome, telefone: l.telefone, email: l.email, origem: deMeta ? 'Anúncio Meta' + (camp ? ' · ' + camp : '') : deGoogle ? 'Google Ads' : 'Site', imovel: l.imovel || '', respostas: deMeta ? l.mensagem : [l.interesse, l.mensagem].filter(Boolean).join(' · '), responsavel: c.responsavelNome || '', clienteId: c.id });
       } else if (l.visitante && !c.visitante) { c.visitante = l.visitante; }
       if (deMeta && l.mensagem) { const pf = perfilDoFormulario(l.mensagem); if (Object.keys(pf).length) c.perfilWhatsApp = Object.assign({}, pf, c.perfilWhatsApp || {}); }
       if (l.visitante) await sql.query('UPDATE site_eventos SET cliente_id = $1 WHERE visitante = $2 AND cliente_id IS NULL', [c.id, l.visitante]).catch(() => null);

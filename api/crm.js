@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import { esquemaLinks } from './_links.js';
 import { sincronizarLeads } from './_sync.js';
 import { enviarAviso, avisoConfigurado } from './_avisos.js';
+import { linkContato } from './_contato.js';
 import { esquemaRastreio } from './leads.js'; // /api/usuarios é atendido aqui (limite de 12 funções do plano Hobby da Vercel)
 
 const CHAVE_OK = /^[a-z_]{1,40}$/;
@@ -102,6 +103,12 @@ export default async function handler(req, res) {
     const q = req.query || {};
 
     if (req.method === 'GET') {
+      if (q.acao === 'linkContato') { // 📇 salvar o cliente nos contatos do celular
+        const cid = String(q.cliente || '');
+        if (s.perfil === 'corretor' && !(await clientesDe(s)).some((c) => c.id === cid)) return err(res, 403, 'Cliente de outro corretor.');
+        const url = linkContato(cid);
+        return url ? ok(res, { url }) : err(res, 400, 'Configure SESSION_SECRET ou ADMIN_KEY na Vercel.');
+      }
       if (q.acao === 'navegacao') { // o que um cliente viu no site
         await esquemaRastreio();
         const cid = String(q.cliente || ''), vis = /^v[a-z0-9]{6,20}$/.test(String(q.visitante || '')) ? String(q.visitante) : '';

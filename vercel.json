@@ -43,6 +43,10 @@
       "destination": "/api/crm?modulo=usuarios"
     },
     {
+      "source": "/c/:token",
+      "destination": "/api/site?c=:token"
+    },
+    {
       "source": "/l/:code",
       "destination": "/api/site?l=:code"
     },
