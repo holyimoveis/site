@@ -298,13 +298,20 @@ async function puxarLeads(forms) {
     let j;
     try { j = await graph(`${f.id}/leads`, 'GET', { fields: 'id,created_time,field_data,ad_name,campaign_name', limit: 100 }, ptk); } catch (e) { continue; }
     // rótulos das perguntas (para gravar "Qual o seu objetivo?: Investir" e não a chave interna)
-    const rotulos = {};
-    try { const fq = await graph(f.id, 'GET', { fields: 'questions' }, ptk); (fq.questions || []).forEach((q) => { if (q.key) rotulos[q.key] = q.label || q.key; }); } catch (e) {}
+    // a Meta devolve a CHAVE da opção marcada (ex.: "pergunta_1_0"); "opcoes" traduz para o texto da opção
+    const rotulos = {}, opcoes = {};
+    try {
+      const fq = await graph(f.id, 'GET', { fields: 'questions{key,label,type,options{key,value}}' }, ptk);
+      (fq.questions || []).forEach((q) => {
+        if (q.key) rotulos[q.key] = q.label || q.key;
+        (q.options || []).forEach((o) => { if (o && o.key) opcoes[o.key] = o.value || o.key; });
+      });
+    } catch (e) {}
     for (const l of j.data || []) {
-      const fd = {}; (l.field_data || []).forEach((x) => { fd[x.name] = (x.values || []).join(', '); });
+      const fd = {}; (l.field_data || []).forEach((x) => { fd[x.name] = (x.values || []).map((v) => opcoes[v] || v).join(', '); });
       const nome = fd.full_name || fd.nome_completo || '', tel = fd.phone_number || fd.telefone || '', email = fd.email || '';
       const legivel = (k) => rotulos[k] || (k.replace(/_\d+$/, '').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) + '?');
-      const extras = Object.entries(fd).filter(([k]) => !['full_name', 'phone_number', 'email', 'nome_completo', 'telefone'].includes(k)).map(([k, v]) => legivel(k).replace(/[?:]?\s*$/, '?') + ' ' + String(v).replace(/_/g, ' ')).join(' | ');
+      const extras = Object.entries(fd).filter(([k]) => !['full_name', 'phone_number', 'email', 'nome_completo', 'telefone'].includes(k)).map(([k, v]) => legivel(k).replace(/[?:]?\s*$/, '?') + ' ' + String(v)).join(' | ');
       const campanha = f.item || l.campaign_name || l.ad_name || '';
       const r = await sql.query(
         `INSERT INTO leads (tipo, nome, email, telefone, interesse, mensagem, origem, imovel, meta_id, criado_em)

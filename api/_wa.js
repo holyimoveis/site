@@ -27,6 +27,8 @@ export const PADRAO_CONFIG = {
   retorno: '',
   semHorario: true,
   avisoNumero: '',
+  retomada: true,      // Helena retoma 1 vez quem parou de responder (dentro da janela de 24h)
+  retomadaHoras: 4,    // depois de quantas horas sem resposta
 };
 
 // ── Envio ──────────────────────────────────────────────────────────────
@@ -207,15 +209,24 @@ const FERRAMENTA = {
           cidades: { type: 'string' }, tipo_imovel: { type: 'string' }, faixa_valor: { type: 'string' },
           quartos: { type: 'string' }, prazo: { type: 'string' }, pagamento: { type: 'string', description: 'à vista, financiamento, permuta…' },
           interesse_em: { type: 'string', description: 'imóveis/empreendimentos do catálogo que despertaram interesse' },
+          entrada: { type: 'string', description: 'valor ou % de entrada / recursos próprios disponíveis, como o cliente disse' },
+          financiamento: { type: 'string', description: 'situação do financiamento: não vai usar, ainda não simulou, já simulou (banco/valor), crédito aprovado' },
+          parcela_confortavel: { type: 'string', description: 'parcela mensal que o cliente considera confortável, se disse' },
+          depende_venda: { type: 'string', description: 'se precisa vender outro imóvel/bem para comprar e em que pé está' },
+          imovel_permuta: { type: 'string', description: 'imóvel oferecido em permuta: tipo, bairro/cidade, metragem, valor estimado, quitado ou não' },
+          decisores: { type: 'string', description: 'quem participa da decisão (sozinho, cônjuge, família, sócio)' },
+          momento: { type: 'string', description: 'maturidade: pronto para avançar já, ou o que falta resolver antes' },
+          disponibilidade: { type: 'string', description: 'dias/horários em que o cliente pode visitar ou conversar' },
         },
       },
+      maturidade: { type: 'string', enum: ['pronto', 'morno', 'frio', 'indefinido'], description: 'pronto = forma de pagamento clara e viável para o valor + decide/está alinhado + prazo curto; morno = interesse real mas depende de simular financiamento, vender/avaliar imóvel ou alinhar decisão; frio = pagamento não fecha com o valor ou só curiosidade; indefinido = ainda sem dados.' },
       temperatura: { type: 'string', enum: ['frio', 'morno', 'quente'] },
       etapa_funil: { type: 'string', enum: ETAPAS },
       transferir: { type: 'boolean', description: 'true para passar a conversa ao Édipo agora.' },
       motivo_transferencia: { type: 'string', enum: Object.keys(MOTIVOS) },
-      resumo: { type: 'string', description: 'Resumo de 1 a 2 frases do cliente e do que ele busca, para o corretor.' },
+      resumo: { type: 'string', description: 'Resumo de 1 a 3 frases para o corretor: quem é, o que busca, como pretende pagar, quem decide, o que falta e o próximo passo sugerido.' },
     },
-    required: ['resposta', 'temperatura', 'etapa_funil', 'transferir', 'resumo'],
+    required: ['resposta', 'temperatura', 'etapa_funil', 'maturidade', 'transferir', 'resumo'],
   },
 };
 
@@ -249,16 +260,36 @@ ${cfg.infoHoly}
 Se o cliente perguntar algo sobre a Holy que não esteja escrito aqui, diga que vai confirmar com o Édipo. Não invente.
 
 OBJETIVO
-Conduza o atendimento o máximo possível sozinho, como um bom corretor: entenda o cliente a fundo, tire as dúvidas com base no catálogo e leve a conversa até a visita.
-Descubra com naturalidade, UMA pergunta por mensagem, sem parecer formulário:
-- o objetivo: morar, revenda (investir para revender), long stay (alugar por temporadas longas/anual) ou short stay (aluguel de temporada);
-- os desejos: o que ele valoriza (vista, lazer, bairro, metragem, andar, vagas);
-- as objeções: o que o preocupa (valor, prazo de entrega, localização, condições) e responda com argumentos verdadeiros do catálogo;
-- a forma de pagamento: à vista, financiamento, parcelamento direto, permuta;
-- também cidade, faixa de valor, quartos e prazo, quando fizer sentido.
+Conduza o atendimento como o melhor corretor da Holy: acolhedor, curioso e consultivo. Sua missão é entregar ao Édipo um cliente QUALIFICADO — com tudo o que ele precisa saber antes de uma visita — sem que o cliente sinta que preencheu um formulário.
+
+QUALIFICAÇÃO (siga esta ordem, pulando o que você já sabe pelo histórico, pelo formulário ou pelo CRM)
+1. Conexão e desejo: entenda o que encantou o cliente e o que não pode faltar no próximo imóvel (bairro, vagas, varanda, andar, lazer, pet). Mostre como o imóvel atende ao que ele disse.
+2. Objetivo e prazo: morar, revenda, long stay ou short stay; e para quando ele imagina a mudança/compra.
+3. Forma de pagamento — SEMPRE antes de falar em visita. Pergunte com leveza e com um motivo que ajuda o cliente, por exemplo: "Pra eu já te passar as condições certinhas: você pensa em recursos próprios, financiamento, ou usar algum imóvel na negociação?"
+4. Aprofunde conforme a resposta (uma pergunta por mensagem):
+   - Recursos próprios / à vista: o valor já está disponível ou depende de vender algo ou de resgate? (depende_venda)
+   - Financiamento: já simulou ou tem crédito aprovado? Quanto pensa em dar de entrada? Que parcela ficaria confortável? Se não simulou, ofereça: "o Édipo pode te ajudar a simular e ver qual banco sai melhor". Explique conceitos com simplicidade se perguntarem (entrada, FGTS, SAC x Price), sem citar taxas, aprovação ou valores de parcela.
+   - Permuta: qual imóvel (tipo, bairro, metragem, valor que ele estima, se está quitado) e se o complemento seria à vista ou financiado. Diga que a Holy avalia o imóvel dele sem compromisso.
+5. Decisão: quem mais participa da escolha? Se houver cônjuge/família, sugira que venham juntos na visita.
+6. Momento: se encontrar o imóvel certo, ele consegue avançar já ou precisa resolver algo antes?
+7. Disponibilidade: quais dias e horários ficam bons para conhecer o imóvel.
+Com isso completo (ou o essencial: pagamento, decisores e disponibilidade), convide para a visita e transfira para o Édipo (pediu_visita).
+
+COMO PERGUNTAR (humanização)
+- UMA pergunta por mensagem, sempre depois de reagir ao que o cliente disse (valide, comente, conecte com o imóvel). Nunca duas perguntas seguidas na mesma mensagem.
+- Justifique as perguntas sensíveis com um benefício para o cliente ("pra não te mostrar nada fora do seu momento", "pra deixar tudo pronto pro Édipo").
+- Nunca pergunte renda, salário ou dados pessoais/documentos. Use entrada e parcela confortável.
+- Se o cliente desviar ou não quiser responder, respeite, siga a conversa e retome depois com naturalidade.
+- Espelhe o jeito do cliente (formal/informal, curto/longo). Use o nome dele de vez em quando.
+- Se ele já respondeu algo no formulário do anúncio (aparece no histórico/CRM), não pergunte de novo: confirme e aprofunde ("vi que você pensa em permuta + complemento, me conta do seu imóvel?").
+- Registre tudo o que descobrir em perfil e atualize maturidade a cada mensagem.
+
 Quando houver opções compatíveis, apresente no máximo 3, com 1 linha cada e o link da página. Se nada combinar, diga que a Holy faz curadoria sob medida e que o Édipo pode buscar opções fora do site.
 
-CATÁLOGO (só existe o que está abaixo; nunca invente imóveis, valores, metragens, prazos ou condições)
+${cfg._ficha ? `O QUE JÁ SABEMOS DESTE CLIENTE (CRM — use para não repetir perguntas; não cite que veio do sistema)
+${cfg._ficha}
+
+` : ''}CATÁLOGO (só existe o que está abaixo; nunca invente imóveis, valores, metragens, prazos ou condições)
 ${cat}
 
 REGRAS
@@ -270,15 +301,18 @@ REGRAS
 ${cfg.regras ? '- ' + String(cfg.regras).split('\n').filter(Boolean).join('\n- ') : ''}
 
 QUANDO PASSAR PARA O ÉDIPO (transferir = true) — SOMENTE nestes casos
-- pediu_visita: quer agendar ou fazer uma visita.
-- pediu_humano: pediu para falar com uma pessoa, com o corretor ou com o Édipo.
+- pediu_visita: quer agendar ou fazer uma visita. Antes de transferir, se ainda faltar forma de pagamento, decisores ou disponibilidade, faça no máximo 2 perguntas essenciais (uma por mensagem), com naturalidade ("pra eu já deixar tudo pronto pro Édipo…"). Se o cliente insistir ou demonstrar pressa, transfira na hora.
+- pediu_humano: pediu para falar com uma pessoa, com o corretor ou com o Édipo. Transfira na hora, sem mais perguntas.
 - duvida_pontual: fez uma pergunta específica que o catálogo e as informações da Holy não respondem (ex.: proposta de valor, condição especial, documentação de um imóvel, disponibilidade de unidade específica).
 Em qualquer outra situação, continue conduzindo você mesmo, mesmo que o cliente esteja muito interessado.
 Ao transferir, avise com naturalidade que o Édipo vai continuar o atendimento por aqui mesmo, respeitando o que está em HORÁRIOS. Não faça mais perguntas nessa mensagem.
 
 FORMATO
 Mensagens curtas de WhatsApp (até 4 ou 5 linhas). Sem títulos, tabelas ou markdown; pode usar *negrito* do WhatsApp com moderação. Links sempre completos.
-Use SEMPRE a ferramenta "responder".`;
+Use SEMPRE a ferramenta "responder".${cfg._retomada ? `
+
+RETOMADA (esta mensagem)
+O cliente parou de responder há algumas horas. Escreva UMA única mensagem curta de retomada, leve e sem pressão, que traga algo de valor ligado ao que ele contou: um imóvel ou empreendimento do catálogo compatível (com o link), uma informação útil sobre o bairro ou a condição, ou uma pergunta simples que facilite a resposta. Não repita o que já foi dito, não cobre resposta, não diga que ele sumiu. Se não houver nada de valor para oferecer, faça só uma pergunta curta e gentil. transferir = false.` : ''}`;
 }
 
 export function montarHistorico(msgs) {
@@ -291,6 +325,25 @@ export function montarHistorico(msgs) {
   }
   while (out.length && out[0].role !== 'user') out.shift();
   return out;
+}
+
+// O que o CRM já sabe do cliente (respostas do formulário do anúncio, perfil anterior), para a Helena não perguntar de novo
+export async function fichaCliente(waId, conv) {
+  try {
+    const r = await sql.query("SELECT valor FROM crm_docs WHERE chave = 'clientes'");
+    const lista = Array.isArray(r[0] && r[0].valor) ? r[0].valor : [];
+    const fim8 = String(waId || '').replace(/\D/g, '').slice(-8);
+    const c = lista.find((x) => conv && x.id === conv.cliente_id) || (canalDe(waId) === 'whatsapp' && fim8.length === 8 ? lista.find((x) => String(x.celular || x.tel || '').replace(/\D/g, '').slice(-8) === fim8) : null);
+    if (!c) return '';
+    const p = c.perfilWhatsApp || {};
+    const perfil = Object.entries(p).filter(([, v]) => v).map(([k, v]) => k.replace(/_/g, ' ') + ': ' + v).join(' · ');
+    return [
+      'Nome: ' + (c.nome || '') + (c.origem ? ' · Origem: ' + c.origem : ''),
+      c.obs ? 'Anotações: ' + String(c.obs).replace(/\[WhatsApp\][\s\S]*/, '').trim().slice(0, 900) : '',
+      perfil ? 'Já levantado: ' + perfil : '',
+      c.maturidade ? 'Maturidade anterior: ' + c.maturidade : '',
+    ].filter((x) => x && !/^Anotações: $/.test(x)).join('\n');
+  } catch (e) { return ''; }
 }
 
 export async function pensar(cfg, cat, historico) {
@@ -330,7 +383,7 @@ async function sincronizarCRM(waId, conv, out, nomePerfil) {
   const tel = canal === 'whatsapp' ? telefoneBR(waId) : (telInformado.length >= 10 ? telefoneBR(telInformado) : '');
   const fim8 = (canal === 'whatsapp' ? String(waId) : telInformado).replace(/\D/g, '').slice(-8);
   const p = out.perfil || {};
-  const perfilTxt = [['Objetivo', p.objetivo], ['Desejos', p.desejos], ['Objeções', p.objecoes], ['Cidades', p.cidades], ['Tipo', p.tipo_imovel], ['Faixa de valor', p.faixa_valor], ['Quartos', p.quartos], ['Prazo', p.prazo], ['Pagamento', p.pagamento], ['Interesse', p.interesse_em]]
+  const perfilTxt = [['Objetivo', p.objetivo], ['Desejos', p.desejos], ['Objeções', p.objecoes], ['Cidades', p.cidades], ['Tipo', p.tipo_imovel], ['Faixa de valor', p.faixa_valor], ['Quartos', p.quartos], ['Prazo', p.prazo], ['Pagamento', p.pagamento], ['Entrada', p.entrada], ['Financiamento', p.financiamento], ['Parcela confortável', p.parcela_confortavel], ['Depende de venda', p.depende_venda], ['Permuta', p.imovel_permuta], ['Decisores', p.decisores], ['Momento', p.momento], ['Disponibilidade', p.disponibilidade], ['Interesse', p.interesse_em]]
     .filter((x) => x[1]).map((x) => x[0] + ': ' + x[1]).join(' · ');
   const bloco = '[WhatsApp] ' + (canal !== 'whatsapp' ? '(' + NOME_CANAL[canal] + ') ' : '') + (out.resumo || '') + (perfilTxt ? '\n' + perfilTxt : '');
   let clienteId = conv.cliente_id, novo = false, nomeFinal = '';
@@ -351,14 +404,15 @@ async function sincronizarCRM(waId, conv, out, nomePerfil) {
     if (iNova > iAtual && iNova <= 3) c.stage = out.etapa_funil; // só avança, nunca volta; Pós-venda fica com você
     if (TEMP[out.temperatura]) c.temp = TEMP[out.temperatura];
     c.obs = (String(c.obs || '').split('[WhatsApp]')[0].trim() + '\n\n' + bloco).trim();
-    c.perfilWhatsApp = p;
+    c.perfilWhatsApp = Object.assign({}, c.perfilWhatsApp || {}, Object.fromEntries(Object.entries(p).filter(([, v]) => v && String(v).trim())));
+    if (out.maturidade && out.maturidade !== 'indefinido') c.maturidade = out.maturidade;
     clienteId = c.id; nomeFinal = c.nome;
     return lista;
   });
   if (!conv.cliente_id || conv.cliente_id !== clienteId) await sql.query('UPDATE wa_conversas SET cliente_id = $2 WHERE wa_id = $1', [waId, clienteId]);
   const eventos = [];
   if (novo) eventos.push({ id: 'int' + rid(), tipo: canal === 'whatsapp' ? 'WhatsApp' : NOME_CANAL[canal].split(' ')[0], data: hojeISO(), hora: agoraHM(), desc: 'Primeiro contato pelo ' + NOME_CANAL[canal] + ' (assistente virtual). ' + (out.resumo || ''), imovelId: '', clienteId, cliente: nomeFinal, autor: 'Helena' });
-  if (out.transferir) eventos.push({ id: 'int' + rid(), tipo: 'Nota interna', data: hojeISO(), hora: agoraHM(), desc: '🔔 Assistente passou o atendimento para você: ' + (MOTIVOS[out.motivo_transferencia] || MOTIVOS.outro) + '. ' + (out.resumo || ''), imovelId: '', clienteId, cliente: nomeFinal });
+  if (out.transferir) eventos.push({ id: 'int' + rid(), tipo: 'Nota interna', data: hojeISO(), hora: agoraHM(), desc: '🔔 Assistente passou o atendimento para você: ' + (MOTIVOS[out.motivo_transferencia] || MOTIVOS.outro) + '. ' + (out.resumo || '') + (out.maturidade && out.maturidade !== 'indefinido' ? '\nMaturidade: ' + ({ pronto: '🟢 pronto para comprar', morno: '🟡 morno', frio: '🔴 frio' }[out.maturidade] || out.maturidade) : '') + (perfilTxt ? '\n' + perfilTxt : ''), imovelId: '', clienteId, cliente: nomeFinal });
   if (eventos.length) await atualizarDoc('timeline', (t) => eventos.concat(Array.isArray(t) ? t : []));
 }
 
@@ -387,6 +441,7 @@ export async function processarConversa(waId, site, nomePerfil) {
   const msgs = (await sql.query('SELECT papel, texto FROM wa_mensagens WHERE wa_id = $1 ORDER BY id DESC LIMIT 40', [waId])).reverse();
   let out;
   try {
+    cfg._ficha = await fichaCliente(waId, conv);
     out = await pensar(cfg, await catalogo(site), montarHistorico(msgs));
   } catch (e) {
     console.error('IA falhou', e);
@@ -451,4 +506,43 @@ export async function criarModeloAviso() {
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error('A Meta recusou o modelo: ' + ((j.error && (j.error.message || j.error)) || JSON.stringify(j).slice(0, 200)));
   return { status: j.status || 'PENDING', existente: false };
+}
+
+// ── Retomada: quem parou de responder recebe UMA mensagem de valor, ainda dentro da janela de 24h ──
+// Roda quando chega mensagem, quando o CRM abre Conversas e 1x por dia (cron). Nunca repete para o mesmo silêncio.
+let _ultimaVarredura = 0;
+export async function retomadas(site, forcar) {
+  if (!forcar && Date.now() - _ultimaVarredura < 10 * 60000) return { feitas: 0, pulou: true };
+  _ultimaVarredura = Date.now();
+  await ensureSchema();
+  await sql.query('ALTER TABLE wa_conversas ADD COLUMN IF NOT EXISTS retomada_em TIMESTAMPTZ');
+  const cfg = await lerConfig();
+  if (cfg.ativo === false || cfg.retomada === false) return { feitas: 0 };
+  const horas = Math.min(Math.max(+cfg.retomadaHoras || 4, 1), 20);
+  const cands = await sql.query(`SELECT c.wa_id, c.nome, c.cliente_id FROM wa_conversas c
+      WHERE c.pausado = false AND c.ultima_cliente IS NOT NULL
+        AND c.ultima_cliente > now() - interval '22 hours'
+        AND c.ultima_msg < now() - ($1 || ' hours')::interval
+        AND (c.retomada_em IS NULL OR c.retomada_em < c.ultima_cliente)
+        AND (SELECT papel FROM wa_mensagens m WHERE m.wa_id = c.wa_id ORDER BY id DESC LIMIT 1) = 'assistente'
+        AND (SELECT count(*) FROM wa_mensagens m WHERE m.wa_id = c.wa_id AND m.papel = 'cliente') >= 1
+      ORDER BY c.ultima_msg LIMIT 5`, [String(horas)]);
+  let feitas = 0;
+  for (const c of cands) {
+    try {
+      if (canalDe(c.wa_id) !== 'whatsapp' && cfg.canaisMeta === false) continue;
+      if (canalDe(c.wa_id) === 'whatsapp' && !whatsappConfigurado()) continue;
+      // marca antes de enviar: se algo falhar, não tenta de novo para este silêncio
+      const marc = await sql.query('UPDATE wa_conversas SET retomada_em = now() WHERE wa_id = $1 AND (retomada_em IS NULL OR retomada_em < ultima_cliente) RETURNING wa_id', [c.wa_id]);
+      if (!marc.length) continue;
+      const msgs = (await sql.query('SELECT papel, texto FROM wa_mensagens WHERE wa_id = $1 ORDER BY id DESC LIMIT 40', [c.wa_id])).reverse();
+      const hist = montarHistorico(msgs.concat([{ papel: 'cliente', texto: '[Aviso interno do sistema, não é o cliente: ele não responde há algumas horas. Envie agora a mensagem de retomada.]' }]));
+      const c2 = Object.assign({}, cfg, { _canal: canalDe(c.wa_id), _retomada: true, _ficha: await fichaCliente(c.wa_id, c) });
+      const out = await pensar(c2, await catalogo(site), hist);
+      const wamid = await enviarTexto(c.wa_id, out.resposta);
+      await salvarMensagem(c.wa_id, 'assistente', out.resposta, wamid);
+      feitas++;
+    } catch (e) { console.error('retomada falhou', c.wa_id, e && e.message); }
+  }
+  return { feitas };
 }

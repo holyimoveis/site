@@ -1,7 +1,8 @@
 // Conversas do WhatsApp para o CRM (só com X-Admin-Key)
 import { sql, ensureSchema, cors, body, ok, err, fail } from './_lib.js';
 import { sessao, pode, ehDoUsuario } from './_auth.js';
-import { enviarTexto, salvarMensagem, whatsappConfigurado, provedor, conectarWebhookKapso, lerConfig, pensar, catalogo, montarHistorico, avisarEdipo, criarModeloAviso } from './_wa.js';
+import { waitUntil } from '@vercel/functions';
+import { retomadas, enviarTexto, salvarMensagem, whatsappConfigurado, provedor, conectarWebhookKapso, lerConfig, pensar, catalogo, montarHistorico, avisarEdipo, criarModeloAviso } from './_wa.js';
 export const maxDuration = 60;
 
 export default async function handler(req, res) {
@@ -9,6 +10,14 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   try {
     await ensureSchema();
+    const site = process.env.SITE_URL || ('https://' + (req.headers['x-forwarded-host'] || req.headers.host));
+    // Cron diário da Vercel (vercel.json): retomadas da Helena
+    if ((req.query || {}).cron) {
+      const auth = String(req.headers.authorization || ''), seg = process.env.CRON_SECRET;
+      const okCron = seg ? auth === 'Bearer ' + seg : /vercel-cron/i.test(String(req.headers['user-agent'] || ''));
+      if (!okCron) return err(res, 401, 'não autorizado');
+      return ok(res, await retomadas(site, true));
+    }
     const s = await sessao(req);
     if (!s) return err(res, 401, 'Senha do CRM inválida.');
     if (!pode(s, 'conversas')) return err(res, 403, 'Seu perfil não tem acesso às conversas.');
@@ -57,6 +66,7 @@ export default async function handler(req, res) {
         const conv = (await sql.query('SELECT * FROM wa_conversas WHERE wa_id = $1', [String(q.wa_id)]))[0] || null;
         return ok(res, { conversa: conv, mensagens: msgs });
       }
+      waitUntil(retomadas(site).catch((e) => console.error('retomadas', e)));
       const lista = await sql.query(`SELECT c.*, (SELECT texto FROM wa_mensagens m WHERE m.wa_id = c.wa_id ORDER BY id DESC LIMIT 1) AS ultimo_texto,
           (SELECT papel FROM wa_mensagens m WHERE m.wa_id = c.wa_id ORDER BY id DESC LIMIT 1) AS ultimo_papel
           FROM wa_conversas c ORDER BY ultima_msg DESC LIMIT 300`);

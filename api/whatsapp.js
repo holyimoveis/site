@@ -4,7 +4,7 @@
 import crypto from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { sql, ensureSchema, fail } from './_lib.js';
-import { salvarMensagem, processarConversa, marcarLida, perfilMeta } from './_wa.js';
+import { salvarMensagem, processarConversa, marcarLida, perfilMeta, retomadas } from './_wa.js';
 
 export const maxDuration = 60;
 
@@ -178,6 +178,7 @@ export default async function handler(req, res) {
     }
   } catch (e) { return fail(res, e); }
   // responde rápido para a Meta e continua o trabalho em segundo plano
-  if (tarefas.length) waitUntil(Promise.allSettled(tarefas));
+  tarefas.push(retomadas(site).catch(() => null));
+  waitUntil(Promise.allSettled(tarefas));
   return res.status(200).json({ ok: true });
 }

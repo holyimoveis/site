@@ -13,6 +13,11 @@ export default async function handler(req, res) {
   if (!key) return err(res, 400, 'IA sem chave. Cadastre ANTHROPIC_API_KEY na Vercel (LEIA-ME, passo 5).');
   const msg = String(b.msg || '').slice(0, 60000);
   if (!msg) return err(res, 400, 'Mensagem vazia.');
+  // Fotos para a IA analisar (estúdio de fotos): até 16 imagens JPEG/PNG pequenas, em base64
+  const imgs = (Array.isArray(b.imagens) ? b.imagens : []).slice(0, 16)
+    .map((i) => ({ data: String((i && i.data) || '').replace(/^data:[^,]+,/, ''), media: /png/.test(String(i && i.media)) ? 'image/png' : 'image/jpeg' }))
+    .filter((i) => i.data.length > 100 && i.data.length < 600000);
+  const content = imgs.length ? imgs.map((i, k) => [{ type: 'text', text: 'Foto ' + k + ':' }, { type: 'image', source: { type: 'base64', media_type: i.media, data: i.data } }]).flat().concat([{ type: 'text', text: msg }]) : msg;
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -21,7 +26,7 @@ export default async function handler(req, res) {
         model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5',
         max_tokens: Math.min(Math.max(+b.max || 900, 50), 4000),
         system: String(b.system || '').slice(0, 20000) || undefined,
-        messages: [{ role: 'user', content: msg }],
+        messages: [{ role: 'user', content }],
       }),
     });
     const d = await r.json();

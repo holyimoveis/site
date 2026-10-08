@@ -41,6 +41,40 @@
     {
       "source": "/api/usuarios",
       "destination": "/api/crm?modulo=usuarios"
+    },
+    {
+      "source": "/l/:code",
+      "destination": "/api/site?l=:code"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/site?pg=sitemap"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/api/site?pg=robots"
+    },
+    {
+      "source": "/imovel/:id/:slug",
+      "destination": "/api/site?pg=imovel&id=:id"
+    },
+    {
+      "source": "/imovel/:id",
+      "destination": "/api/site?pg=imovel&id=:id"
+    },
+    {
+      "source": "/empreendimento/:id/:slug",
+      "destination": "/api/site?pg=empreendimento&id=:id"
+    },
+    {
+      "source": "/empreendimento/:id",
+      "destination": "/api/site?pg=empreendimento&id=:id"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/conversas?cron=1",
+      "schedule": "0 13 * * *"
     }
   ]
 }

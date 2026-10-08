@@ -17254,7 +17254,7 @@ window.onerror=function(msg,src,line,col,err){
 // ══════════════════════════════════════════════════════════════════
 // HOLY CLOUD: dados do CRM salvos na nuvem (Vercel), com cópia no aparelho
 // ══════════════════════════════════════════════════════════════════
-var HOLY_KEYS = ['imoveis', 'clientes', 'timeline', 'empreendimentos', 'wa_config', 'site_config', 'campanhas', 'equipe_config', 'posts_aprovacao'];
+var HOLY_KEYS = ['imoveis', 'clientes', 'timeline', 'empreendimentos', 'wa_config', 'site_config', 'campanhas', 'equipe_config', 'posts_aprovacao', 'conteudos'];
 // Acesso: login individual (token) ou chave mestra (ADMIN_KEY), que vale como administrador
 var HolyAuth = {
   get: function () { try { return localStorage.getItem('hly_token') || localStorage.getItem('hly_admin_key') || ''; } catch (e) { return ''; } },
@@ -17797,7 +17797,7 @@ async function apiDelete(path, id) {
 
 const BAIRROS_SC = (cidade) => CIDADES_SC[cidade] || ["Centro", "Outros"];
 const STATUS_IMOVEL = ["Disponível", "Reservado", "Negociação", "Vendido", "Locado", "Captação"];
-const ORIGENS = ["Instagram", "WhatsApp", "Indicação", "Landing Page", "Site", "Meta Ads", "Facebook", "Portais", "Ligação", "Evento", "Outros"];
+const ORIGENS = ["Instagram", "WhatsApp", "Google Ads", "Indicação", "Landing Page", "Site", "Meta Ads", "Facebook", "Portais", "Ligação", "Evento", "Outros"];
 const FINALIDADES = ["Moradia", "Investimento", "Locação", "Misto"];
 const DIFS_OPT = ["Lavabo social", "Suíte master com closet", "Closet", "Banheira", "Home office", "Varanda gourmet", "Sacada com churrasqueira", "Churrasqueira", "Terraço", "Jardim", "Garden", "Piscina", "Piscina aquecida", "Hidromassagem/Jacuzzi", "Sauna", "Adega", "Home theater", "Lareira", "Cozinha integrada", "Cozinha gourmet", "Lavanderia separada", "Dependência de serviço", "Depósito", "Pé-direito duplo", "Mobiliado", "Semimobiliado", "Decorado", "Ar-condicionado", "Infra para ar-condicionado", "Aquecimento a gás", "Piso aquecido", "Automação residencial", "Fechadura digital", "Energia solar", "Vista mar", "Vista panorâmica", "Frente mar", "Andar alto", "Cobertura", "Pet friendly", "Condomínio fechado"];
 const LAZER_OPT = ["Salão de festas", "Espaço gourmet", "Churrasqueira coletiva", "Academia", "Pilates/Yoga", "Sauna seca", "Sauna úmida", "Spa", "Sala de massagem", "Piscina adulto", "Piscina infantil", "Piscina aquecida", "Piscina coberta", "Piscina com borda infinita", "Raia de natação", "Hidromassagem/Jacuzzi", "Solarium", "Rooftop", "Deck molhado", "Home market", "Coworking", "Sala de reunião", "Cinema", "Brinquedoteca", "Playground", "Espaço teen", "Salão de jogos", "Pub/Bar", "Adega coletiva", "Espaço zen", "Quadra", "Quadra de beach tennis", "Quadra de tênis", "Quadra de squash", "Campo de futebol", "Pista de caminhada", "Bicicletário", "Pet place", "Pet wash", "Lavanderia coletiva", "Espaço beleza", "Car wash", "Carregador para carro elétrico", "Gerador", "Portaria 24h", "Portaria remota", "Segurança privada", "Concierge", "Serviço de praia", "Box de praia", "Depósito/Hobby box", "Hall decorado", "Elevador social e de serviço"];
@@ -17836,7 +17836,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const nowH = () => new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 const tempC = { hot: C.danger, warm: C.gold, cold: C.muted };
 const tempL = { hot: "Quente", warm: "Morno", cold: "Frio" };
-const origC = { Instagram: C.purple, Indicação: C.olive, "Landing Page": C.blue, Site: C.muted, WhatsApp: C.success, Facebook: "#1877f2", Portais: C.gold, Ligação: C.warn, Outros: C.muted };
+const origC = { "Google Ads": "#1a73e8", "Meta Ads": "#1877f2", Instagram: C.purple, Indicação: C.olive, "Landing Page": C.blue, Site: C.muted, WhatsApp: C.success, Facebook: "#1877f2", Portais: C.gold, Ligação: C.warn, Outros: C.muted };
 const stIC = { Disponível: C.success, Reservado: C.warn, Negociação: C.gold, Vendido: C.muted, Locado: C.blue, Captação: C.purple };
 function matchScore(cli, im) {
     var _a, _b, _c;
@@ -18244,6 +18244,10 @@ ${imovel.exclusividade ? `<div style="font-size:10px;padding:5px 12px;background
                 holyPode("anunciar") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.blue, onClick: () => abrirMkt("campanha", imovel, "im") }, "📣 Anunciar"),
                 holyPode("post") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, onClick: () => abrirMkt("post", imovel, "im") }, "📸 Post"),
                 holyPode("post") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.oliveMid, onClick: () => abrirMkt("marketplace", imovel, "im") }, "🏷 Marketplace"),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.success, onClick: () => abrirMkt("match", imovel, "im") }, "🎯 Clientes compatíveis"),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.purple, onClick: () => abrirMkt("fotos", imovel, "im") }, "✨ Estúdio de fotos"),
+                holyPode("anunciar") && React.createElement(PBtn, { sm: true, variant: "ghost", color: "#1a73e8", onClick: () => abrirMkt("google", imovel, "im") }, "🔎 Google Ads"),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.inkMid, onClick: () => { try { navigator.clipboard.writeText(vPagina(imovel, "im")); alert("Link da página copiado:\n" + vPagina(imovel, "im")); } catch (e) { } } }, "🔗 Página do imóvel"),
                 holyPode("excluirImovel") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.danger, onClick: () => { if (window.confirm("Excluir \"" + imovel.nome + "\"?\n\nEsta a\u00E7\u00E3o n\u00E3o pode ser desfeita.")) onDelete(imovel.id); } }, "\uD83D\uDDD1\uFE0F Excluir"),
                 React.createElement("button", { onClick: onClose, style: { background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.muted } }, "\u00D7"))),
         ((_c = imovel.fotos) === null || _c === void 0 ? void 0 : _c.length) > 0
@@ -18516,6 +18520,8 @@ function ClienteDetail({ cliente, imoveis, timeline, onEdit, onAddInt, onDelete,
             cliente.tel && React.createElement("span", null,
                 "\uD83D\uDCDE ",
                 cliente.tel)),
+        React.createElement(ClienteVendas, { cliente: cliente, imoveis: imoveis }),
+        React.createElement(NavegacaoSite, { cliente: cliente }),
         cliente.obs && React.createElement("div", { style: { fontSize: 13, color: C.inkMid, fontStyle: "italic", padding: "10px 14px", background: C.oliveGhost, borderRadius: 8, marginBottom: 14 } },
             "\"",
             cliente.obs,
@@ -18758,6 +18764,8 @@ ${e.preco ? `<div class="val"><div style="font-size:10px;letter-spacing:.15em;te
             holyPode("anunciar") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.blue, onClick: () => abrirMkt("campanha", e, "em") }, "📣 Anunciar / impulsionar"),
             holyPode("post") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, onClick: () => abrirMkt("post", e, "em") }, "📸 Post"),
             holyPode("post") && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.oliveMid, onClick: () => abrirMkt("marketplace", e, "em") }, "🏷 Marketplace"),
+            React.createElement(PBtn, { sm: true, variant: "ghost", color: C.success, onClick: () => abrirMkt("match", e, "em") }, "🎯 Clientes compatíveis"),
+            holyPode("anunciar") && React.createElement(PBtn, { sm: true, variant: "ghost", color: "#1a73e8", onClick: () => abrirMkt("google", e, "em") }, "🔎 Google Ads"),
             React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: dossie }, "🖨️ Dossiê PDF"),
             React.createElement(PBtn, { sm: true, variant: "ghost", color: C.success, onClick: () => window.open(zap, "_blank") }, "💬 Enviar no WhatsApp"),
             React.createElement(PBtn, { sm: true, variant: "ghost", color: C.inkMid, onClick: () => copiar(link, "Link da página") }, "🔗 Copiar link")),
@@ -18785,6 +18793,8 @@ function EmpreendimentosPage() {
     const ord = [...lista].sort((a, b) => (+a.ordem || 0) - (+b.ordem || 0));
     const renumera = arr => arr.map((e, i) => Object.assign({}, e, { ordem: i }));
     function salvar(e) {
+        const eNovo = !lista.some(x => x.id === e.id);
+        if (eNovo) setTimeout(() => abrirMkt("match", e, "em"), 400);
         setLista(p => p.some(x => x.id === e.id) ? p.map(x => x.id === e.id ? e : x) : renumera([...[...p].sort((a, b) => (+a.ordem || 0) - (+b.ordem || 0)), Object.assign({}, e, { ordem: p.length })]));
         setEdit(null);
     }
@@ -18977,6 +18987,10 @@ function WaConfig({ cfg, setCfg, salvar, salvo }) {
                 React.createElement(FI, { label: "Você atende a partir de (h)", type: "number", value: cfg.horaInicio, onChange: v => F("horaInicio", +v || 0) }),
                 React.createElement(FI, { label: "Até (h)", type: "number", value: cfg.horaFim, onChange: v => F("horaFim", +v || 0) }),
                 React.createElement(FI, { label: "Prazo de retorno", value: cfg.retorno, onChange: v => F("retorno", v) })),
+            React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.inkMid, cursor: "pointer", flexWrap: "wrap" } },
+                React.createElement("input", { type: "checkbox", checked: cfg.retomada !== false, onChange: e => F("retomada", e.target.checked), style: { accentColor: C.olive } }),
+                "Retomar quem parou de responder (1 vez, com algo de valor, dentro da janela de 24h) depois de",
+                React.createElement("input", { type: "number", min: 1, max: 20, value: cfg.retomadaHoras || 4, onChange: e => F("retomadaHoras", +e.target.value || 4), style: { width: 54, padding: "4px 6px", borderRadius: 6, border: `0.5px solid ${C.border}` } }), "horas"),
             React.createElement(FI, { label: "Tom de voz (como você escreve)", rows: 5, value: cfg.tom, onChange: v => F("tom", v) }),
             React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: -8, lineHeight: 1.5 } }, "Dica: cole aqui 3 ou 4 mensagens reais suas (sem dados de clientes). O assistente imita o jeito de escrever."),
             React.createElement(FI, { label: "Sobre a Holy (o que ele pode contar)", rows: 6, value: cfg.infoHoly, onChange: v => F("infoHoly", v) }),
@@ -19410,11 +19424,718 @@ function TimelinePage({ timeline, imoveis }) {
                     React.createElement("div", { style: { fontSize: 13, color: C.inkMid, lineHeight: 1.6 } }, t.desc))));
         }));
 }
+// ═══════════════════════════════════════════════════════════════════════
+// VENDAS: lead score, match em tempo real, esquentar, visitas, proposta, links rastreados, relatório
+// ═══════════════════════════════════════════════════════════════════════
+const vPrimeiro = n => String(n || "").trim().split(/\s+/)[0] || "";
+const vDig = t => String(t || "").replace(/\D/g, "");
+function vWa(tel, texto) {
+    let d = vDig(tel); if (d.length === 10 || d.length === 11) d = "55" + d;
+    return "https://wa.me/" + (d.length >= 12 ? d : "") + "?text=" + encodeURIComponent(texto || "");
+}
+function vEu() { return (HolyUser && HolyUser.nome) || "Édipo"; }
+function vTL(cliente, tipo, desc, extra) {
+    const agora = new Date();
+    const ev = Object.assign({ id: "int" + uid(), tipo, data: agora.toLocaleDateString("sv-SE"), hora: agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }), desc, imovelId: "", clienteId: cliente.id, cliente: cliente.nome, autor: vEu(), autorId: (HolyUser && HolyUser.id) || "" }, extra || {});
+    HolyStore.update("timeline", l => [ev].concat(Array.isArray(l) ? l : []));
+    return ev;
+}
+function vValores(t) { // "1,5 a 2 milhões" -> [1500000, 2000000]
+    const x = String(t || "").toLowerCase().replace(/r\$/g, "");
+    const nums = [...x.matchAll(/(\d[\d.]*(?:,\d+)?)\s*(milh[õo]es|milh[ãa]o|mi\b|mil|k\b)?/g)].map(m => {
+        let n = parseFloat(m[1].replace(/\./g, "").replace(",", ".")); const u = m[2] || "";
+        if (/^mi/.test(u) && u !== "mil") n *= 1e6; else if (u === "mil" || u === "k") n *= 1e3; else if (n < 100) n *= (/milh|mi\b/.test(x) ? 1e6 : 1e3);
+        return n;
+    }).filter(n => n >= 50000);
+    if (!nums.length) return [0, 0];
+    return nums.length === 1 ? (/até|ate|no máximo/.test(x) ? [0, nums[0]] : [nums[0] * 0.85, nums[0] * 1.15]) : [Math.min(...nums), Math.max(...nums)];
+}
+function vPerfil(c) { // junta o perfil de interesse (cadastro) com o que a Helena descobriu na conversa
+    const i = (c.interesses || [])[0] || {}, w = c.perfilWhatsApp || {};
+    const [vmin, vmax] = vValores(w.faixa_valor);
+    return {
+        orcMin: +i.orcMin || vmin, orcMax: +i.orcMax || vmax,
+        cidades: (i.cidades || []).concat(String(w.cidades || "").split(/,|\be\b|\//)).map(x => String(x).trim().toLowerCase()).filter(Boolean),
+        bairros: (i.bairros || []).map(x => String(x).toLowerCase()), tipos: (i.tipos || []).concat(w.tipo_imovel ? [w.tipo_imovel] : []).map(x => String(x).toLowerCase()),
+        quartos: +i.quartosPref || parseInt(w.quartos) || 0, prazo: String(w.prazo || ""), objetivo: String(w.objetivo || i.finalidade || ""),
+        temPerfil: !!(i.orcMax || vmax || w.cidades || w.tipo_imovel || (i.tipos || []).length),
+    };
+}
+function vMatch(c, item, kind) { // 0-100 + motivos
+    const p = vPerfil(c); if (!p.temPerfil) return { score: 0, motivos: [] };
+    let sc = 0; const m = [];
+    const cid = String(item.cidade || "").toLowerCase().replace(/-sc$/, "").trim();
+    const valor = kind === "im" ? +item.valor || 0 : mpPreco(item, "em");
+    if (valor && p.orcMax) { if (valor >= (p.orcMin || 0) * 0.9 && valor <= p.orcMax * 1.05) { sc += 35; m.push("valor no orçamento"); } else if (valor <= p.orcMax * 1.15) { sc += 15; m.push("perto do teto"); } }
+    else if (!valor || !p.orcMax) sc += 10;
+    if (cid && p.cidades.some(x => x && (cid.includes(x) || x.includes(cid)))) { sc += 25; m.push("cidade desejada"); }
+    if (kind === "im" && item.bairro && p.bairros.includes(String(item.bairro).toLowerCase())) { sc += 15; m.push("bairro preferido"); }
+    const tipo = String(kind === "im" ? item.tipo : item.tipoLabel || "").toLowerCase();
+    if (tipo && p.tipos.some(t => t && (tipo.includes(t) || t.includes(tipo.split(" ")[0])))) { sc += 15; m.push("tipo certo"); }
+    if (kind === "im" && p.quartos && +item.quartos >= p.quartos) { sc += 10; m.push(item.quartos + " quartos"); }
+    if (kind === "em" && /lan|obra|pré/i.test(item.status || "") && /invest|revenda|short|long/i.test(p.objetivo)) { sc += 10; m.push("bom para investir"); }
+    return { score: Math.min(100, sc), motivos: m };
+}
+function vScore(c, tl, aberturas) { // lead score 0-100: quem ligar primeiro
+    let sc = 0; const m = [];
+    sc += { hot: 30, warm: 15, cold: 0 }[c.temp] || 10; if (c.temp === "hot") m.push("quente");
+    const et = ["Prospecção", "Qualificação", "Proposta", "Negociação", "Pós-venda"].indexOf(c.stage);
+    if (et === 4) return { score: 0, motivos: ["pós-venda"] };
+    sc += [0, 8, 18, 24][Math.max(0, et)] || 0; if (et >= 2) m.push(c.stage.toLowerCase());
+    const ult = (tl || []).filter(t => t.clienteId === c.id).map(t => t.data).sort().pop() || c.createdAt;
+    const dias = ult ? Math.floor((Date.now() - new Date(ult + "T12:00:00")) / 864e5) : 99;
+    sc += dias <= 2 ? 15 : dias <= 7 ? 9 : dias <= 15 ? 4 : 0;
+    const p = vPerfil(c); if (p.orcMax) { sc += 8; m.push("orçamento definido"); }
+    if (/imedia|já|ja\b|agora|30 dias|1 m[eê]s|2 meses|3 meses|este ano|curto/i.test(p.prazo)) { sc += 10; m.push("prazo curto"); }
+    if (/vista|aprovad|financiamento aprovado|permuta/i.test(String((c.perfilWhatsApp || {}).pagamento || ""))) { sc += 5; m.push("pagamento encaminhado"); }
+    const q = vQualif(c); if (q.feitos >= 5) { sc += 6; m.push("qualificado " + q.feitos + "/" + q.total); }
+    if (c.maturidade === "pronto") { sc += 12; m.push("🟢 pronto para comprar"); } else if (c.maturidade === "morno") sc += 4; else if (c.maturidade === "frio") sc -= 8;
+    if (aberturas) { sc += Math.min(15, aberturas * 5); m.push("abriu link " + aberturas + "x"); }
+    if (/indica/i.test(c.origem || "")) { sc += 5; m.push("indicação"); }
+    return { score: Math.min(100, sc), motivos: m, dias };
+}
+function useLinksAbertos() {
+    const [d, setD] = useState({});
+    useEffect(() => { holyFetch("/api/crm?acao=links").then(r => r.json()).then(j => { if (j.success) { const o = {}; (j.links || []).forEach(x => o[x.cliente_id] = x); setD(o); } }).catch(() => { }); }, []);
+    return d;
+}
+async function vLink(url, cliente, item) {
+    try { const r = await holyFetch("/api/crm", { method: "POST", body: JSON.stringify({ acao: "link", url, clienteId: cliente && cliente.id, cliente: cliente && cliente.nome, item }) }); const j = await r.json(); return j.success ? j.url : url; }
+    catch (e) { return url; }
+}
+const vItemLink = (item, kind) => location.origin + "/" + (kind === "im" ? "imovel" : "empreendimento") + "/" + encodeURIComponent(item.id) + "/" + String(item.nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70);
+function vMsgMatch(c, item, kind, link) {
+    const nome = vPrimeiro(c.nome);
+    const desc = kind === "im"
+        ? [item.tipo + (item.bairro ? " no " + item.bairro : "") + (item.cidade ? ", " + String(item.cidade).replace(/-SC$/i, "") : ""), item.quartos ? item.quartos + " quartos" + (item.suites ? " (" + item.suites + " suítes)" : "") : "", (item.areaPrivativa || item.area) ? (item.areaPrivativa || item.area) + " m²" : "", item.valor ? fmt(item.valor) : ""].filter(Boolean).join(" · ")
+        : [item.nome + (item.cidade ? ", em " + item.cidade : ""), item.tipoLabel, item.preco].filter(Boolean).join(" · ");
+    return `Oi${nome ? ", " + nome : ""}! Aqui é ${vPrimeiro(vEu())}, da Holy. Lembrei de você: ${kind === "im" ? "entrou um imóvel" : "tenho um empreendimento"} que tem muito a ver com o que você procura.\n\n${desc}\n\nFotos e detalhes: ${link}\n\nQuer que eu te conte mais ou agendamos uma visita?`;
+}
+function vIA(prompt) { return holyIA(prompt, 500, "Você escreve mensagens de WhatsApp de um corretor de imóveis de alto padrão em SC (Holy Curadoria Imobiliária). Tom próximo, elegante, curto (até 6 linhas), sem 'top', 'perfeito', 'imperdível', sem exageros, no máximo 1 emoji. Use somente os dados fornecidos. Responda só com a mensagem, sem aspas.").then(r => r.error ? null : String(r.text || "").trim()); }
+
+// ── Alerta de match: quem combina com este imóvel/empreendimento ──
+function MatchAlerta({ item, kind, onClose, novo }) {
+    const clientes = HolyStore.get("clientes", []);
+    const lista = clientes.filter(c => c.stage !== "Pós-venda").map(c => Object.assign({ c }, vMatch(c, item, kind))).filter(x => x.score >= 45).sort((a, b) => b.score - a.score).slice(0, 40);
+    const [msgs, setMsgs] = useState({}); const [feito, setFeito] = useState({}); const [ia, setIa] = useState("");
+    const linkBase = vItemLink(item, kind);
+    const msgDe = c => msgs[c.id] != null ? msgs[c.id] : vMsgMatch(c, item, kind, "[link]");
+    async function enviar(c) {
+        const w = window.open("about:blank", "_blank");
+        const l = await vLink(linkBase, c, item.nome);
+        const t = msgDe(c).replace("[link]", l);
+        if (w) w.location.href = vWa(c.celular || c.tel, t); else window.open(vWa(c.celular || c.tel, t), "_blank");
+        vTL(c, "WhatsApp", "🎯 Enviado " + (kind === "im" ? "imóvel" : "empreendimento") + " compatível: " + item.nome, { imovelId: kind === "im" ? item.id : "" });
+        setFeito(p => Object.assign({}, p, { [c.id]: true }));
+    }
+    async function personalizar(c) {
+        setIa(c.id);
+        const t = await vIA(`Cliente: ${c.nome}. Perfil: ${JSON.stringify(vPerfil(c))}. Resumo: ${String(c.obs || "").slice(-600)}\n${kind === "im" ? "Imóvel" : "Empreendimento"}: ${JSON.stringify(mktVitrine(item, kind)).slice(0, 2500)}\nEscreva a mensagem apresentando esta opção, ligando aos interesses dele, e termine com uma pergunta. Coloque exatamente [link] onde vai o link.`);
+        setIa(""); if (t) setMsgs(p => Object.assign({}, p, { [c.id]: t.includes("[link]") ? t : t + "\n\n[link]" }));
+    }
+    return React.createElement(Modal, { onClose, width: 820, z: 2700 },
+        React.createElement(MHead, { title: "🎯 Clientes compatíveis: " + item.nome, sub: novo ? "Acabou de entrar no portfólio. Avise quem combina antes da concorrência." : "Cruzamento com o perfil de cada cliente (cadastro + o que a Helena descobriu)", onClose }),
+        !lista.length ? React.createElement("div", { style: { padding: 30, textAlign: "center", color: C.muted, fontSize: 13 } }, "Nenhum cliente com perfil compatível (nota 45+). Complete o perfil de interesse dos clientes para o cruzamento ficar melhor.") :
+        React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10, maxHeight: "65vh", overflowY: "auto" } },
+            lista.map(({ c, score, motivos }) => React.createElement("div", { key: c.id, style: { border: `0.5px solid ${C.border}`, borderLeft: `3px solid ${score >= 75 ? C.success : C.gold}`, borderRadius: 10, padding: 12, background: feito[c.id] ? C.oliveGhost : C.white } },
+                React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 6 } },
+                    React.createElement("b", { style: { fontSize: 13, color: C.ink } }, c.nome),
+                    React.createElement(Bdg, { label: score + "% compatível", color: score >= 75 ? C.success : C.gold, sm: true }),
+                    React.createElement("span", { style: { fontSize: 11, color: C.muted } }, motivos.join(" · ")),
+                    React.createElement("span", { style: { fontSize: 11, color: C.muted, marginLeft: "auto" } }, c.celular || "sem telefone")),
+                React.createElement("textarea", { value: msgDe(c), onChange: e => setMsgs(p => Object.assign({}, p, { [c.id]: e.target.value })), style: Object.assign({}, mkInput, { minHeight: 92, fontSize: 12 }) }),
+                React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap", alignItems: "center" } },
+                    React.createElement(PBtn, { sm: true, color: C.success, onClick: () => enviar(c), disabled: !vDig(c.celular || c.tel) }, feito[c.id] ? "✓ Enviado (enviar de novo)" : "💬 Enviar no WhatsApp"),
+                    React.createElement(PBtn, { sm: true, variant: "ghost", onClick: () => personalizar(c), loading: ia === c.id }, "✦ Personalizar com IA"),
+                    React.createElement("span", { style: { fontSize: 10, color: C.muted } }, "[link] vira um link rastreado: você vê quando ele abrir."))))));
+}
+
+// ── Agendar visita ──
+function VisitaModal({ cliente, imoveis, onClose }) {
+    const emps = HolyStore.get("empreendimentos", []);
+    const amanha = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+    const [f, setF] = useState({ data: amanha, hora: "10:00", dur: 60, item: "", local: "", obs: "" });
+    const F = (k, v) => setF(p => Object.assign({}, p, { [k]: v }));
+    const opcoes = imoveis.filter(i => i.status !== "Vendido").map(i => ({ v: "im:" + i.id, l: i.nome, x: i, k: "im" })).concat(emps.map(e => ({ v: "em:" + e.id, l: "🏢 " + e.nome, x: e, k: "em" })));
+    const sel = opcoes.find(o => o.v === f.item);
+    const local = f.local || (sel ? (sel.k === "im" ? [sel.x.bairro, sel.x.cidade].filter(Boolean).join(", ") : sel.x.endereco || sel.x.cidade || "") : "");
+    const ini = new Date(f.data + "T" + f.hora + ":00"), fim = new Date(ini.getTime() + (+f.dur || 60) * 60000);
+    const g = d => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const titulo = "Visita: " + cliente.nome + (sel ? " · " + sel.x.nome : "");
+    const gcal = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" + encodeURIComponent(titulo) + "&dates=" + g(ini) + "/" + g(fim) + "&location=" + encodeURIComponent(local) + "&details=" + encodeURIComponent("Cliente: " + cliente.nome + " · " + (cliente.celular || "") + (f.obs ? "\n" + f.obs : "") + "\nHoly Intelligence CRM");
+    const dataBR = ini.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+    const conf = `Oi, ${vPrimeiro(cliente.nome)}! Visita confirmada ✅\n\n📅 ${dataBR}, às ${f.hora}\n📍 ${local || "endereço a combinar"}${sel ? "\n🏠 " + sel.x.nome : ""}\n\nNo dia anterior te mando um lembrete. Qualquer coisa, é só me chamar. ${vPrimeiro(vEu())}, Holy Curadoria Imobiliária.`;
+    const [salvo, setSalvo] = useState(false);
+    function salvar() {
+        vTL(cliente, "Visita", "📅 Visita agendada para " + ini.toLocaleDateString("pt-BR") + " às " + f.hora + (sel ? " · " + sel.x.nome : "") + (local ? " · " + local : "") + (f.obs ? " · " + f.obs : ""), { imovelId: sel && sel.k === "im" ? sel.x.id : "", visitaEm: ini.toISOString(), visitaItem: sel ? sel.x.nome : "", visitaLocal: local });
+        if (["Prospecção", "Qualificação"].includes(cliente.stage)) HolyStore.update("clientes", l => (l || []).map(c => c.id === cliente.id ? Object.assign({}, c, { stage: "Proposta" === c.stage ? c.stage : "Qualificação", temp: "hot" }) : c));
+        setSalvo(true);
+    }
+    return React.createElement(Modal, { onClose, width: 560, z: 2700 },
+        React.createElement(MHead, { title: "📅 Agendar visita", sub: cliente.nome + (cliente.celular ? " · " + cliente.celular : ""), onClose }),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 } },
+            React.createElement(FI, { label: "Data", type: "date", value: f.data, onChange: v => F("data", v) }),
+            React.createElement(FI, { label: "Hora", type: "time", value: f.hora, onChange: v => F("hora", v) }),
+            React.createElement(FI, { label: "Duração (min)", type: "number", value: f.dur, onChange: v => F("dur", v) })),
+        React.createElement("div", { style: { marginBottom: 10 } }, mkLbl("Imóvel ou empreendimento"),
+            React.createElement("select", { value: f.item, onChange: e => F("item", e.target.value), style: mkInput }, React.createElement("option", { value: "" }, "—"), opcoes.map(o => React.createElement("option", { key: o.v, value: o.v }, o.l)))),
+        React.createElement(FI, { label: "Local / ponto de encontro", value: f.local, placeholder: local, onChange: v => F("local", v) }),
+        React.createElement("div", { style: { height: 8 } }),
+        React.createElement(FI, { label: "Observações", value: f.obs, onChange: v => F("obs", v) }),
+        React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 } },
+            React.createElement(PBtn, { sm: true, onClick: salvar, disabled: salvo }, salvo ? "✓ Visita registrada" : "Registrar visita no CRM"),
+            React.createElement(PBtn, { sm: true, variant: "ghost", color: C.blue, onClick: () => window.open(gcal, "_blank") }, "📆 Adicionar ao Google Agenda"),
+            React.createElement(PBtn, { sm: true, variant: "ghost", color: C.success, onClick: () => window.open(vWa(cliente.celular || cliente.tel, conf), "_blank"), disabled: !vDig(cliente.celular || cliente.tel) }, "💬 Enviar confirmação")),
+        React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 10 } }, "O lembrete da véspera aparece em 🔥 Esquentar > Visitas, pronto para enviar."));
+}
+
+// ── Proposta em PDF ──
+function PropostaModal({ cliente, imoveis, onClose }) {
+    const emps = HolyStore.get("empreendimentos", []);
+    const opcoes = imoveis.filter(i => i.status !== "Vendido").map(i => ({ v: "im:" + i.id, l: i.nome, x: i, k: "im" })).concat(emps.map(e => ({ v: "em:" + e.id, l: "🏢 " + e.nome, x: e, k: "em" })));
+    const [f, setF] = useState({ item: opcoes[0] ? opcoes[0].v : "", unidade: "", valor: "", entrada: "", pagamento: "", condicoes: "", validade: 5, obs: "", cpf: cliente.cpf || "" });
+    const F = (k, v) => setF(p => Object.assign({}, p, { [k]: v }));
+    const sel = opcoes.find(o => o.v === f.item);
+    const esc = t => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const num = v => +String(v || "").replace(/\./g, "").replace(",", ".") || 0;
+    function gerar() {
+        if (!sel) return alert("Escolha o imóvel ou empreendimento.");
+        const hoje = new Date(), val = new Date(hoje.getTime() + (+f.validade || 5) * 864e5);
+        const w = window.open("", "_blank");
+        const linha = (l, v) => v ? `<tr><td>${esc(l)}</td><td>${esc(v)}</td></tr>` : "";
+        w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Proposta · ${esc(cliente.nome)}</title><style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:Inter,Arial,sans-serif;color:#1a1c18;font-size:13px}.p{max-width:760px;margin:0 auto;padding:48px}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #4a5c2f;padding-bottom:18px;margin-bottom:26px}h1{font-family:'Cormorant Garamond',serif;font-size:30px;margin-bottom:4px}
+.s{color:#6b7c47;font-size:12px;margin-bottom:22px}table{width:100%;border-collapse:collapse;margin-bottom:20px}td{padding:9px 10px;border-bottom:.5px solid #e1e5d9;vertical-align:top}td:first-child{width:36%;color:#6b6e66}
+.box{background:#f2f5ec;border-radius:10px;padding:14px 16px;margin-bottom:18px;line-height:1.6}.v{background:#4a5c2f;color:#fff;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+.v b{font-size:22px;font-family:'Cormorant Garamond',serif}.as{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:60px}.as div{border-top:1px solid #1a1c18;padding-top:6px;font-size:11px;text-align:center}
+.ft{margin-top:34px;font-size:10px;color:#7a7d72;text-align:center;border-top:1px solid #d6dfc8;padding-top:12px}</style></head><body><div class="p">
+<div class="hd"><img src="${location.origin}/assets/holy-logo-escuro.svg" style="width:120px"><div style="text-align:right;font-size:11px;color:#7a7d72">Proposta de compra<br>${hoje.toLocaleDateString("pt-BR")}</div></div>
+<h1>${esc(sel.x.nome)}</h1><div class="s">${esc(sel.k === "im" ? [sel.x.tipo, sel.x.bairro, sel.x.cidade].filter(Boolean).join(" · ") : [sel.x.cidade, sel.x.tipoLabel].filter(Boolean).join(" · "))}${f.unidade ? " · Unidade " + esc(f.unidade) : ""}</div>
+<table>${linha("Proponente", cliente.nome)}${linha("CPF", f.cpf)}${linha("Telefone", cliente.celular || cliente.tel)}${linha("E-mail", cliente.email)}${linha("Valor anunciado", sel.k === "im" ? fmt(sel.x.valor) : sel.x.preco)}</table>
+<div class="v"><span style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.8">Valor proposto</span><b>${num(f.valor) ? fmt(num(f.valor)) : esc(f.valor)}</b></div>
+<table>${linha("Entrada / sinal", num(f.entrada) ? fmt(num(f.entrada)) : f.entrada)}${linha("Forma de pagamento", f.pagamento)}${linha("Condições", f.condicoes)}${linha("Observações", f.obs)}${linha("Validade da proposta", val.toLocaleDateString("pt-BR") + " (" + (+f.validade || 5) + " dias)")}</table>
+<div class="box">Esta proposta é feita por intermédio da Holy Curadoria Imobiliária e está sujeita à aceitação do proprietário/incorporadora. Ela não constitui compromisso de compra e venda; após o aceite, as partes formalizarão o contrato com as condições aqui descritas.</div>
+<div class="as"><div>${esc(cliente.nome)}<br>Proponente</div><div>${esc(vEu())}<br>Holy Curadoria Imobiliária</div></div>
+<div class="ft">Holy Curadoria Imobiliária · holyimoveis.com · Holy Intelligence CRM</div></div>\x3cscript>window.onload=()=>setTimeout(()=>window.print(),500)\x3c/script></body></html>`);
+        w.document.close();
+        vTL(cliente, "Proposta", "📄 Proposta: " + sel.x.nome + (f.unidade ? " un. " + f.unidade : "") + " · " + (num(f.valor) ? fmt(num(f.valor)) : f.valor) + (f.pagamento ? " · " + f.pagamento : "") + " · validade " + val.toLocaleDateString("pt-BR"), { imovelId: sel.k === "im" ? sel.x.id : "" });
+        if (["Prospecção", "Qualificação"].includes(cliente.stage)) HolyStore.update("clientes", l => (l || []).map(c => c.id === cliente.id ? Object.assign({}, c, { stage: "Proposta" }) : c));
+    }
+    return React.createElement(Modal, { onClose, width: 620, z: 2700 },
+        React.createElement(MHead, { title: "📄 Proposta", sub: cliente.nome, onClose }),
+        React.createElement("div", { style: { marginBottom: 10 } }, mkLbl("Imóvel ou empreendimento"),
+            React.createElement("select", { value: f.item, onChange: e => F("item", e.target.value), style: mkInput }, opcoes.map(o => React.createElement("option", { key: o.v, value: o.v }, o.l)))),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+            React.createElement(FI, { label: "Unidade (opcional)", value: f.unidade, onChange: v => F("unidade", v) }),
+            React.createElement(FI, { label: "CPF do proponente", value: f.cpf, onChange: v => F("cpf", v) }),
+            React.createElement(FI, { label: "Valor proposto (R$)", value: f.valor, onChange: v => F("valor", v) }),
+            React.createElement(FI, { label: "Entrada / sinal (R$)", value: f.entrada, onChange: v => F("entrada", v) }),
+            React.createElement(FI, { label: "Forma de pagamento", value: f.pagamento, placeholder: "à vista, financiamento, permuta…", onChange: v => F("pagamento", v) }),
+            React.createElement(FI, { label: "Validade (dias)", type: "number", value: f.validade, onChange: v => F("validade", v) })),
+        React.createElement("div", { style: { height: 8 } }),
+        React.createElement(FI, { label: "Condições (parcelas, prazos, permuta…)", rows: 3, value: f.condicoes, onChange: v => F("condicoes", v) }),
+        React.createElement("div", { style: { height: 8 } }),
+        React.createElement(FI, { label: "Observações", rows: 2, value: f.obs, onChange: v => F("obs", v) }),
+        React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 14, alignItems: "center", flexWrap: "wrap" } },
+            React.createElement(PBtn, { sm: true, onClick: gerar }, "🖨️ Gerar proposta (PDF)"),
+            React.createElement("span", { style: { fontSize: 11, color: C.muted } }, "Abre pronta para salvar em PDF. Para assinatura digital com validade jurídica, envie o PDF pelo gov.br (Assinador) ou por um serviço como Clicksign.")));
+}
+
+// ── Botões de venda na ficha do cliente ──
+// Roteiro de qualificação (o mesmo que a Helena segue): preenchido pela Helena ou à mão
+const V_QUALIF = [["objetivo", "Objetivo", "morar, investir, temporada…"], ["prazo", "Prazo", "quando pretende comprar"], ["pagamento", "Forma de pagamento", "à vista, financiamento, permuta…"], ["entrada", "Entrada / recursos", "valor disponível"], ["financiamento", "Financiamento", "não vai usar, simulou, aprovado…"], ["parcela_confortavel", "Parcela confortável", "R$/mês"], ["depende_venda", "Depende de vender algo?", "sim/não e situação"], ["imovel_permuta", "Imóvel na permuta", "tipo, bairro, m², valor, quitado?"], ["decisores", "Quem decide", "sozinho, casal, família…"], ["momento", "Momento", "pronto ou o que falta"], ["disponibilidade", "Disponibilidade p/ visita", "dias e horários"]];
+function vQualif(c) {
+    const p = c.perfilWhatsApp || {};
+    const essenciais = ["objetivo", "prazo", "pagamento", "decisores", "momento", "disponibilidade"];
+    const pag = String(p.pagamento || "").toLowerCase();
+    if (/financ/.test(pag)) essenciais.push("entrada", "financiamento");
+    if (/permut/.test(pag)) essenciais.push("imovel_permuta");
+    if (/vista|pr[oó]prio/.test(pag)) essenciais.push("depende_venda");
+    const feitos = essenciais.filter(k => String(p[k] || "").trim()).length;
+    return { feitos, total: essenciais.length, faltam: essenciais.filter(k => !String(p[k] || "").trim()), essenciais };
+}
+function QualificacaoCard({ cliente }) {
+    const [aberto, setAberto] = useState(false);
+    const [f, setF] = useState(Object.assign({}, cliente.perfilWhatsApp || {}));
+    const [mat, setMat] = useState(cliente.maturidade || "");
+    const q = vQualif(Object.assign({}, cliente, { perfilWhatsApp: f }));
+    const cores = { pronto: C.success, morno: C.gold, frio: C.danger || "#b4483c" };
+    const rotMat = { pronto: "🟢 Pronto para comprar", morno: "🟡 Morno", frio: "🔴 Frio" };
+    function salvar() {
+        const limpo = Object.fromEntries(Object.entries(f).filter(([, v]) => String(v || "").trim()));
+        HolyStore.update("clientes", l => (l || []).map(c => c.id === cliente.id ? Object.assign({}, c, { perfilWhatsApp: limpo, maturidade: mat || c.maturidade || "" }) : c));
+        vTL(cliente, "Nota interna", "📋 Qualificação atualizada (" + q.feitos + "/" + q.total + ")" + (mat ? " · " + rotMat[mat] : ""));
+        setAberto(false);
+    }
+    const nomeCampo = k => (V_QUALIF.find(x => x[0] === k) || [k, k])[1];
+    return React.createElement("div", { style: { border: `0.5px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 10, background: C.white } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+            React.createElement("div", null,
+                React.createElement("div", { style: { fontSize: 12, fontWeight: 700 } }, "📋 Qualificação ", React.createElement("span", { style: { color: q.feitos === q.total ? C.success : C.muted, fontWeight: 600 } }, q.feitos + "/" + q.total),
+                    cliente.maturidade && React.createElement("span", { style: { marginLeft: 8, fontSize: 11, color: cores[cliente.maturidade] } }, rotMat[cliente.maturidade])),
+                q.faltam.length > 0 && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, "Falta saber: " + q.faltam.map(nomeCampo).join(", "))),
+            React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: () => setAberto(!aberto) }, aberto ? "Fechar" : "Ver / editar")),
+        aberto && React.createElement("div", { style: { marginTop: 10 } },
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 8 } },
+                V_QUALIF.map(([k, rot, ph]) => React.createElement("label", { key: k, style: { fontSize: 11, color: C.muted } }, rot + (q.essenciais.includes(k) ? " *" : ""),
+                    React.createElement("input", { style: Object.assign({}, mkInput, { marginTop: 3 }), value: f[k] || "", placeholder: ph, onChange: e => setF(Object.assign({}, f, { [k]: e.target.value })) })))),
+            React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap", alignItems: "center" } },
+                React.createElement("span", { style: { fontSize: 11, color: C.muted } }, "Maturidade:"),
+                ["pronto", "morno", "frio"].map(k => React.createElement("button", { key: k, onClick: () => setMat(k), style: { fontSize: 11, padding: "4px 10px", borderRadius: 14, cursor: "pointer", border: `1px solid ${mat === k ? cores[k] : C.border}`, background: mat === k ? cores[k] + "18" : C.white } }, rotMat[k])),
+                React.createElement("div", { style: { flex: 1 } }),
+                React.createElement(PBtn, { sm: true, onClick: salvar }, "Salvar"))));
+}
+function ClienteVendas({ cliente, imoveis }) {
+    const [m, setM] = useState(null);
+    const emps = HolyStore.get("empreendimentos", []);
+    const top = imoveis.filter(i => i.status === "Disponível").map(i => ({ x: i, k: "im", s: vMatch(cliente, i, "im").score })).concat(emps.filter(e => e.publicarSite !== false).map(e => ({ x: e, k: "em", s: vMatch(cliente, e, "em").score }))).filter(o => o.s >= 45).sort((a, b) => b.s - a.s).slice(0, 4);
+    async function enviarItem(o) {
+        const w = window.open("about:blank", "_blank");
+        const l = await vLink(vItemLink(o.x, o.k), cliente, o.x.nome);
+        const t = vMsgMatch(cliente, o.x, o.k, l);
+        if (w) w.location.href = vWa(cliente.celular || cliente.tel, t);
+        vTL(cliente, "WhatsApp", "🎯 Enviado: " + o.x.nome + " (link rastreado)", { imovelId: o.k === "im" ? o.x.id : "" });
+    }
+    return React.createElement("div", { style: { marginBottom: 14 } },
+        React.createElement(QualificacaoCard, { key: cliente.id + JSON.stringify(cliente.perfilWhatsApp || {}) + (cliente.maturidade || ""), cliente }),
+        React.createElement("div", { style: { display: "flex", gap: 7, flexWrap: "wrap", marginBottom: top.length ? 10 : 0 } },
+            React.createElement(PBtn, { sm: true, variant: "ghost", color: C.blue, onClick: () => setM("visita") }, "📅 Agendar visita"),
+            React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, onClick: () => setM("proposta") }, "📄 Proposta"),
+            vDig(cliente.celular || cliente.tel) && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.success, onClick: () => window.open(vWa(cliente.celular || cliente.tel, "Oi, " + vPrimeiro(cliente.nome) + "! Aqui é " + vPrimeiro(vEu()) + ", da Holy. "), "_blank") }, "💬 WhatsApp")),
+        top.length > 0 && React.createElement("div", { style: { fontSize: 11, color: C.muted } }, "Enviar opção compatível (link rastreado): ",
+            top.map(o => React.createElement("button", { key: o.k + o.x.id, onClick: () => enviarItem(o), style: { margin: "3px 4px 0 0", fontSize: 11, padding: "4px 9px", borderRadius: 14, border: `0.5px solid ${C.border}`, background: C.white, cursor: "pointer", color: C.inkMid } }, (o.k === "em" ? "🏢 " : "🏠 ") + o.x.nome.slice(0, 34) + " · " + o.s + "%"))),
+        m === "visita" && React.createElement(VisitaModal, { cliente, imoveis, onClose: () => setM(null) }),
+        m === "proposta" && React.createElement(PropostaModal, { cliente, imoveis, onClose: () => setM(null) }));
+}
+
+// ── 🔥 Esquentar: a rotina da semana ──
+function EsquentarPage({ clientes, imoveis, timeline }) {
+    const abertos = useLinksAbertos();
+    const [conteudos, setConteudos] = usePS("conteudos", []);
+    const [msgs, setMsgs] = useState({}); const [feitos, setFeitos] = useState({}); const [ia, setIa] = useState(""); const [aba, setAba] = useState("ligar");
+    const [novo, setNovo] = useState({ titulo: "", link: "", resumo: "", cidades: "" });
+    const [rel, setRel] = useState(false);
+    const emps = HolyStore.get("empreendimentos", []);
+    const tlDe = id => (timeline || []).filter(t => t.clienteId === id);
+    const ultimaData = id => tlDe(id).map(t => t.data).sort().pop();
+    const diasDesde = d => d ? Math.floor((Date.now() - new Date(d + "T12:00:00")) / 864e5) : 999;
+    const ativos = clientes.filter(c => c.stage !== "Pós-venda");
+    // Ligar primeiro
+    const ranking = ativos.map(c => Object.assign({ c }, vScore(c, timeline, (abertos[c.id] || {}).aberturas))).sort((a, b) => b.score - a.score).slice(0, 15);
+    // Esquentar: mornos/frios parados 7+ dias, sem conteúdo nos últimos 30 dias
+    const enviadoRecente = id => tlDe(id).some(t => /^🔥/.test(t.desc || "") && diasDesde(t.data) < 30);
+    const esquentar = ativos.filter(c => c.temp !== "hot" && diasDesde(ultimaData(c.id) || c.createdAt) >= 7 && !enviadoRecente(c.id)).slice(0, 25).map(c => {
+        const ja = tlDe(c.id).map(t => t.desc || "").join(" ");
+        const ops = imoveis.filter(i => i.status === "Disponível").map(i => ({ x: i, k: "im", s: vMatch(c, i, "im").score })).concat(emps.filter(e => e.publicarSite !== false).map(e => ({ x: e, k: "em", s: vMatch(c, e, "em").score })))
+            .filter(o => o.s >= 45 && !ja.includes(o.x.nome)).sort((a, b) => b.s - a.s);
+        const p = vPerfil(c);
+        const cont = (conteudos || []).find(k => !ja.includes(k.titulo) && (!k.cidades || p.cidades.some(cd => String(k.cidades).toLowerCase().includes(cd))));
+        const sug = ops[0] ? { tipo: "match", o: ops[0] } : cont ? { tipo: "conteudo", k: cont } : { tipo: "pergunta" };
+        return { c, sug };
+    });
+    function textoEsquentar(c, sug) {
+        const n = vPrimeiro(c.nome);
+        if (sug.tipo === "match") return vMsgMatch(c, sug.o.x, sug.o.k, "[link]");
+        if (sug.tipo === "conteudo") return `Oi${n ? ", " + n : ""}! Aqui é ${vPrimeiro(vEu())}, da Holy. Vi isto e lembrei da sua busca:\n\n${sug.k.titulo}${sug.k.resumo ? "\n" + sug.k.resumo : ""}\n\n${sug.k.link ? "[link]" : ""}\n\nSe quiser, separo opções atualizadas para você.`;
+        return `Oi${n ? ", " + n : ""}! Aqui é ${vPrimeiro(vEu())}, da Holy. Passando para saber como está sua busca por imóvel. Mudou algo no que você procura? Tenho novidades e posso separar as melhores opções para você.`;
+    }
+    const msgDe = (c, sug) => msgs[c.id] != null ? msgs[c.id] : textoEsquentar(c, sug);
+    async function enviar(c, sug) {
+        const w = window.open("about:blank", "_blank");
+        let t = msgDe(c, sug), item = "", url = "";
+        if (sug.tipo === "match") { url = vItemLink(sug.o.x, sug.o.k); item = sug.o.x.nome; }
+        if (sug.tipo === "conteudo") { url = sug.k.link || ""; item = sug.k.titulo; }
+        if (t.includes("[link]")) { const l = url && /holyimoveis|vercel\.app/.test(url) ? await vLink(url, c, item) : url; t = t.replace("[link]", l || ""); }
+        if (w) w.location.href = vWa(c.celular || c.tel, t);
+        vTL(c, "WhatsApp", "🔥 Esquentar: " + (item || "mensagem de acompanhamento"));
+        setFeitos(p => Object.assign({}, p, { [c.id]: true }));
+    }
+    async function personalizar(c, sug) {
+        setIa(c.id);
+        const base = sug.tipo === "match" ? `Opção compatível: ${JSON.stringify(mktVitrine(sug.o.x, sug.o.k)).slice(0, 2000)}. Coloque [link] onde vai o link.` : sug.tipo === "conteudo" ? `Conteúdo para compartilhar: ${sug.k.titulo} - ${sug.k.resumo || ""}. Coloque [link] onde vai o link.` : "Sem novidade específica: faça um acompanhamento gentil com uma pergunta que reabra a conversa.";
+        const t = await vIA(`Cliente ${c.nome}, ${diasDesde(ultimaData(c.id) || c.createdAt)} dias sem contato. Perfil: ${JSON.stringify(vPerfil(c))}. Último resumo: ${String(c.obs || "").slice(-500)}\n${base}\nObjetivo: reaquecer o lead de forma útil e não invasiva.`);
+        setIa(""); if (t) setMsgs(p => Object.assign({}, p, { [c.id]: t }));
+    }
+    // Visitas
+    const visitas = (timeline || []).filter(t => t.visitaEm).map(t => Object.assign({ t, d: new Date(t.visitaEm) }, { c: clientes.find(c => c.id === t.clienteId) })).filter(v => v.c && v.d > new Date(Date.now() - 864e5) && v.d < new Date(Date.now() + 14 * 864e5)).sort((a, b) => a.d - b.d);
+    const lembrete = v => `Oi, ${vPrimeiro(v.c.nome)}! Passando para lembrar da nossa visita ${v.d.toDateString() === new Date(Date.now() + 864e5).toDateString() ? "amanhã" : "em " + v.d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" })}, às ${v.d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${v.t.visitaItem ? " (" + v.t.visitaItem + ")" : ""}${v.t.visitaLocal ? ", em " + v.t.visitaLocal : ""}. Está confirmado? ${vPrimeiro(vEu())}, Holy.`;
+    // Pós-venda
+    const pos = clientes.filter(c => c.stage === "Pós-venda");
+    const [dataCompra, setDataCompra] = useState({});
+    function posMsg(c) {
+        const d = c.dataCompra ? diasDesde(c.dataCompra) : null; const n = vPrimeiro(c.nome);
+        if (d != null && d % 365 >= 358 || d != null && d % 365 <= 3 && d > 300) return `Oi, ${n}! Hoje faz ${Math.round(d / 365)} ano(s) que você conquistou seu imóvel com a Holy. Que essa casa siga cheia de bons momentos! Se puder indicar alguém que esteja buscando, vou cuidar com o mesmo carinho. Abraço, ${vPrimeiro(vEu())}.`;
+        return `Oi, ${n}! Aqui é ${vPrimeiro(vEu())}, da Holy. Espero que esteja aproveitando o imóvel. Uma pergunta rápida: você conhece alguém que esteja procurando comprar ou investir? Indicações de clientes como você são as que mais valorizo, e cuido de cada uma pessoalmente.`;
+    }
+    const tab = (k, l, n) => React.createElement("button", { key: k, onClick: () => setAba(k), style: { padding: "8px 13px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: `0.5px solid ${aba === k ? C.olive : C.border}`, background: aba === k ? C.olive : C.white, color: aba === k ? "#fff" : C.inkMid } }, l + (n != null ? " (" + n + ")" : ""));
+    const caixa = { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 10 };
+    return React.createElement("div", null,
+        React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14, alignItems: "center" } },
+            tab("ligar", "📞 Ligar primeiro", ranking.length), tab("esquentar", "🔥 Esquentar", esquentar.length), tab("visitas", "📅 Visitas", visitas.length), tab("pos", "🤝 Pós-venda", pos.length), holyPode("editarEmpr") && tab("conteudos", "📰 Conteúdos", (conteudos || []).length),
+            React.createElement("div", { style: { flex: 1 } }),
+            React.createElement(PBtn, { sm: true, variant: "ghost", onClick: () => setRel(true) }, "📨 Relatório da semana")),
+        aba === "ligar" && React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10 } }, "Nota de 0 a 100: temperatura, etapa, contato recente, orçamento e prazo informados à Helena, aberturas de link e indicação."),
+            ranking.map(({ c, score, motivos, dias }) => React.createElement("div", { key: c.id, style: Object.assign({}, caixa, { display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }) },
+                React.createElement("div", { style: { width: 46, height: 46, borderRadius: 23, background: score >= 70 ? C.danger : score >= 45 ? C.gold : C.muted, color: "#fff", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono',monospace" } }, score),
+                React.createElement("div", { style: { flex: 1, minWidth: 180 } },
+                    React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.ink } }, c.nome, " ", React.createElement("span", { style: { fontWeight: 400, color: C.muted, fontSize: 11 } }, c.stage + " · " + (dias < 99 ? "último contato há " + dias + " dia(s)" : "sem contato"))),
+                    React.createElement("div", { style: { fontSize: 11, color: C.muted } }, motivos.join(" · ") || "—", c.responsavelNome && holyPerfil() !== "corretor" ? " · com " + c.responsavelNome : "")),
+                vDig(c.celular || c.tel) && React.createElement("a", { href: "tel:+" + (vDig(c.celular || c.tel).length <= 11 ? "55" : "") + vDig(c.celular || c.tel), style: { fontSize: 12, fontWeight: 700, color: C.olive, textDecoration: "none" } }, "📞 " + (c.celular || c.tel)),
+                vDig(c.celular || c.tel) && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.success, onClick: () => window.open(vWa(c.celular || c.tel, "Oi, " + vPrimeiro(c.nome) + "! Aqui é " + vPrimeiro(vEu()) + ", da Holy. "), "_blank") }, "💬")))),
+        aba === "esquentar" && React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10 } }, "Leads mornos e frios sem contato há 7 dias ou mais. No máximo 1 envio por mês por cliente. A sugestão prioriza um imóvel compatível ainda não enviado; depois, um conteúdo da biblioteca."),
+            !esquentar.length && React.createElement("div", { style: Object.assign({}, caixa, { color: C.muted, fontSize: 13 }) }, "Ninguém para esquentar esta semana."),
+            esquentar.map(({ c, sug }) => React.createElement("div", { key: c.id, style: Object.assign({}, caixa, { background: feitos[c.id] ? C.oliveGhost : C.white }) },
+                React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 6 } },
+                    React.createElement("b", { style: { fontSize: 13 } }, c.nome),
+                    React.createElement(Bdg, { label: tempL[c.temp] || "", color: tempC[c.temp], sm: true }),
+                    React.createElement("span", { style: { fontSize: 11, color: C.muted } }, diasDesde(ultimaData(c.id) || c.createdAt) + " dias sem contato · " + (sug.tipo === "match" ? "🎯 " + sug.o.x.nome + " (" + sug.o.s + "%)" : sug.tipo === "conteudo" ? "📰 " + sug.k.titulo : "acompanhamento"))),
+                React.createElement("textarea", { value: msgDe(c, sug), onChange: e => setMsgs(p => Object.assign({}, p, { [c.id]: e.target.value })), style: Object.assign({}, mkInput, { minHeight: 86, fontSize: 12 }) }),
+                React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" } },
+                    React.createElement(PBtn, { sm: true, color: C.success, onClick: () => enviar(c, sug), disabled: !vDig(c.celular || c.tel) }, feitos[c.id] ? "✓ Enviado" : "💬 Enviar no WhatsApp"),
+                    React.createElement(PBtn, { sm: true, variant: "ghost", onClick: () => personalizar(c, sug), loading: ia === c.id }, "✦ Personalizar com IA"),
+                    !vDig(c.celular || c.tel) && React.createElement("span", { style: { fontSize: 11, color: C.danger } }, "sem telefone no cadastro"))))),
+        aba === "visitas" && React.createElement("div", null,
+            !visitas.length && React.createElement("div", { style: Object.assign({}, caixa, { color: C.muted, fontSize: 13 }) }, "Nenhuma visita nos próximos 14 dias. Agende pela ficha do cliente (📅 Agendar visita)."),
+            visitas.map(v => React.createElement("div", { key: v.t.id, style: Object.assign({}, caixa, { display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }) },
+                React.createElement("div", { style: { minWidth: 120 } }, React.createElement("div", { style: { fontSize: 13, fontWeight: 700 } }, v.d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" })), React.createElement("div", { style: { fontSize: 12, color: C.muted } }, v.d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }))),
+                React.createElement("div", { style: { flex: 1 } }, React.createElement("b", { style: { fontSize: 13 } }, v.c.nome), React.createElement("div", { style: { fontSize: 11, color: C.muted } }, [v.t.visitaItem, v.t.visitaLocal].filter(Boolean).join(" · "))),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.success, onClick: () => { window.open(vWa(v.c.celular || v.c.tel, lembrete(v)), "_blank"); vTL(v.c, "WhatsApp", "⏰ Lembrete de visita enviado"); }, disabled: !vDig(v.c.celular || v.c.tel) }, "⏰ Enviar lembrete")))),
+        aba === "pos" && React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10 } }, "Clientes em Pós-venda: pedido de indicação e mensagem no aniversário da compra. Informe a data da compra para o aniversário aparecer."),
+            !pos.length && React.createElement("div", { style: Object.assign({}, caixa, { color: C.muted, fontSize: 13 }) }, "Nenhum cliente em Pós-venda."),
+            pos.map(c => React.createElement("div", { key: c.id, style: Object.assign({}, caixa, { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }) },
+                React.createElement("b", { style: { fontSize: 13, minWidth: 160 } }, c.nome),
+                React.createElement("input", { type: "date", value: dataCompra[c.id] != null ? dataCompra[c.id] : (c.dataCompra || ""), onChange: e => { const v = e.target.value; setDataCompra(p => Object.assign({}, p, { [c.id]: v })); HolyStore.update("clientes", l => (l || []).map(x => x.id === c.id ? Object.assign({}, x, { dataCompra: v }) : x)); }, style: Object.assign({}, mkInput, { width: 150 }) }),
+                React.createElement("span", { style: { fontSize: 11, color: C.muted, flex: 1 } }, c.dataCompra ? "comprou há " + diasDesde(c.dataCompra) + " dias" : "data da compra"),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.success, onClick: () => { window.open(vWa(c.celular || c.tel, posMsg(c)), "_blank"); vTL(c, "WhatsApp", "🤝 Pós-venda: pedido de indicação / aniversário"); }, disabled: !vDig(c.celular || c.tel) }, "💬 Indicação / aniversário")))),
+        aba === "conteudos" && React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10 } }, "Biblioteca do que vale compartilhar: posts do blog, notícias do bairro ou da cidade, andamento de obra. A sugestão de Esquentar usa estes itens, filtrando pela cidade de interesse. Só entra aqui o que você aprovar."),
+            React.createElement("div", { style: Object.assign({}, caixa, { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }) },
+                React.createElement(FI, { label: "Título", value: novo.titulo, onChange: v => setNovo(p => Object.assign({}, p, { titulo: v })) }),
+                React.createElement(FI, { label: "Link", value: novo.link, placeholder: "https://…", onChange: v => setNovo(p => Object.assign({}, p, { link: v })) }),
+                React.createElement(FI, { label: "Resumo (1 frase)", value: novo.resumo, onChange: v => setNovo(p => Object.assign({}, p, { resumo: v })) }),
+                React.createElement(FI, { label: "Cidades (vazio = todas)", value: novo.cidades, placeholder: "Itapema, Porto Belo", onChange: v => setNovo(p => Object.assign({}, p, { cidades: v })) }),
+                React.createElement("div", null, React.createElement(PBtn, { sm: true, disabled: !novo.titulo.trim(), onClick: () => { setConteudos(l => [Object.assign({ id: "ct" + uid(), criadoEm: today() }, novo)].concat(l || [])); setNovo({ titulo: "", link: "", resumo: "", cidades: "" }); } }, "+ Adicionar"))),
+            (conteudos || []).map(k => React.createElement("div", { key: k.id, style: Object.assign({}, caixa, { display: "flex", gap: 10, alignItems: "center" }) },
+                React.createElement("div", { style: { flex: 1 } }, React.createElement("b", { style: { fontSize: 13 } }, k.titulo), React.createElement("div", { style: { fontSize: 11, color: C.muted } }, [k.cidades || "todas as cidades", k.link].filter(Boolean).join(" · "))),
+                React.createElement("button", { onClick: () => setConteudos(l => (l || []).filter(x => x.id !== k.id)), style: { border: "none", background: "none", color: C.danger, cursor: "pointer", fontSize: 12 } }, "Remover")))),
+        rel && React.createElement(RelatorioSemana, { clientes, timeline, ranking, visitas, onClose: () => setRel(false) }));
+}
+
+function RelatorioSemana({ clientes, timeline, ranking, visitas, onClose }) {
+    const campanhas = HolyStore.get("campanhas", []);
+    const semana = Date.now() - 7 * 864e5;
+    const novos = clientes.filter(c => c.createdAt && new Date(c.createdAt + "T12:00:00") >= semana);
+    const porOrig = {}; novos.forEach(c => { const k = ldOrigem(c.origem); porOrig[k] = (porOrig[k] || 0) + 1; });
+    const esquecidos = clientes.filter(c => c.temp === "hot" && c.stage !== "Pós-venda" && !(timeline || []).some(t => t.clienteId === c.id && new Date(t.data + "T12:00:00") >= Date.now() - 3 * 864e5));
+    const props = (timeline || []).filter(t => t.tipo === "Proposta" && new Date(t.data + "T12:00:00") >= semana).length;
+    const camp = (campanhas || []).filter(c => c.metricas).map(c => `• ${String(c.nome || "").slice(0, 40)}: ${c.metricas.leads || 0} leads, ${c.metricas.gasto != null ? fmt(c.metricas.gasto) : "—"}${c.metricas.leads ? ", " + fmt((c.metricas.gasto || 0) / c.metricas.leads) + "/lead" : ""}`);
+    const txt = `📊 *Holy · resumo da semana* (${new Date(semana).toLocaleDateString("pt-BR")} a ${new Date().toLocaleDateString("pt-BR")})
+
+*Novos leads:* ${novos.length}${Object.keys(porOrig).length ? " (" + Object.entries(porOrig).map(([k, v]) => k + " " + v).join(", ") + ")" : ""}
+*Propostas feitas:* ${props}
+*Visitas nos próximos dias:* ${visitas.length}${visitas.slice(0, 5).map(v => "\n• " + v.d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" }) + " " + v.d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) + " · " + v.c.nome).join("")}
+
+*Quentes sem contato há 3+ dias:* ${esquecidos.length}${esquecidos.slice(0, 6).map(c => "\n• " + c.nome + (c.responsavelNome ? " (" + c.responsavelNome + ")" : "")).join("")}
+
+*Ligar primeiro:*${ranking.slice(0, 5).map(r => "\n• " + r.c.nome + " · nota " + r.score).join("")}${camp.length ? "\n\n*Campanhas:*\n" + camp.join("\n") : ""}`;
+    return React.createElement(Modal, { onClose, width: 600, z: 2700 },
+        React.createElement(MHead, { title: "📨 Relatório da semana", sub: "Para mandar no seu WhatsApp ou para a equipe", onClose }),
+        React.createElement("textarea", { readOnly: true, value: txt, style: Object.assign({}, mkInput, { minHeight: 320, fontSize: 12, fontFamily: "'DM Mono',monospace" }) }),
+        React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" } },
+            React.createElement(PBtn, { sm: true, color: C.success, onClick: () => window.open(vWa("49984351515", txt), "_blank") }, "💬 Enviar no meu WhatsApp"),
+            React.createElement(PBtn, { sm: true, variant: "ghost", onClick: () => { try { navigator.clipboard.writeText(txt); } catch (e) { } } }, "📋 Copiar")),
+        React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 8 } }, "Quando o WhatsApp da Holy estiver conectado (Kapso), este resumo pode chegar sozinho toda segunda-feira."));
+}
+// ── SEO, Google Ads e navegação no site ──
+const vSlug = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70);
+const vPagina = (item, kind) => location.origin + "/" + (kind === "im" ? "imovel" : "empreendimento") + "/" + encodeURIComponent(item.id) + "/" + vSlug(item.nome);
+function RastreamentoConfig() {
+    const [cfg, setCfg] = usePS("site_config", {});
+    const t = (cfg && cfg.rastreamento) || {};
+    const set = (k, v) => setCfg(Object.assign({}, cfg || {}, { rastreamento: Object.assign({}, t, { [k]: String(v || "").trim() }) }));
+    const campo = (k, rot, ph, ajuda) => React.createElement("div", null, React.createElement(FI, { label: rot, value: t[k] || "", placeholder: ph, onChange: v => set(k, v) }), ajuda && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 3 } }, ajuda));
+    return React.createElement("div", { style: { padding: "16px 18px", background: "#fff", borderRadius: 12, border: "0.5px solid #dde0d6", borderLeft: "3px solid #2563a8" } },
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 6 } }, "📈 Google, Meta e rastreamento do site"),
+        React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 12 } }, "Cole os IDs e o site passa a medir visitas e conversões (formulário e WhatsApp) no Google Analytics, no Google Ads e no Pixel da Meta. Tudo só carrega depois que o visitante aceita os cookies."),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+            campo("ga4", "Google Analytics 4 (ID de medição)", "G-XXXXXXXXXX", "analytics.google.com > Administrador > Fluxos de dados"),
+            campo("ads", "Google Ads (ID da tag)", "AW-123456789", "Google Ads > Metas > Conversões > Tag do Google"),
+            campo("adsLead", "Rótulo da conversão: formulário", "AbCdEf123", "O texto depois da / em send_to"),
+            campo("adsWhats", "Rótulo da conversão: WhatsApp", "XyZ987", "Crie uma 2ª conversão para cliques no WhatsApp"),
+            campo("pixel", "Pixel da Meta (ID)", "123456789012345", "Gerenciador de Eventos da Meta > Fontes de dados")),
+        React.createElement("div", { style: { fontSize: 12, color: C.inkMid, marginTop: 12, lineHeight: 1.7 } },
+            "Para o Google encontrar o site: em ", React.createElement("b", null, "search.google.com/search-console"), " adicione ", React.createElement("b", null, "holyimoveis.com"), ", confirme pelo DNS e envie o sitemap ",
+            React.createElement("a", { href: "/sitemap.xml", target: "_blank", style: { color: C.blue } }, "holyimoveis.com/sitemap.xml"), ". Cada imóvel e empreendimento publicado ganha uma página própria (ex.: /imovel/…), que o Google lê e que serve de página de destino para anúncios."));
+}
+function NavegacaoSite({ cliente }) {
+    const [d, setD] = useState(null);
+    useEffect(() => { holyFetch("/api/crm?acao=navegacao&cliente=" + encodeURIComponent(cliente.id) + "&visitante=" + encodeURIComponent(cliente.visitante || "")).then(r => r.json()).then(j => setD(j.success ? j : null)).catch(() => setD(null)); }, [cliente.id]);
+    const u = cliente.utm || (d && d.resumo && d.resumo.utm) || null;
+    if (!d || (!(d.itens || []).length && !u)) return null;
+    return React.createElement("div", { style: { marginBottom: 14, padding: "10px 14px", background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 10 } },
+        React.createElement("div", { style: { fontSize: 11, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, fontWeight: 600 } }, "🌐 No site"),
+        u && React.createElement("div", { style: { fontSize: 12, color: C.inkMid, marginBottom: 6 } }, "Chegou por: ", React.createElement("b", null, u.gclid || /google/i.test(u.utm_source || "") ? "Google Ads" : u.fbclid ? "Meta (Facebook/Instagram)" : (u.utm_source || u.ref || "acesso direto")), u.utm_campaign ? " · campanha " + u.utm_campaign : "", u.utm_term ? " · busca \"" + u.utm_term + "\"" : ""),
+        (d.itens || []).length > 0 && React.createElement("div", { style: { fontSize: 12, color: C.inkMid } },
+            d.resumo && d.resumo.dias ? React.createElement("div", { style: { marginBottom: 4, color: C.muted } }, "Visitou o site em " + d.resumo.dias + " dia(s); última vez " + new Date(d.resumo.ultima).toLocaleDateString("pt-BR") + ".") : null,
+            d.itens.slice(0, 8).map((i, k) => React.createElement("div", { key: k }, (i.kind === "em" ? "🏢 " : "🏠 ") + i.item_nome + (i.vezes > 1 ? " · viu " + i.vezes + "x" : "") + " · " + new Date(i.ultima).toLocaleDateString("pt-BR")))));
+}
+function SiteTop() {
+    const [d, setD] = useState(null);
+    useEffect(() => { holyFetch("/api/crm?acao=siteTop&dias=30").then(r => r.json()).then(j => setD(j.success ? j : null)).catch(() => { }); }, []);
+    if (!d) return null;
+    const v = d.visitantes || {};
+    return React.createElement("div", { style: { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: "16px 18px" } },
+        React.createElement(SecT, null, "No site (30 dias)"),
+        React.createElement("div", { style: { fontSize: 12, color: C.inkMid, marginBottom: 10 } }, React.createElement("b", null, v.visitantes || 0), " visitantes que aceitaram cookies · ", React.createElement("b", null, v.google || 0), " vindos do Google Ads · ", React.createElement("b", null, v.meta || 0), " da Meta"),
+        (d.top || []).length ? React.createElement(LdBarras, { linhas: d.top.map(t => ({ k: (t.kind === "em" ? "🏢 " : "🏠 ") + (t.item_nome || t.item_id), v: t.pessoas, extra: t.vezes + " visualizações" })), cor: C.gold }) : React.createElement("div", { style: { fontSize: 12, color: C.muted } }, "Ainda sem dados. Os números aparecem conforme os visitantes aceitam os cookies."));
+}
+function GoogleAdsKit({ item, kind, onClose }) {
+    const [d, setD] = useState(null); const [load, setLoad] = useState(false); const [msg, setMsg] = useState("");
+    const url = vPagina(item, kind) + "?utm_source=google&utm_medium=cpc&utm_campaign=" + vSlug(item.nome).slice(0, 40);
+    async function gerar() {
+        setLoad(true); setMsg("");
+        const r = await holyIA(`Crie um anúncio de pesquisa responsivo do Google Ads para o ${kind === "im" ? "imóvel" : "empreendimento"} abaixo, da Holy Curadoria Imobiliária (SC). Público: quem busca comprar ou investir. Responda APENAS com JSON:
+{"palavras_chave":["10 a 15 termos de busca com intenção de compra, em português, com cidade/bairro; marque com [exata] as mais fortes"],"negativas":["8 a 12 palavras negativas: aluguel temporada, emprego, minha casa minha vida etc., conforme o caso"],"titulos":["15 títulos com NO MÁXIMO 30 caracteres cada"],"descricoes":["4 descrições com NO MÁXIMO 90 caracteres cada"],"orcamento_sugerido":"valor diário em R$ e por quê, em 1 frase","dica":"1 dica de segmentação (raio, horário ou público)"}
+Regras: use só os dados fornecidos; sem 'top', 'perfeito', 'imperdível'; sem promessa de valorização; respeite os limites de caracteres.
+Dados: ${JSON.stringify(mktVitrine(item, kind)).slice(0, 6000)}`, 1800, "Você é gestor de tráfego especialista em Google Ads para o mercado imobiliário de alto padrão no Brasil.");
+        setLoad(false);
+        if (r.error) return setMsg("❌ " + r.error);
+        try { setD(JSON.parse(String(r.text).replace(/```json|```/g, "").trim().replace(/^[^{]*/, "").replace(/[^}]*$/, ""))); } catch (e) { setMsg("❌ Não consegui ler a resposta. Tente de novo."); }
+    }
+    const copia = (t, n) => { try { navigator.clipboard.writeText(t); setMsg("📋 " + n + " copiado."); } catch (e) { } };
+    const bloco = (tit, arr, lim) => arr && arr.length ? React.createElement("div", { style: { marginBottom: 12 } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, mkLbl(tit), React.createElement("button", { onClick: () => copia(arr.join("\n"), tit), style: { fontSize: 11, border: `0.5px solid ${C.border}`, background: C.white, borderRadius: 6, padding: "3px 8px", cursor: "pointer" } }, "📋 Copiar")),
+        arr.map((t, i) => React.createElement("div", { key: i, style: { fontSize: 12, padding: "3px 0", display: "flex", justifyContent: "space-between", gap: 10, borderBottom: `0.5px solid ${C.border}` } }, React.createElement("span", null, t), lim ? React.createElement("span", { style: { color: String(t).length > lim ? C.danger : C.muted, fontFamily: "'DM Mono',monospace", fontSize: 11 } }, String(t).length + "/" + lim) : null))) : null;
+    return React.createElement(Modal, { onClose, width: 760, z: 2700 },
+        React.createElement(MHead, { title: "🔎 Google Ads: " + item.nome, sub: "Anúncio de pesquisa pronto para colar no Google Ads", onClose }),
+        React.createElement("div", { style: { fontSize: 12, color: C.inkMid, background: C.oliveGhost, borderRadius: 8, padding: "10px 12px", marginBottom: 12, lineHeight: 1.6 } },
+            React.createElement("b", null, "Página de destino (com rastreamento): "), React.createElement("a", { href: url, target: "_blank", style: { color: C.blue, wordBreak: "break-all" } }, url),
+            React.createElement("button", { onClick: () => copia(url, "Link"), style: { marginLeft: 8, fontSize: 11, border: `0.5px solid ${C.border}`, background: C.white, borderRadius: 6, padding: "2px 8px", cursor: "pointer" } }, "📋")),
+        !d && React.createElement(PBtn, { sm: true, onClick: gerar, loading: load }, "✦ Gerar anúncio com IA"),
+        msg && React.createElement("div", { style: { fontSize: 12, color: msg.startsWith("❌") ? C.danger : C.olive, margin: "8px 0" } }, msg),
+        d && React.createElement("div", { style: { maxHeight: "60vh", overflowY: "auto" } },
+            bloco("Títulos (até 30)", d.titulos, 30), bloco("Descrições (até 90)", d.descricoes, 90), bloco("Palavras-chave", d.palavras_chave), bloco("Palavras negativas", d.negativas),
+            d.orcamento_sugerido && React.createElement("div", { style: { fontSize: 12, color: C.inkMid, marginBottom: 6 } }, React.createElement("b", null, "Orçamento: "), d.orcamento_sugerido),
+            d.dica && React.createElement("div", { style: { fontSize: 12, color: C.inkMid, marginBottom: 10 } }, React.createElement("b", null, "Dica: "), d.dica),
+            React.createElement("div", { style: { fontSize: 11, color: C.muted, lineHeight: 1.6 } }, "No Google Ads: Nova campanha > Leads > Pesquisa > cole títulos, descrições, palavras-chave e a página de destino. Imóveis entram na categoria especial \"Moradia\" (sem segmentar por idade, gênero ou CEP). As conversões de formulário e WhatsApp são medidas pelos IDs em Configurações."),
+            React.createElement("div", { style: { marginTop: 10 } }, React.createElement(PBtn, { sm: true, variant: "ghost", onClick: gerar, loading: load }, "↻ Gerar outra versão"))));
+}
+// ═══════════════════════════════════════════════════════════════════════
+// ESTÚDIO DE FOTOS: melhora as fotos no próprio navegador (grátis), IA escolhe capa/ordem e sugere ajustes,
+// e gera a capa de venda (imagem e vídeo em movimento). As originais ficam guardadas.
+// ═══════════════════════════════════════════════════════════════════════
+const FS_PADRAO = { auto: 1, exp: 0, temp: 0, contraste: 0.3, sat: 0.3, nitidez: 0.5, rot: 0, sombras: 0.3 };
+function fsCarregar(src) {
+    if (/^https?:/.test(src)) return mkImg(src);
+    return new Promise(r => { const i = new Image(); i.onload = () => r(i); i.onerror = () => r(null); i.src = src; });
+}
+function fsProcessar(img, aj, maxDim) {
+    aj = Object.assign({}, FS_PADRAO, aj || {});
+    const k = Math.min(1, (maxDim || 2048) / Math.max(img.width, img.height));
+    const W = Math.round(img.width * k), H = Math.round(img.height * k);
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H; const ctx = cv.getContext("2d", { willReadFrequently: true });
+    if (aj.rot) { const r = aj.rot * Math.PI / 180, z = Math.abs(Math.cos(r)) + Math.abs(Math.sin(r)) * Math.max(W / H, H / W); ctx.translate(W / 2, H / 2); ctx.rotate(r); ctx.scale(z, z); ctx.drawImage(img, -W / 2, -H / 2, W, H); ctx.setTransform(1, 0, 0, 1, 0, 0); }
+    else ctx.drawImage(img, 0, 0, W, H);
+    const id = ctx.getImageData(0, 0, W, H), d = id.data, n = W * H;
+    // estatísticas (amostra): primeiro o balanço de branco, depois os níveis sobre a imagem já neutra
+    const A = Math.max(0, Math.min(1, aj.auto));
+    let sr = 0, sg = 0, sb = 0, cnt = 0;
+    for (let i = 0; i < d.length; i += 16) { sr += d[i]; sg += d[i + 1]; sb += d[i + 2]; cnt++; }
+    const mr = sr / cnt, mg = sg / cnt, mb = sb / cnt, mm = (mr + mg + mb) / 3;
+    const wb = [mr, mg, mb].map(m => Math.min(1.8, Math.max(0.6, Math.pow(mm / Math.max(m, 1), 0.8 * A))));
+    const temp = aj.temp * 0.07; wb[0] *= 1 + temp; wb[2] *= 1 - temp;
+    const hist = new Uint32Array(256); let soma = 0;
+    for (let i = 0; i < d.length; i += 16) { const l = Math.min(255, (d[i] * wb[0] * 0.299 + d[i + 1] * wb[1] * 0.587 + d[i + 2] * wb[2] * 0.114) | 0); hist[l]++; soma += l; }
+    const pct = p => { let a = 0, alvo = cnt * p; for (let v = 0; v < 256; v++) { a += hist[v]; if (a >= alvo) return v; } return 255; };
+    const lo = pct(0.004) * A, hi = 255 - (255 - pct(0.996)) * A;
+    const mediaL = Math.max(0.05, Math.min(0.95, (soma / cnt - lo) / Math.max(hi - lo, 1)));
+    let gama = Math.log(0.46) / Math.log(mediaL); gama = 1 + (Math.max(0.6, Math.min(1.35, gama)) - 1) * A;  // x^gama: < 1 clareia, > 1 escurece
+    const expo = Math.pow(2, aj.exp * 0.7), ctr = 1 + aj.contraste * 0.35, somb = aj.sombras * 0.25;
+    const luts = [0, 1, 2].map(c => { const L = new Uint8ClampedArray(256); for (let v = 0; v < 256; v++) {
+        let x = (v * wb[c] - lo) / Math.max(hi - lo, 1); x = Math.max(0, x);
+        x = Math.pow(Math.min(x, 1.2), gama) * expo;
+        x = x + somb * (1 - x) * Math.pow(1 - Math.min(x, 1), 3);   // levanta sombras
+        x = 0.5 + (x - 0.5) * ctr;                                     // contraste
+        if (x > 0.85) x = 0.85 + (x - 0.85) * 0.6;                     // protege altas luzes
+        L[v] = Math.round(Math.max(0, Math.min(1, x)) * 255); } return L; });
+    const sat = aj.sat * 0.35;
+    for (let i = 0; i < d.length; i += 4) {
+        let r = luts[0][d[i]], g = luts[1][d[i + 1]], b = luts[2][d[i + 2]];
+        if (sat) { const l = r * 0.299 + g * 0.587 + b * 0.114, mx = Math.max(r, g, b), mn = Math.min(r, g, b), s0 = mx ? (mx - mn) / mx : 0, f = 1 + sat * (1 - s0); r = l + (r - l) * f; g = l + (g - l) * f; b = l + (b - l) * f; }
+        d[i] = r; d[i + 1] = g; d[i + 2] = b;
+    }
+    if (aj.nitidez > 0) { // nitidez (máscara de nitidez simples)
+        const s = new Uint8ClampedArray(d), a = aj.nitidez * 0.55, w4 = W * 4;
+        for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { const i = (y * W + x) * 4;
+            for (let c = 0; c < 3; c++) { const v = s[i + c], bl = (s[i - 4 + c] + s[i + 4 + c] + s[i - w4 + c] + s[i + w4 + c]) / 4; d[i + c] = v + (v - bl) * a; } }
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv;
+}
+function fsMiniatura(img, max) { const k = Math.min(1, (max || 512) / Math.max(img.width, img.height)); const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.72); }
+function fsCapa(ctx, W, H, img, t, info) { // desenha a capa (t = 0..1 para o movimento)
+    const z = 1.14 - 0.12 * (t == null ? 1 : t), s = Math.max(W / img.width, H / img.height) * z, iw = img.width * s, ih = img.height * s;
+    const px = (W - iw) / 2 + (t == null ? 0 : (0.5 - t) * W * 0.04);
+    ctx.fillStyle = "#1a1c18"; ctx.fillRect(0, 0, W, H); ctx.drawImage(img, px, (H - ih) / 2, iw, ih);
+    const g = ctx.createLinearGradient(0, H * 0.35, 0, H); g.addColorStop(0, "rgba(20,22,18,0)"); g.addColorStop(1, "rgba(20,22,18,.92)"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const gt = ctx.createLinearGradient(0, 0, 0, H * 0.2); gt.addColorStop(0, "rgba(20,22,18,.55)"); gt.addColorStop(1, "rgba(20,22,18,0)"); ctx.fillStyle = gt; ctx.fillRect(0, 0, W, H * 0.2);
+    const A = t == null ? 1 : Math.min(1, Math.max(0, (t - 0.12) / 0.25)), u = W / 1080, P = 72 * u;
+    ctx.globalAlpha = A; ctx.textAlign = "left";
+    if (info.logo) { const lw = 200 * u, lh = lw * info.logo.height / info.logo.width; ctx.drawImage(info.logo, P, P * 0.8, lw, lh); }
+    let y = H - P;
+    if (info.preco) { ctx.font = `600 ${44 * u}px Inter, Arial`; ctx.fillStyle = "#d4b86a"; ctx.fillText(info.preco, P, y); y -= 70 * u; }
+    if (info.specs) { ctx.font = `500 ${30 * u}px Inter, Arial`; ctx.fillStyle = "rgba(255,255,255,.88)"; ctx.fillText(info.specs, P, y); y -= 64 * u; }
+    ctx.font = `700 ${(H > W ? 82 : 72) * u}px 'Playfair Display', Georgia, serif`; ctx.fillStyle = "#fff";
+    const pal = String(info.titulo || "").split(" "), linhas = []; let l = "";
+    pal.forEach(p => { const tt = l ? l + " " + p : p; if (ctx.measureText(tt).width > W - P * 2 && l) { linhas.push(l); l = p; } else l = tt; }); if (l) linhas.push(l);
+    linhas.slice(-3).reverse().forEach(li => { ctx.fillText(li, P, y); y -= (H > W ? 92 : 80) * u; });
+    if (info.kicker) { ctx.font = `600 ${24 * u}px Inter, Arial`; ctx.fillStyle = "#d4b86a"; ctx.fillText(info.kicker.toUpperCase().split("").join(String.fromCharCode(8202)), P, y + 12 * u); }
+    ctx.globalAlpha = 1;
+}
+function FotoStudio({ imovel, onClose }) {
+    const inicial = (imovel.fotos || []).map((f, i) => ({ id: f.id || "f" + i, src: f.url, original: f.original || f.url, principal: !!f.principal, nome: f.name || "foto-" + (i + 1), aj: Object.assign({}, FS_PADRAO, f.ajustes || {}), novo: false }));
+    const [itens, setItens] = useState(inicial);
+    const [prev, setPrev] = useState({}); const [antes, setAntes] = useState(null);
+    const [sel, setSel] = useState(inicial[0] ? inicial[0].id : null);
+    const [load, setLoad] = useState(""); const [msg, setMsg] = useState(""); const [ia, setIa] = useState(null);
+    const [capa, setCapa] = useState(null); const [video, setVideo] = useState(null);
+    const fileRef = useRef(); const imgs = useRef({});
+    const item = itens.find(i => i.id === sel);
+    async function img(it) { if (!imgs.current[it.id]) imgs.current[it.id] = await fsCarregar(it.original || it.src); return imgs.current[it.id]; }
+    async function atualizarPrev(lista) { for (const it of lista) { const im = await img(it); if (!im) continue; const cv = fsProcessar(im, it.aj, 900); const u = cv.toDataURL("image/jpeg", 0.85); setPrev(p => Object.assign({}, p, { [it.id]: u })); } }
+    useEffect(() => { setLoad("Melhorando as fotos…"); atualizarPrev(itens).then(() => setLoad("")); }, []);
+    const AJ = (k, v) => { const lista = itens.map(i => i.id === sel ? Object.assign({}, i, { aj: Object.assign({}, i.aj, { [k]: v }) }) : i); setItens(lista); const it = lista.find(i => i.id === sel); clearTimeout(window._fsT); window._fsT = setTimeout(() => atualizarPrev([it]), 120); };
+    function adicionar(files) {
+        const novos = Array.from(files || []).filter(f => /^image\//.test(f.type)).map((f, i) => ({ id: "n" + uid(), src: URL.createObjectURL(f), original: URL.createObjectURL(f), nome: f.name, aj: Object.assign({}, FS_PADRAO), novo: true, principal: false }));
+        if (!novos.length) return; const l = itens.concat(novos); setItens(l); if (!sel) setSel(novos[0].id); setLoad("Melhorando as fotos novas…"); atualizarPrev(novos).then(() => setLoad(""));
+    }
+    async function analisarIA() {
+        setLoad("A IA está olhando as fotos…"); setMsg("");
+        try {
+            const lista = itens.slice(0, 16), thumbs = [];
+            for (const it of lista) { const im = await img(it); thumbs.push({ data: im ? fsMiniatura(im, 480) : "", media: "image/jpeg" }); }
+            const r = await holyFetch("/api/ia", { method: "POST", body: JSON.stringify({ max: 2500, imagens: thumbs, system: "Você é fotógrafo e editor de fotos de imóveis de alto padrão. Avalia com olhar técnico e comercial.", msg: `São ${lista.length} fotos do imóvel "${imovel.nome}" (${imovel.tipo}, ${imovel.bairro || ""} ${imovel.cidade || ""}). Responda APENAS com JSON:
+{"capa": índice da melhor foto para capa (fachada ou ambiente mais impactante, bem iluminado, sem bagunça),
+ "ordem": [índices na ordem ideal para vender: capa, fachada/área externa, sala, cozinha, suíte master, demais quartos, banheiros, lazer, vista; remova duplicadas ou ruins colocando-as no fim],
+ "fotos": [{"i": índice, "ambiente": "sala/fachada/…", "nota": 0-10, "problemas": "curto: escura, torta, amarelada, bagunça, dedo, reflexo…", "exposicao": -1 a 1, "temperatura": -1 (esfriar) a 1 (esquentar), "contraste": 0 a 1, "saturacao": 0 a 1, "endireitar_graus": -4 a 4 (positivo gira no sentido horário; só se as verticais estiverem tortas), "descartar": true/false}],
+ "titulo_capa": "título curto e elegante para a capa (até 38 caracteres, sem preço)",
+ "dicas": "1 a 2 frases: o que refotografar para vender melhor"}` }) });
+            const j = await r.json(); if (!j.success) throw new Error(j.error);
+            const o = JSON.parse(String(j.text).replace(/```json|```/g, "").trim().replace(/^[^{]*/, "").replace(/[^}]*$/, ""));
+            const cl = (v, a, b, def) => Number.isFinite(+v) ? Math.max(a, Math.min(b, +v)) : def;
+            let lista2 = itens.map((it, i) => { const f = (o.fotos || []).find(x => +x.i === i); if (!f) return it; return Object.assign({}, it, { ia: f, aj: Object.assign({}, it.aj, { exp: cl(f.exposicao, -1, 1, 0), temp: cl(f.temperatura, -1, 1, 0), contraste: cl(f.contraste, 0, 1, 0.3), sat: cl(f.saturacao, 0, 1, 0.3), rot: -cl(f.endireitar_graus, -4, 4, 0) }) }); });
+            setIa(o); setItens(lista2); setLoad("Aplicando os ajustes da IA…"); await atualizarPrev(lista2); setLoad("");
+            setMsg("✅ IA analisou. Capa sugerida: foto " + (+o.capa + 1) + ". Use \"Aplicar ordem da IA\" para reorganizar.");
+        } catch (e) { setLoad(""); setMsg("❌ " + e.message); }
+    }
+    function aplicarOrdem() {
+        if (!ia || !Array.isArray(ia.ordem)) return;
+        const base = itens.slice(0, 16), resto = itens.slice(16), usados = new Set();
+        const ord = ia.ordem.map(i => base[+i]).filter(x => x && !usados.has(x.id) && usados.add(x.id));
+        const lista = ord.concat(base.filter(x => !usados.has(x.id)), resto).map((x, k) => Object.assign({}, x, { principal: k === 0 }));
+        setItens(lista); setMsg("Ordem aplicada. A primeira foto é a capa.");
+    }
+    const mover = (id, dlt) => setItens(l => { const a = l.slice(); const i = a.findIndex(x => x.id === id), j = i + dlt; if (j < 0 || j >= a.length) return a; [a[i], a[j]] = [a[j], a[i]]; return a; });
+    async function salvar() {
+        if (!confirm("Salvar as fotos melhoradas no imóvel? As originais ficam guardadas e você pode voltar a elas.")) return;
+        try {
+            const fotos = [];
+            for (let k = 0; k < itens.length; k++) {
+                const it = itens[k]; setLoad(`Enviando foto ${k + 1} de ${itens.length}…`);
+                const im = await img(it); if (!im) continue;
+                const url = await holyEnviarDataUrl(fsProcessar(im, it.aj, 2048).toDataURL("image/jpeg", 0.9), "holy-" + vSlug(imovel.nome) + "-" + (k + 1) + ".jpg", "imoveis/" + imovel.id);
+                let original = it.original;
+                if (it.novo) original = await holyEnviarDataUrl(fsMiniatura(im, 2400).replace("image/jpeg", "image/jpeg"), "original-" + (k + 1) + ".jpg", "imoveis/" + imovel.id + "/originais");
+                fotos.push({ id: it.novo ? uid() : it.id, url, original, name: it.nome, principal: k === 0 || it.principal && !fotos.some(f => f.principal), ajustes: it.aj, melhorada: true });
+            }
+            if (fotos.length && !fotos.some(f => f.principal)) fotos[0].principal = true;
+            const unico = fotos.findIndex(f => f.principal); fotos.forEach((f, i) => f.principal = i === unico);
+            HolyStore.update("imoveis", l => (l || []).map(x => x.id === imovel.id ? Object.assign({}, x, { fotos }) : x));
+            setLoad(""); setMsg("✅ " + fotos.length + " fotos salvas no imóvel (originais guardadas).");
+        } catch (e) { setLoad(""); setMsg("❌ " + e.message); }
+    }
+    function restaurar() { if (!item) return; setItens(l => l.map(i => i.id === sel ? Object.assign({}, i, { aj: Object.assign({}, FS_PADRAO, { auto: 0, contraste: 0, sat: 0, nitidez: 0, sombras: 0 }) }) : i)); setTimeout(() => atualizarPrev([Object.assign({}, item, { aj: Object.assign({}, FS_PADRAO, { auto: 0, contraste: 0, sat: 0, nitidez: 0, sombras: 0 }) })]), 50); }
+    async function gerarCapa(fmtCapa) {
+        const it = (ia && itens.find((x, i) => i === +ia.capa)) || itens.find(x => x.principal) || itens[0]; if (!it) return;
+        setLoad("Criando a capa…");
+        const im = fsProcessar(await img(it), it.aj, 2400), logo = await new Promise(r => { const l = new Image(); l.onload = () => r(l); l.onerror = () => r(null); l.src = "/assets/holy-logo-claro.svg"; });
+        const [W, H] = fmtCapa === "story" ? [1080, 1920] : fmtCapa === "site" ? [1920, 1080] : [1080, 1350];
+        const info = { titulo: (ia && ia.titulo_capa) || imovel.nome, kicker: [imovel.bairro, String(imovel.cidade || "").replace(/-SC$/i, "")].filter(Boolean).join(" · "), preco: imovel.valor ? fmt(imovel.valor) : "", specs: [(imovel.areaPrivativa || imovel.area) ? (imovel.areaPrivativa || imovel.area) + " m²" : "", imovel.quartos ? imovel.quartos + " quartos" : "", imovel.suites ? imovel.suites + " suítes" : "", imovel.vagas ? imovel.vagas + " vagas" : ""].filter(Boolean).join("   ·   "), logo };
+        try { await document.fonts.load("700 80px 'Playfair Display'"); } catch (e) { }
+        const cv = document.createElement("canvas"); cv.width = W; cv.height = H; fsCapa(cv.getContext("2d"), W, H, im, null, info);
+        setCapa({ url: cv.toDataURL("image/jpeg", 0.92), fmt: fmtCapa, info, im }); setLoad("");
+    }
+    async function gerarVideo() {
+        if (!capa) return; setLoad("Gravando a capa em movimento (8 s, mantenha a aba aberta)…"); setVideo(null);
+        try {
+            const W = 1080, H = 1920, cv = document.createElement("canvas"); cv.width = W; cv.height = H; const ctx = cv.getContext("2d");
+            const tipos = ["video/mp4;codecs=avc1.42E01E", "video/mp4", "video/webm;codecs=vp9", "video/webm"], mime = window.MediaRecorder && tipos.find(t => MediaRecorder.isTypeSupported(t));
+            if (!mime) throw new Error("Este navegador não grava vídeo. Use o Chrome no computador.");
+            const rec = new MediaRecorder(cv.captureStream(30), { mimeType: mime, videoBitsPerSecond: 8000000 }), partes = [];
+            rec.ondataavailable = e => e.data.size && partes.push(e.data); const fim = new Promise(r => rec.onstop = r);
+            fsCapa(ctx, W, H, capa.im, 0, capa.info); rec.start(250);
+            const tot = 8, t0 = performance.now();
+            await new Promise(ok => { (function q() { const el = (performance.now() - t0) / 1000; if (el >= tot) return ok(); fsCapa(ctx, W, H, capa.im, el / tot, capa.info); requestAnimationFrame(q); })(); });
+            rec.stop(); await fim; const ext = mime.indexOf("mp4") >= 0 ? "mp4" : "webm";
+            setVideo({ url: URL.createObjectURL(new Blob(partes, { type: mime.split(";")[0] })), ext }); setLoad("");
+        } catch (e) { setLoad(""); setMsg("❌ " + e.message); }
+    }
+    const sl = (k, rot, a, b, st) => React.createElement("label", { style: { display: "grid", gridTemplateColumns: "92px 1fr 36px", gap: 8, alignItems: "center", fontSize: 11, color: C.inkMid } }, rot,
+        React.createElement("input", { type: "range", min: a, max: b, step: st || 0.05, value: item ? item.aj[k] : 0, onChange: e => AJ(k, +e.target.value), style: { accentColor: C.olive } }),
+        React.createElement("span", { style: { fontFamily: "'DM Mono',monospace" } }, item ? (+item.aj[k]).toFixed(k === "rot" ? 1 : 2) : ""));
+    return React.createElement(Modal, { onClose, width: 1120, z: 2700 },
+        React.createElement(MHead, { title: "✨ Estúdio de fotos: " + imovel.nome, sub: "Melhora luz, cor, nitidez e alinhamento sem inventar nada: o imóvel continua igual ao real. As originais ficam guardadas.", onClose }),
+        React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10, alignItems: "center" } },
+            React.createElement(PBtn, { sm: true, onClick: analisarIA, disabled: !!load || !itens.length }, "✦ IA: analisar, escolher capa e ajustar"),
+            ia && React.createElement(PBtn, { sm: true, variant: "ghost", onClick: aplicarOrdem }, "↕ Aplicar ordem da IA"),
+            React.createElement(PBtn, { sm: true, variant: "ghost", onClick: () => fileRef.current && fileRef.current.click() }, "+ Adicionar fotos"),
+            React.createElement("input", { ref: fileRef, type: "file", accept: "image/*", multiple: true, style: { display: "none" }, onChange: e => { adicionar(e.target.files); e.target.value = ""; } }),
+            React.createElement("div", { style: { flex: 1 } }),
+            React.createElement(PBtn, { sm: true, color: C.success, onClick: salvar, disabled: !!load || !itens.length }, "💾 Salvar no imóvel")),
+        (load || msg) && React.createElement("div", { style: { fontSize: 12, color: msg.startsWith("❌") ? C.danger : C.olive, marginBottom: 8 } }, load ? "⏳ " + load : msg),
+        ia && ia.dicas && React.createElement("div", { style: { fontSize: 12, color: C.inkMid, background: C.oliveGhost, borderRadius: 8, padding: "8px 12px", marginBottom: 10 } }, "📷 ", ia.dicas),
+        React.createElement("div", { onDragOver: e => e.preventDefault(), onDrop: e => { e.preventDefault(); adicionar(e.dataTransfer.files); }, style: { display: "grid", gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr)", gap: 16 } },
+            React.createElement("div", null,
+                item ? React.createElement("div", { onMouseDown: () => setAntes(item.id), onMouseUp: () => setAntes(null), onMouseLeave: () => setAntes(null), onTouchStart: () => setAntes(item.id), onTouchEnd: () => setAntes(null), style: { position: "relative", cursor: "pointer", userSelect: "none" } },
+                    React.createElement("img", { src: antes === item.id ? (/^https?:/.test(item.original) ? "/api/img?url=" + encodeURIComponent(item.original) : item.original) : (prev[item.id] || ""), style: { width: "100%", maxHeight: 460, objectFit: "contain", background: "#111", borderRadius: 10, display: "block" } }),
+                    React.createElement("div", { style: { position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 11, padding: "3px 8px", borderRadius: 4 } }, antes === item.id ? "ANTES" : "DEPOIS · segure para ver o antes"),
+                    item.ia && React.createElement("div", { style: { position: "absolute", bottom: 8, left: 8, right: 8, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 11, padding: "5px 8px", borderRadius: 4 } }, `${item.ia.ambiente || ""} · nota ${item.ia.nota}/10${item.ia.problemas ? " · " + item.ia.problemas : ""}${item.ia.descartar ? " · IA sugere tirar" : ""}`))
+                    : React.createElement("div", { style: { height: 300, border: `1.5px dashed ${C.olivePale}`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: 13 } }, "Arraste as fotos aqui ou use + Adicionar fotos"),
+                React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(92px,1fr))", gap: 6, marginTop: 10 } },
+                    itens.map((it, k) => React.createElement("div", { key: it.id, style: { position: "relative" } },
+                        React.createElement("img", { src: prev[it.id] || "", onClick: () => setSel(it.id), style: { width: "100%", aspectRatio: "4/3", objectFit: "cover", borderRadius: 6, cursor: "pointer", border: `2px solid ${it.id === sel ? C.olive : k === 0 ? C.gold : "transparent"}`, opacity: it.ia && it.ia.descartar ? 0.45 : 1, background: "#eee" } }),
+                        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 10, color: C.muted } },
+                            React.createElement("button", { onClick: () => mover(it.id, -1), style: { border: "none", background: "none", cursor: "pointer", color: C.olive } }, "◀"), k === 0 ? "capa" : k + 1,
+                            React.createElement("button", { onClick: () => mover(it.id, 1), style: { border: "none", background: "none", cursor: "pointer", color: C.olive } }, "▶"),
+                            React.createElement("button", { onClick: () => { setItens(l => l.filter(x => x.id !== it.id)); if (sel === it.id) setSel(null); }, title: "Tirar", style: { border: "none", background: "none", cursor: "pointer", color: C.danger } }, "✕")))))),
+            React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+                mkLbl("Ajustes da foto selecionada"),
+                sl("auto", "Correção auto", 0, 1), sl("exp", "Exposição", -1, 1), sl("sombras", "Sombras", 0, 1), sl("contraste", "Contraste", 0, 1), sl("temp", "Temperatura", -1, 1), sl("sat", "Vivacidade", 0, 1), sl("nitidez", "Nitidez", 0, 1), sl("rot", "Endireitar (°)", -5, 5, 0.1),
+                React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+                    React.createElement("button", { onClick: () => item && setItens(l => l.map(i => Object.assign({}, i, { aj: Object.assign({}, item.aj, { rot: i.aj.rot }) }))) || setTimeout(() => atualizarPrev(itens), 50), style: { fontSize: 11, border: `0.5px solid ${C.border}`, background: C.white, borderRadius: 6, padding: "4px 8px", cursor: "pointer" } }, "Aplicar estes ajustes a todas"),
+                    React.createElement("button", { onClick: restaurar, style: { fontSize: 11, border: `0.5px solid ${C.border}`, background: C.white, borderRadius: 6, padding: "4px 8px", cursor: "pointer" } }, "Voltar ao original")),
+                React.createElement("div", { style: { borderTop: `0.5px solid ${C.border}`, marginTop: 6, paddingTop: 10 } }, mkLbl("Capa de venda"),
+                    React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+                        [["feed", "Feed 4:5"], ["story", "Story/Reels 9:16"], ["site", "Site/YouTube 16:9"]].map(([k, l]) => React.createElement(PBtn, { key: k, sm: true, variant: "ghost", onClick: () => gerarCapa(k), disabled: !!load || !itens.length }, l))),
+                    capa && React.createElement("div", { style: { marginTop: 8 } },
+                        React.createElement("img", { src: capa.url, style: { width: "100%", maxHeight: 300, objectFit: "contain", borderRadius: 8, background: "#111" } }),
+                        React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6, alignItems: "center" } },
+                            React.createElement("a", { href: capa.url, download: "capa-" + vSlug(imovel.nome) + "-" + capa.fmt + ".jpg", style: { fontSize: 12, fontWeight: 700, color: C.olive } }, "⬇ Baixar capa"),
+                            React.createElement(PBtn, { sm: true, variant: "ghost", onClick: gerarVideo, disabled: !!load }, "🎬 Capa em movimento (9:16)"),
+                            video && React.createElement("a", { href: video.url, download: "capa-" + vSlug(imovel.nome) + "." + video.ext, style: { fontSize: 12, fontWeight: 700, color: C.olive } }, "⬇ Baixar vídeo (." + video.ext + ")")),
+                        video && React.createElement("video", { src: video.url, controls: true, style: { width: 160, borderRadius: 8, marginTop: 6 } }))))));
+}
 // ── Dashboard de leads: origem, funil de conversão e tempo de atendimento ──
-const LD_ORIGENS = ["Site", "Meta Ads", "Instagram", "Messenger", "WhatsApp", "Indicação", "Outros"];
+const LD_ORIGENS = ["Site", "Google Ads", "Meta Ads", "Instagram", "Messenger", "WhatsApp", "Indicação", "Outros"];
 function ldOrigem(o) {
     const x = String(o || "").toLowerCase();
     if (/^meta/.test(x)) return "Meta Ads";
+    if (/google/.test(x)) return "Google Ads";
     if (/site|landing/.test(x)) return "Site";
     if (/insta/.test(x)) return "Instagram";
     if (/facebook|messenger/.test(x)) return "Messenger";
@@ -19500,6 +20221,7 @@ function LeadsDashboard({ clientes, timeline }) {
                     React.createElement("div", null, "Primeira resposta da equipe (quando assumiu): ", React.createElement("b", { style: { color: C.ink } }, ldDur(helena.respostaEquipe))),
                     React.createElement("div", null, "Atendidas só pela Helena: ", React.createElement("b", { style: { color: C.ink } }, helena.soHelena), " · com a equipe: ", React.createElement("b", { style: { color: C.ink } }, helena.comEquipe)),
                     Object.keys(helena.porCanal || {}).length ? React.createElement(LdBarras, { linhas: Object.entries(helena.porCanal).map(([k, o]) => ({ k, v: o.conversas, extra: o.comEquipe + " com a equipe" })), total: helena.conversas, cor: C.blue }) : React.createElement("div", { style: { color: C.muted } }, "Nenhuma conversa no período.")))),
+        holyPerfil() !== "corretor" && React.createElement(SiteTop, null),
         holyPerfil() !== "corretor" && resp.length > 0 && React.createElement("div", { style: caixa }, React.createElement(SecT, null, "Por corretor"),
             React.createElement("div", { style: { overflowX: "auto" } },
                 React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } },
@@ -19608,6 +20330,15 @@ function Dashboard({ clientes, imoveis, timeline, setPage }) {
 // ═══════════════════════════════════════════════════════════════════════
 // MARKETING: anúncios na Meta (campanhas de leads) e criador de posts
 // ═══════════════════════════════════════════════════════════════════════
+// Campo de lista separada por vírgulas: guarda o texto como foi digitado (espaços, edição no meio)
+function ListaVirgulas({ valor, onChange, placeholder }) {
+    const junta = v => (v || []).join(", ");
+    const [txt, setTxt] = useState(() => junta(valor));
+    const ultimo = useRef(junta(valor));
+    useEffect(() => { const j = junta(valor); if (j !== ultimo.current) { setTxt(j); ultimo.current = j; } }, [valor]);
+    return React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 58, resize: "vertical" }), value: txt, placeholder,
+        onChange: ev => { const t = ev.target.value; setTxt(t); const lista = t.split(",").map(x => x.trim()).filter(Boolean); ultimo.current = junta(lista); onChange(lista); } });
+}
 const abrirMkt = (modo, item, kind) => window.dispatchEvent(new CustomEvent("holy-mkt", { detail: { modo, item, kind } }));
 // Token da Página pelo login do Édipo (Plano B quando o usuário do sistema da Meta está bloqueado)
 function TokenPaginaBox({ fechar, depois }) {
@@ -19701,6 +20432,9 @@ function MarketingHost() {
     useEffect(() => { const f = e => setSt(e.detail); window.addEventListener("holy-mkt", f); return () => window.removeEventListener("holy-mkt", f); }, []);
     if (!st) return null;
     const fechar = () => setSt(null);
+    if (st.modo === "fotos") return React.createElement(FotoStudio, { imovel: st.item, onClose: fechar });
+    if (st.modo === "google") return React.createElement(GoogleAdsKit, { item: st.item, kind: st.kind, onClose: fechar });
+    if (st.modo === "match") return React.createElement(MatchAlerta, { item: st.item, kind: st.kind, novo: st.novo, onClose: fechar });
     return st.modo === "campanha" ? React.createElement(CampanhaWizard, { item: st.item, kind: st.kind, onClose: fechar }) : React.createElement(PostStudio, { item: st.item, kind: st.kind, onClose: fechar, formatoInicial: st.modo === "marketplace" ? "marketplace" : "feed" });
 }
 
@@ -19779,7 +20513,7 @@ function CampanhaWizard({ item, kind, onClose }) {
                 React.createElement("button", { onClick: () => E("pracas", [...(e.pracas || []), { cidade: "", uf: "SC", raio_km: 25 }]), style: { fontSize: 12, background: "none", border: `0.5px dashed ${C.border}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.olive } }, "+ Adicionar cidade"),
                 React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 6 } }, "Cidade · UF · raio em km (mínimo 25 km). Passe o mouse sobre a cidade para ver o motivo da escolha.")),
             React.createElement("div", null, mkLbl("Sinais de interesse (separados por vírgula)"),
-                React.createElement("input", { style: mkInput, value: (e.interesses || []).join(", "), onChange: ev => E("interesses", ev.target.value.split(",").map(x => x.trim()).filter(Boolean)) })),
+                React.createElement(ListaVirgulas, { valor: e.interesses, onChange: v => E("interesses", v), placeholder: "Imóveis de luxo, Arquitetura, Piscinas e spas…" })),
             React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 } },
                 React.createElement("div", null, mkLbl("Orçamento por dia (R$)"), React.createElement("input", { style: mkInput, type: "number", min: 20, value: e.orcamento_diario, onChange: ev => E("orcamento_diario", +ev.target.value) })),
                 React.createElement("div", null, mkLbl("Duração (dias)"), React.createElement("input", { style: mkInput, type: "number", min: 3, value: e.duracao_dias, onChange: ev => E("duracao_dias", +ev.target.value) })),
@@ -20374,6 +21108,7 @@ function ConfigPage() {
         slot('litoral', 'Costa Esmeralda', 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=70'),
         slot('holy', 'A Holy', 'https://images.unsplash.com/photo-1760204741315-abfc98ce3bf5?auto=format&fit=crop&w=600&q=70'),
         slot('venda', 'Venda seu imóvel', 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=600&q=70'))),
+    holyPode('configCompleta') && React.createElement(RastreamentoConfig, null),
     React.createElement('div', { style: box('#4a5c2f') },
       h('☁ Conexão com a nuvem'),
       p('Seus dados ficam salvos na nuvem e aparecem em qualquer computador ou celular onde você entrar com a senha do CRM.'),
@@ -20839,7 +21574,7 @@ function App() {
     const [imoveis, setImoveis] = usePS("imoveis", SEED_IMOVEIS);
     const [clientes, setClientes] = usePS("clientes", SEED_CLIENTES);
     const [timeline, setTimeline] = usePS("timeline", SEED_TIMELINE);
-    const addIm = im => setImoveis(p => [im, ...p]);
+    const addIm = im => { setImoveis(p => [im, ...p]); if (im.status !== "Vendido") setTimeout(() => window.dispatchEvent(new CustomEvent("holy-mkt", { detail: { modo: "match", item: im, kind: "im", novo: true } })), 400); };
     const editIm = im => setImoveis(p => p.map(i => i.id === im.id ? im : i));
     const addCli = c => setClientes(p => [c, ...p]);
     const editCli = c => setClientes(p => p.map(x => x.id === c.id ? c : x));
@@ -20852,6 +21587,7 @@ function App() {
     }
     const nav = [
         { k: "dashboard", i: "⌂", l: "Dashboard" },
+        { k: "esquentar", i: "🔥", l: "Vender hoje" },
         { k: "leads", i: "📊", l: "Leads" },
         { k: "clientes", i: "◎", l: "Clientes" },
         { k: "conversas", i: "💬", l: "Conversas" },
@@ -20868,7 +21604,7 @@ function App() {
         { k: "usuarios", i: "🔑", l: "Usuários" },
     ].filter(n => ({
         campanhas: holyPode("campanhas"), conversas: holyPode("conversas"), equipe: holyPode("equipe"), usuarios: holyPode("usuarios"),
-        matching: holyPerfil() !== "secretaria", ia: holyPerfil() !== "secretaria", leads: holyPerfil() !== "secretaria",
+        matching: holyPerfil() !== "secretaria", ia: holyPerfil() !== "secretaria", leads: holyPerfil() !== "secretaria", esquentar: holyPerfil() !== "secretaria",
     })[n.k] !== false).map(n => n.k === "config" && !holyPode("configCompleta") ? Object.assign({}, n, { l: "Minha conta" }) : n);
     const totC = imoveis.filter(i => i.status === "Disponível").reduce((s, i) => s + i.valor, 0);
     return React.createElement(React.Fragment, null,
@@ -20920,6 +21656,7 @@ function App() {
                 React.createElement("div", { style: { flex: 1, overflowY: "auto", padding: isM ? "14px 12px 80px" : 22 } },
                     page === "dashboard" && React.createElement(Dashboard, { clientes: clientes, imoveis: imoveis, timeline: timeline, setPage: setPage }),
                     page === "leads" && React.createElement(LeadsDashboard, { clientes: clientes, timeline: timeline }),
+                    page === "esquentar" && React.createElement(EsquentarPage, { clientes: clientes, imoveis: imoveis, timeline: timeline }),
                     page === "clientes" && React.createElement(ClientesPage, { clientes: clientes, imoveis: imoveis, timeline: timeline, onAdd: addCli, onEdit: editCli, onAddTL: addTL, onDelete: holyPode("excluirCliente") ? delCli : null }),
                     page === "imoveis" && React.createElement(ImoveisPage, { imoveis: imoveis, clientes: clientes, onAdd: addIm, onEdit: editIm, onDelete: id => setImoveis(p => p.filter(i => i.id !== id)) }),
                     page === "empreendimentos" && React.createElement(EmpreendimentosPage, null),

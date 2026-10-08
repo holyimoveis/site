@@ -3,7 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Holy Curadoria Imobiliária</title>
+<title>Holy Curadoria Imobiliária | Imóveis de alto padrão em Chapecó, Balneário Camboriú, Itapema e Porto Belo</title>
+<meta name="description" content="Curadoria de imóveis e empreendimentos de alto padrão em Santa Catarina: Chapecó, Balneário Camboriú, Itapema e Porto Belo. Atendimento personalizado com 16 anos de mercado.">
+<link rel="canonical" href="https://www.holyimoveis.com/">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Holy Curadoria Imobiliária"><meta property="og:locale" content="pt_BR">
+<meta property="og:title" content="Holy Curadoria Imobiliária | Imóveis de alto padrão em SC">
+<meta property="og:description" content="Curadoria de imóveis e empreendimentos de alto padrão em Chapecó, Balneário Camboriú, Itapema e Porto Belo.">
+<meta property="og:url" content="https://www.holyimoveis.com/"><meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/holy-coroa.svg">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"RealEstateAgent","name":"Holy Curadoria Imobiliária","url":"https://www.holyimoveis.com/","logo":"https://www.holyimoveis.com/assets/holy-logo-escuro.svg","telephone":"+55 49 98845-4873","address":{"@type":"PostalAddress","addressRegion":"SC","addressCountry":"BR"},"areaServed":[{"@type":"City","name":"Chapecó, SC"},{"@type":"City","name":"Balneário Camboriú, SC"},{"@type":"City","name":"Itapema, SC"},{"@type":"City","name":"Porto Belo, SC"}],"sameAs":["https://www.instagram.com/holycuradoriaimobiliaria/"]}</script>
+<script src="/assets/holy-track.js" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -973,7 +982,7 @@ async function loadEmpr(){
 // Registra no CRM cada clique nos botões de WhatsApp (de qual página/imóvel e qual botão)
 function trackLead(extra){
   try{
-    var p=Object.assign({pagina:location.hash||'/',imovel:(_dtOpen&&_dtCur&&_dtCur.kind!=='art')?_dtCur.nome:''},extra||{});
+    var p=Object.assign({pagina:location.hash||'/',imovel:(_dtOpen&&_dtCur&&_dtCur.kind!=='art')?_dtCur.nome:''},window.holyCtx?holyCtx():{},extra||{});
     var body=JSON.stringify(p);
     if(navigator.sendBeacon&&navigator.sendBeacon('/api/leads',new Blob([body],{type:'application/json'})))return;
     fetch('/api/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true}).catch(function(){});
@@ -1144,6 +1153,7 @@ function dtPlant(i,btn){_dtPl=i;var p=_dtCur.plantas[i];document.getElementById(
 function dtGo(id){var el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
 function openDetail(d,fromHash){
   _dtCur=d;_dtPl=0;
+  try{if(window.holyTrack&&(d.kind==='im'||d.kind==='empr'))holyTrack('ver',{kind:d.kind==='im'?'im':'em',id:d.id,nome:d.nome});}catch(e){}
   var root=document.getElementById('dt');
   if(_dtMap){_dtMap.remove();_dtMap=null;}
   root.innerHTML=dtHTML(d);root.classList.add('open');root.scrollTop=0;_dtOpen=true;
@@ -1362,7 +1372,8 @@ async function sendForm(e){
   e.preventDefault();var form=e.target,btn=form.querySelector('.fsub'),msg=document.getElementById('fmsg');
   btn.textContent='Enviando...';btn.disabled=true;
   var data=Object.fromEntries(new FormData(form));data.origem='Formulário de contato';data.pagina=location.hash||'/';var sent=false;
-  try{var r=await fetch('/api/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(r.ok)sent=true;}catch(e){}
+  try{if(window.holyCtx)Object.assign(data,holyCtx());}catch(e){}
+  try{var r=await fetch('/api/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(r.ok){sent=true;if(window.holyConv)holyConv('lead');}}catch(e){}
   if(!sent){window._semRegistro=true;setTimeout(function(){window._semRegistro=false;},500);}if(!sent)window.open('https://wa.me/5549988454873?text='+encodeURIComponent('Olá! Me chamo '+data.nome+'. Interesse em: '+(data.interesse||'imóveis')),'_blank');
   msg.style.cssText='display:block;padding:9px;border-radius:6px;font-size:12px;text-align:center;background:rgba(37,211,102,.15);color:#25D366;border:1px solid rgba(37,211,102,.3)';
   msg.textContent='✅ Mensagem enviada! Entraremos em contato em breve.';

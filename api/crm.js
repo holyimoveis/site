@@ -7,7 +7,10 @@
 // só o que podem editar é aceito, nada é excluído e a resposta traz os dados atualizados.
 import { sql, ensureSchema, cors, body, ok, err, fail, atualizarDoc } from './_lib.js';
 import { sessao, ehDoUsuario, proximoResponsavel } from './_auth.js';
-import usuarios from './_usuarios.js'; // /api/usuarios é atendido aqui (limite de 12 funções do plano Hobby da Vercel)
+import usuarios from './_usuarios.js';
+import crypto from 'node:crypto';
+import { esquemaLinks } from './_links.js';
+import { esquemaRastreio } from './leads.js'; // /api/usuarios é atendido aqui (limite de 12 funções do plano Hobby da Vercel)
 
 const CHAVE_OK = /^[a-z_]{1,40}$/;
 const HIST_MAX = 30; // cópias guardadas por chave (desfazer em caso de erro)
@@ -89,6 +92,21 @@ function mesclar(s, chave, servidor, enviado) {
 // ── Contatos do site e da Meta -> Clientes (no servidor, com rodízio) ──
 const dig = (v) => String(v || '').replace(/\D/g, '');
 const rid = () => Math.random().toString(36).slice(2, 9);
+// Respostas do formulário do anúncio -> perfil de qualificação (o mesmo que a Helena preenche)
+function perfilDoFormulario(msg) {
+  const p = {};
+  String(msg || '').split(' | ').forEach((par) => {
+    const i = par.indexOf('?'); if (i < 0) return;
+    const q = par.slice(0, i).toLowerCase(), r = par.slice(i + 1).trim(); if (!r) return;
+    if (/objetivo|finalidade/.test(q)) p.objetivo = r;
+    else if (/prazo|quando/.test(q)) p.prazo = r;
+    else if (/pagamento|pretende realizar|como pretende|forma de/.test(q)) p.pagamento = r;
+    else if (/faixa|investimento|valor|or[cç]amento/.test(q)) p.faixa_valor = r;
+    else if (/entrada/.test(q)) p.entrada = r;
+    else if (/quartos|dormit/.test(q)) p.quartos = r;
+  });
+  return p;
+}
 async function sincronizarLeads() {
   const leads = await sql.query(`SELECT * FROM leads WHERE tipo = 'formulario' AND sincronizado = false ORDER BY criado_em ASC LIMIT 100`);
   if (!leads.length) return { novos: 0, nomes: [] };
@@ -98,20 +116,26 @@ async function sincronizarLeads() {
     for (const l of leads) {
       const tel = dig(l.telefone), mail = String(l.email || '').toLowerCase();
       const deMeta = /^Meta/.test(l.origem || '');
+      const u = l.utm || {};
+      const deGoogle = !deMeta && (!!(u.gclid || u.gbraid || u.wbraid) || /google/i.test(u.utm_source || ''));
+      const campUtm = u.utm_campaign ? ' · campanha ' + u.utm_campaign : '';
       const camp = deMeta ? String(l.origem).replace(/^Meta Ads:?\s*/, '').trim() : '';
-      const desc = deMeta
+      const contato = [l.telefone ? 'Tel: ' + l.telefone : '', l.email ? 'E-mail: ' + l.email : ''].filter(Boolean).join(' · ');
+      const desc = (contato ? contato + ' | ' : '') + (deMeta
         ? 'Lead de anúncio na Meta' + (camp ? ' · ' + camp : '') + (l.imovel && l.imovel !== camp ? ' | Imóvel: ' + l.imovel : '') + (l.mensagem ? ' | Respostas: ' + l.mensagem : '')
-        : 'Contato pelo site' + (l.interesse ? ' | Interesse: ' + l.interesse : '') + (l.imovel ? ' | Imóvel: ' + l.imovel : '') + (l.mensagem ? ' | "' + l.mensagem + '"' : '');
+        : 'Contato pelo site' + (deGoogle ? ' (Google Ads' + campUtm + ')' : u.utm_source ? ' (' + u.utm_source + campUtm + ')' : '') + (l.interesse ? ' | Interesse: ' + l.interesse : '') + (l.imovel ? ' | Imóvel: ' + l.imovel : '') + (l.mensagem ? ' | "' + l.mensagem + '"' : ''));
       let c = lista.find((x) => (tel.length >= 8 && dig(x.celular || x.tel).slice(-8) === tel.slice(-8)) || (mail && String(x.email || '').toLowerCase() === mail));
       if (!c) {
         const nome = l.nome || 'Lead do site';
         const r = await proximoResponsavel();
         c = { id: 'cl' + rid(), nome, avatar: nome.trim().split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2), email: l.email || '', celular: l.telefone || '', tel: '', cpf: '', nascimento: '', profissao: '', empresa: '', renda: 0, patrimonioEst: 0,
-          origem: deMeta ? 'Meta Ads' : 'Site', stage: 'Prospecção', temp: 'warm', obs: desc, interesses: [], interacoes: [], createdAt: String(l.criado_em ? new Date(l.criado_em).toISOString() : new Date().toISOString()).slice(0, 10), leadSite: l.id,
+          origem: deMeta ? 'Meta Ads' : deGoogle ? 'Google Ads' : 'Site', stage: 'Prospecção', ...(l.visitante ? { visitante: l.visitante } : {}), ...(l.utm ? { utm: l.utm } : {}), temp: 'warm', obs: desc, interesses: [], interacoes: [], createdAt: String(l.criado_em ? new Date(l.criado_em).toISOString() : new Date().toISOString()).slice(0, 10), leadSite: l.id,
           ...(r ? { responsavelId: r.id, responsavelNome: r.nome } : {}) };
         lista.unshift(c);
         nomes.push(nome);
-      }
+      } else if (l.visitante && !c.visitante) { c.visitante = l.visitante; }
+      if (deMeta && l.mensagem) { const pf = perfilDoFormulario(l.mensagem); if (Object.keys(pf).length) c.perfilWhatsApp = Object.assign({}, pf, c.perfilWhatsApp || {}); }
+      if (l.visitante) await sql.query('UPDATE site_eventos SET cliente_id = $1 WHERE visitante = $2 AND cliente_id IS NULL', [c.id, l.visitante]).catch(() => null);
       const d = l.criado_em ? new Date(l.criado_em) : new Date();
       tl.push({ id: 'int' + rid(), tipo: 'Nota interna', data: d.toISOString().slice(0, 10), hora: d.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }), desc: desc + (c.responsavelNome ? ' · Responsável: ' + c.responsavelNome : ''), imovelId: '', clienteId: c.id, cliente: c.nome, autor: 'Sistema' });
     }
@@ -133,6 +157,34 @@ export default async function handler(req, res) {
     const q = req.query || {};
 
     if (req.method === 'GET') {
+      if (q.acao === 'navegacao') { // o que um cliente viu no site
+        await esquemaRastreio();
+        const cid = String(q.cliente || ''), vis = /^v[a-z0-9]{6,20}$/.test(String(q.visitante || '')) ? String(q.visitante) : '';
+        if (s.perfil === 'corretor' && !(await clientesDe(s)).some((c) => c.id === cid)) return err(res, 403, 'Cliente de outro corretor.');
+        const r = await sql.query(`SELECT kind, item_id, item_nome, count(*)::int AS vezes, max(criado_em) AS ultima, min(criado_em) AS primeira
+            FROM site_eventos WHERE (cliente_id = $1 OR ($2 <> '' AND visitante = $2)) AND item_id <> '' GROUP BY kind, item_id, item_nome ORDER BY max(criado_em) DESC LIMIT 30`, [cid, vis]);
+        const t = await sql.query(`SELECT count(DISTINCT date_trunc('day', criado_em))::int AS dias, max(criado_em) AS ultima, (array_agg(utm ORDER BY criado_em) FILTER (WHERE utm IS NOT NULL))[1] AS utm
+            FROM site_eventos WHERE cliente_id = $1 OR ($2 <> '' AND visitante = $2)`, [cid, vis]);
+        return ok(res, { itens: r, resumo: t[0] || {} });
+      }
+      if (q.acao === 'siteTop') { // mais vistos no site
+        await esquemaRastreio();
+        const dias = Math.min(Math.max(parseInt(q.dias, 10) || 30, 1), 365);
+        const r = await sql.query(`SELECT kind, item_id, max(item_nome) AS item_nome, count(*)::int AS vezes, count(DISTINCT visitante)::int AS pessoas
+            FROM site_eventos WHERE item_id <> '' AND criado_em > now() - ($1 || ' days')::interval GROUP BY kind, item_id ORDER BY pessoas DESC, vezes DESC LIMIT 10`, [String(dias)]);
+        const v = await sql.query(`SELECT count(DISTINCT visitante)::int AS visitantes, count(DISTINCT visitante) FILTER (WHERE utm->>'gclid' IS NOT NULL OR utm->>'utm_source' ILIKE 'google%')::int AS google,
+            count(DISTINCT visitante) FILTER (WHERE utm->>'fbclid' IS NOT NULL OR utm->>'utm_source' ILIKE ANY (ARRAY['facebook%','instagram%','meta%','fb%','ig%']))::int AS meta
+            FROM site_eventos WHERE criado_em > now() - ($1 || ' days')::interval`, [String(dias)]);
+        return ok(res, { top: r, visitantes: v[0] || {} });
+      }
+      if (q.acao === 'links') {
+        await esquemaLinks();
+        let r = await sql.query(`SELECT cliente_id, count(*)::int AS links, sum(aberturas)::int AS aberturas, max(ultima) AS ultima,
+            json_agg(json_build_object('item', item, 'aberturas', aberturas, 'ultima', ultima, 'criado', criado_em) ORDER BY criado_em DESC) AS itens
+          FROM links WHERE cliente_id IS NOT NULL GROUP BY cliente_id`);
+        if (s.perfil === 'corretor') { const meus = new Set((await clientesDe(s)).map((c) => c.id)); r = r.filter((x) => meus.has(x.cliente_id)); }
+        return ok(res, { links: r });
+      }
       if (q.chaves) {
         const chaves = String(q.chaves).split(',').filter((c) => CHAVE_OK.test(c)).slice(0, 20);
         const docs = {};
@@ -147,6 +199,18 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const b = body(req);
       if (b.acao === 'sincronizarLeads') return ok(res, await sincronizarLeads());
+      if (b.acao === 'link') {
+        const url = String(b.url || '');
+        let u; try { u = new URL(url); } catch { return err(res, 400, 'Link inválido.'); }
+        const host = req.headers['x-forwarded-host'] || req.headers.host || '';
+        if (u.protocol !== 'https:' || !(/holyimoveis\.com$/.test(u.hostname) || /vercel\.app$/.test(u.hostname) || u.hostname === host)) return err(res, 400, 'Só links do site da Holy podem ser rastreados.');
+        await esquemaLinks();
+        const code = crypto.randomBytes(5).toString('base64url').replace(/[-_]/g, 'x').slice(0, 7);
+        await sql.query('INSERT INTO links (code, url, cliente_id, cliente, item, criado_por) VALUES ($1, $2, $3, $4, $5, $6)',
+          [code, url, b.clienteId || null, String(b.cliente || '').slice(0, 120), String(b.item || '').slice(0, 160), s.nome || '']);
+        const base = process.env.SITE_URL || ('https://' + host);
+        return ok(res, { code, url: base + '/l/' + code });
+      }
       if (!CHAVE_OK.test(b.chave || '')) return err(res, 400, 'Chave inválida.');
       if (b.valor === undefined) return err(res, 400, 'Informe "valor".');
       const json = JSON.stringify(b.valor);
