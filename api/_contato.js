@@ -5,24 +5,29 @@ import { sql } from './_lib.js';
 
 const SEGREDO = () => process.env.SESSION_SECRET || process.env.ADMIN_KEY || process.env.META_APP_SECRET || '';
 const b64 = (s) => Buffer.from(s).toString('base64url');
-const assinatura = (dados) => crypto.createHmac('sha256', SEGREDO()).update('contato|' + dados).digest('base64url').slice(0, 22);
+const assinatura = (tipo, dados) => crypto.createHmac('sha256', SEGREDO()).update(tipo + '|' + dados).digest('base64url').slice(0, 22);
 
-export function linkContato(clienteId) {
-  if (!clienteId || SEGREDO().length < 8) return '';
-  const dados = b64(String(clienteId)) + '.' + Math.floor(Date.now() / 1000 + 60 * 86400).toString(36);
-  const site = process.env.SITE_URL || 'https://www.holyimoveis.com';
-  return site + '/c/' + dados + '.' + assinatura(dados);
+// Token assinado genérico: tipo ('contato', 'sair'...) + id + validade em dias
+export function assinarToken(tipo, id, dias) {
+  if (!id || SEGREDO().length < 8) return '';
+  const dados = b64(String(id)) + '.' + Math.floor(Date.now() / 1000 + dias * 86400).toString(36);
+  return dados + '.' + assinatura(tipo, dados);
 }
-
-function lerToken(t) {
+export function lerTokenTipo(tipo, t) {
   const p = String(t || '').split('.');
   if (p.length !== 3) return null;
   const dados = p[0] + '.' + p[1];
-  const esperado = assinatura(dados);
+  const esperado = assinatura(tipo, dados);
   if (p[2].length !== esperado.length || !crypto.timingSafeEqual(Buffer.from(p[2]), Buffer.from(esperado))) return null;
   if (parseInt(p[1], 36) * 1000 < Date.now()) return null;
   try { return Buffer.from(p[0], 'base64url').toString('utf8'); } catch { return null; }
 }
+
+export function linkContato(clienteId) {
+  const t = assinarToken('contato', clienteId, 60);
+  return t ? (process.env.SITE_URL || 'https://www.holyimoveis.com') + '/c/' + t : '';
+}
+const lerToken = (t) => lerTokenTipo('contato', t);
 
 const esc = (v) => String(v || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
 const fone = (t) => { const d = String(t || '').replace(/\D/g, ''); return d ? '+' + (d.length <= 11 ? '55' + d : d) : ''; };

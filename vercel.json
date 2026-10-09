@@ -47,6 +47,10 @@
       "destination": "/api/site?c=:token"
     },
     {
+      "source": "/e/sair/:token",
+      "destination": "/api/site?sair=:token"
+    },
+    {
       "source": "/l/:code",
       "destination": "/api/site?l=:code"
     },

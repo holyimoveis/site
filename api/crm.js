@@ -13,6 +13,8 @@ import { esquemaLinks } from './_links.js';
 import { sincronizarLeads } from './_sync.js';
 import { enviarAviso, avisoConfigurado } from './_avisos.js';
 import { linkContato } from './_contato.js';
+import { personalizarLote } from './_investidores.js';
+import { statusCliente, iniciarSequencia, pausarSequencia, emailTeste, emailConfigurado } from './_email.js';
 import { esquemaRastreio } from './leads.js'; // /api/usuarios é atendido aqui (limite de 12 funções do plano Hobby da Vercel)
 
 const CHAVE_OK = /^[a-z_]{1,40}$/;
@@ -103,6 +105,12 @@ export default async function handler(req, res) {
     const q = req.query || {};
 
     if (req.method === 'GET') {
+      if (q.acao === 'emailStatus') { // 📧 sequência de e-mails do cliente
+        if (!q.cliente) return ok(res, { configurado: emailConfigurado() });
+        const cid = String(q.cliente);
+        if (s.perfil === 'corretor' && !(await clientesDe(s)).some((c) => c.id === cid)) return err(res, 403, 'Cliente de outro corretor.');
+        return ok(res, await statusCliente(cid));
+      }
       if (q.acao === 'linkContato') { // 📇 salvar o cliente nos contatos do celular
         const cid = String(q.cliente || '');
         if (s.perfil === 'corretor' && !(await clientesDe(s)).some((c) => c.id === cid)) return err(res, 403, 'Cliente de outro corretor.');
@@ -151,6 +159,33 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const b = body(req);
       if (b.acao === 'sincronizarLeads') return ok(res, await sincronizarLeads());
+      if (b.acao === 'emailIniciar' || b.acao === 'emailPausar') {
+        const cid = String(b.clienteId || '');
+        const meus = await clientesDe(s);
+        const cli = meus.find((c) => c.id === cid);
+        if (!cli) return err(res, 403, 'Cliente não encontrado ou de outro corretor.');
+        if (b.acao === 'emailPausar') { await pausarSequencia(cid, !!b.ativo); return ok(res, await statusCliente(cid)); }
+        const r = await iniciarSequencia(cli, String(b.item || '').slice(0, 160) || ((String(cli.obs || '').match(/Lead de anúncio na Meta · ([^|]+)/) || [])[1] || '').trim(), { manual: true });
+        if (!r.ok) return err(res, 400, r.motivo || r.erro || 'Não foi possível iniciar.');
+        return ok(res, await statusCliente(cid));
+      }
+      if (b.acao === 'investPersonalizar') { // 💼 mesma oferta, uma mensagem por investidor
+        const ids = (Array.isArray(b.ids) ? b.ids : []).map(String).slice(0, 6);
+        const oferta = String(b.oferta || '').trim().slice(0, 2000);
+        const canal = ['email', 'whatsapp', 'ligacao'].includes(b.canal) ? b.canal : 'whatsapp';
+        if (!ids.length || oferta.length < 10) return err(res, 400, 'Selecione investidores e escreva a oferta.');
+        const meus = await clientesDe(s);
+        const clientes = ids.map((id) => meus.find((c) => c.id === id)).filter(Boolean);
+        const r = await personalizarLote({ clientes, oferta, itemRef: b.item || null, canal, enviar: !!b.enviar && canal === 'email', eu: s.nome || 'o corretor', rotulo: String(b.rotulo || '').slice(0, 80) });
+        return ok(res, { mensagens: r });
+      }
+      if (b.acao === 'emailTeste') {
+        if (s.perfil !== 'admin') return err(res, 403, 'Só o administrador.');
+        const para = String(b.para || '').trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(para)) return err(res, 400, 'Informe um e-mail válido.');
+        const r = await emailTeste(para, b.nome);
+        return r.ok ? ok(res, { enviado: true }) : err(res, 502, 'Não enviou: ' + r.erro);
+      }
       if (b.acao === 'avisoStatus') return ok(res, { configurado: avisoConfigurado() });
       if (b.acao === 'testarAvisoPessoal') {
         if (s.perfil !== 'admin') return err(res, 403, 'Só o administrador.');

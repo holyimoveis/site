@@ -3,6 +3,7 @@
 import { sql, atualizarDoc } from './_lib.js';
 import { proximoResponsavel } from './_auth.js';
 import { avisarLead } from './_avisos.js';
+import { iniciarSequencia } from './_email.js';
 
 const arr = (v) => (Array.isArray(v) ? v : []);
 // ── Contatos do site e da Meta -> Clientes (no servidor, com rodízio) ──
@@ -26,9 +27,9 @@ function perfilDoFormulario(msg) {
 export async function sincronizarLeads() {
   const leads = await sql.query(`SELECT * FROM leads WHERE tipo = 'formulario' AND sincronizado = false ORDER BY criado_em ASC LIMIT 100`);
   if (!leads.length) return { novos: 0, nomes: [] };
-  let tl = [], nomes = [], avisos = [];
+  let tl = [], nomes = [], avisos = [], inicios = [];
   await atualizarDoc('clientes', async (lista) => {
-    lista = arr(lista); tl = []; nomes = []; avisos = [];
+    lista = arr(lista); tl = []; nomes = []; avisos = []; inicios = [];
     for (const l of leads) {
       const tel = dig(l.telefone), mail = String(l.email || '').toLowerCase();
       const deMeta = /^Meta/.test(l.origem || '');
@@ -49,6 +50,7 @@ export async function sincronizarLeads() {
           ...(r ? { responsavelId: r.id, responsavelNome: r.nome } : {}) };
         lista.unshift(c);
         nomes.push(nome);
+        if (c.email) inicios.push({ c: { ...c }, item: l.imovel || '' });
         avisos.push({ nome, telefone: l.telefone, email: l.email, origem: deMeta ? 'Anúncio Meta' + (camp ? ' · ' + camp : '') : deGoogle ? 'Google Ads' : 'Site', imovel: l.imovel || '', respostas: deMeta ? l.mensagem : [l.interesse, l.mensagem].filter(Boolean).join(' · '), responsavel: c.responsavelNome || '', clienteId: c.id });
       } else if (l.visitante && !c.visitante) { c.visitante = l.visitante; }
       if (deMeta && l.mensagem) { const pf = perfilDoFormulario(l.mensagem); if (Object.keys(pf).length) c.perfilWhatsApp = Object.assign({}, pf, c.perfilWhatsApp || {}); }
@@ -61,6 +63,8 @@ export async function sincronizarLeads() {
   await atualizarDoc('timeline', (t) => tl.concat(arr(t)));
   await sql.query('UPDATE leads SET sincronizado = true, atualizado_em = now() WHERE id = ANY($1::bigint[])', [leads.map((l) => l.id)]);
   for (const a of avisos) await avisarLead(a);
+  // e-mail de boas-vindas + sequência (só se ligado em Configurações e configurado na Vercel)
+  for (const x of inicios) await iniciarSequencia(x.c, x.item).catch((e) => console.error('[email] boas-vindas', e.message));
   return { novos: leads.length, nomes };
 }
 

@@ -1,5 +1,6 @@
 // Conversas do WhatsApp para o CRM (só com X-Admin-Key)
 import { sql, ensureSchema, cors, body, ok, err, fail } from './_lib.js';
+import { processarEmails } from './_email.js';
 import { sessao, pode, ehDoUsuario } from './_auth.js';
 import { waitUntil } from '@vercel/functions';
 import { retomadas, enviarTexto, salvarMensagem, whatsappConfigurado, provedor, conectarWebhookKapso, lerConfig, pensar, catalogo, montarHistorico, avisarEdipo, criarModeloAviso } from './_wa.js';
@@ -16,7 +17,9 @@ export default async function handler(req, res) {
       const auth = String(req.headers.authorization || ''), seg = process.env.CRON_SECRET;
       const okCron = seg ? auth === 'Bearer ' + seg : /vercel-cron/i.test(String(req.headers['user-agent'] || ''));
       if (!okCron) return err(res, 401, 'não autorizado');
-      return ok(res, await retomadas(site, true));
+      const r1 = await retomadas(site, true).catch((e) => ({ erro: e.message }));
+      const r2 = await processarEmails().catch((e) => ({ erro: e.message }));
+      return ok(res, { retomadas: r1, emails: r2 });
     }
     const s = await sessao(req);
     if (!s) return err(res, 401, 'Senha do CRM inválida.');

@@ -19687,6 +19687,169 @@ function QualificacaoCard({ cliente }) {
                 React.createElement("div", { style: { flex: 1 } }),
                 React.createElement(PBtn, { sm: true, onClick: salvar }, "Salvar"))));
 }
+function EmailSeqCard({ cliente }) {
+    const [st, setSt] = useState(null); const [load, setLoad] = useState(false); const [msg, setMsg] = useState("");
+    const temEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(cliente.email || "")) && !/@(meta|fb|facebook)\.com$/i.test(cliente.email || "");
+    async function carregar() { try { const r = await holyFetch("/api/crm?acao=emailStatus&cliente=" + encodeURIComponent(cliente.id)); const j = await r.json(); if (j.success) setSt(j); } catch (e) { } }
+    useEffect(() => { if (temEmail) carregar(); }, [cliente.id]);
+    async function acao(a, extra) { setLoad(true); setMsg(""); try { const r = await holyFetch("/api/crm", { method: "POST", body: JSON.stringify(Object.assign({ acao: a, clienteId: cliente.id }, extra || {})) }); const j = await r.json(); if (!j.success) throw new Error(j.error); setSt(j); setMsg(a === "emailIniciar" ? "✅ Boas-vindas enviada" : ""); } catch (e) { setMsg("⚠️ " + e.message); } setLoad(false); }
+    if (!temEmail || !st || !st.configurado) return null;
+    const seq = st.seq, et = st.etapas || [];
+    const quando = d => d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "";
+    const linha = !seq ? "Ainda não está na sequência de e-mails."
+        : seq.ativo ? `Ativa · ${Math.min(seq.etapa, et.length)}/${et.length} etapas enviadas` + (seq.proximo_em ? ` · próximo: ${et[seq.etapa] || "Novidades"} em ${quando(seq.proximo_em)}` : "")
+        : "Parada · " + (seq.motivo || "");
+    return React.createElement("div", { style: { border: `0.5px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 10, background: C.white } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+            React.createElement("div", null,
+                React.createElement("div", { style: { fontSize: 12, fontWeight: 700 } }, "📧 E-mails automáticos"),
+                React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, linha)),
+            React.createElement("div", { style: { display: "flex", gap: 6 } },
+                !seq || (!seq.ativo && seq.motivo !== "descadastrou") ? React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, disabled: load, onClick: () => seq ? acao("emailPausar", { ativo: true }) : acao("emailIniciar") }, seq ? "▶ Retomar" : "▶ Iniciar (boas-vindas agora)")
+                    : seq.ativo ? React.createElement(PBtn, { sm: true, variant: "ghost", color: C.muted, disabled: load, onClick: () => acao("emailPausar", { ativo: false }) }, "⏸ Pausar") : null)),
+        msg && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 6 } }, msg),
+        (st.envios || []).length > 0 && React.createElement("details", { style: { fontSize: 11, color: C.inkMid, marginTop: 6 } }, React.createElement("summary", { style: { cursor: "pointer" } }, "Enviados (" + st.envios.length + ")"),
+            st.envios.map((e, i) => React.createElement("div", { key: i, style: { padding: "3px 0" } }, quando(e.criado_em) + " · " + (et[e.etapa] || "Novidades") + " · " + (e.status === "enviado" ? "“" + e.assunto + "”" : "⚠️ " + (e.erro || "erro"))))));
+}
+// ── 💼 Investidores: carteira + mesma oferta para muitos, mensagem personalizada para cada um ──
+const INV_TIPOS = ["Lançamento", "Renda (aluguel anual)", "Temporada", "Revenda", "Terreno", "Comercial"];
+const invAtivo = c => !!(c && c.investidor && c.investidor.ativo);
+const invSugerido = c => !invAtivo(c) && /invest|revend|renda|temporada|aluguel|long stay|short stay/i.test(String(((c || {}).perfilWhatsApp || {}).objetivo || "") + " " + String((((c || {}).interesses || [])[0] || {}).finalidade || ""));
+function InvestidorCard({ cliente }) {
+    const inv = cliente.investidor || {};
+    const [aberto, setAberto] = useState(false);
+    const [f, setF] = useState(Object.assign({ cidades: "", faixa: "", tipos: [], objetivo: "", canal: "WhatsApp", obs: "" }, inv));
+    function salvar(ativo) {
+        const v = Object.assign({}, f, { ativo, atualizadoEm: new Date().toISOString().slice(0, 10) });
+        HolyStore.update("clientes", l => (l || []).map(c => c.id === cliente.id ? Object.assign({}, c, { investidor: v }) : c));
+        if (ativo !== !!inv.ativo) vTL(cliente, "Nota interna", ativo ? "💼 Marcado como investidor" : "💼 Desmarcado como investidor");
+        setAberto(false);
+    }
+    const sug = invSugerido(cliente);
+    return React.createElement("div", { style: { border: `0.5px solid ${inv.ativo ? C.gold : C.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 10, background: C.white } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+            React.createElement("div", null,
+                React.createElement("div", { style: { fontSize: 12, fontWeight: 700 } }, "💼 Investidor ", inv.ativo ? React.createElement("span", { style: { color: C.gold } }, "· sim") : React.createElement("span", { style: { color: C.muted, fontWeight: 400 } }, sug ? "· parece investidor pelo perfil" : "· não")),
+                inv.ativo && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, [inv.faixa, inv.cidades, (inv.tipos || []).join(", "), inv.canal && "prefere " + inv.canal].filter(Boolean).join(" · "))),
+            React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, onClick: () => setAberto(!aberto) }, aberto ? "Fechar" : inv.ativo ? "Editar perfil" : "Marcar como investidor")),
+        aberto && React.createElement("div", { style: { marginTop: 10 } },
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 8 } },
+                React.createElement("label", { style: { fontSize: 11, color: C.muted } }, "Faixa de investimento", React.createElement("input", { style: Object.assign({}, mkInput, { marginTop: 3 }), value: f.faixa, placeholder: "ex.: R$ 500 mil a 1,5 milhão", onChange: e => setF(Object.assign({}, f, { faixa: e.target.value })) })),
+                React.createElement("label", { style: { fontSize: 11, color: C.muted } }, "Cidades de interesse", React.createElement("input", { style: Object.assign({}, mkInput, { marginTop: 3 }), value: f.cidades, placeholder: "ex.: Itapema, Porto Belo", onChange: e => setF(Object.assign({}, f, { cidades: e.target.value })) })),
+                React.createElement("label", { style: { fontSize: 11, color: C.muted } }, "Objetivo", React.createElement("input", { style: Object.assign({}, mkInput, { marginTop: 3 }), value: f.objetivo, placeholder: "ex.: renda passiva, valorização na planta", onChange: e => setF(Object.assign({}, f, { objetivo: e.target.value })) })),
+                React.createElement("label", { style: { fontSize: 11, color: C.muted } }, "Canal preferido", React.createElement("select", { style: Object.assign({}, mkInput, { marginTop: 3 }), value: f.canal, onChange: e => setF(Object.assign({}, f, { canal: e.target.value })) }, ["WhatsApp", "E-mail", "Ligação"].map(o => React.createElement("option", { key: o }, o))))),
+            React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", margin: "8px 0" } }, INV_TIPOS.map(t => { const on = (f.tipos || []).includes(t); return React.createElement("button", { key: t, onClick: () => setF(Object.assign({}, f, { tipos: on ? f.tipos.filter(x => x !== t) : (f.tipos || []).concat(t) })), style: { fontSize: 11, padding: "4px 10px", borderRadius: 14, cursor: "pointer", border: `1px solid ${on ? C.gold : C.border}`, background: on ? C.gold + "1f" : C.white } }, t); })),
+            React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 50 }), value: f.obs, placeholder: "Observações (o que ele já comprou, como gosta de ser abordado…)", onChange: e => setF(Object.assign({}, f, { obs: e.target.value })) }),
+            React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 } },
+                inv.ativo && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.muted, onClick: () => salvar(false) }, "Não é investidor"),
+                React.createElement(PBtn, { sm: true, onClick: () => salvar(true) }, "Salvar como investidor"))));
+}
+function InvestidoresPage({ clientes, imoveis }) {
+    const emps = HolyStore.get("empreendimentos", []);
+    const [busca, setBusca] = useState(""); const [cid, setCid] = useState(""); const [tipo, setTipo] = useState(""); const [sug, setSug] = useState(false);
+    const [sel, setSel] = useState({}); const [canal, setCanal] = useState("whatsapp"); const [item, setItem] = useState(""); const [oferta, setOferta] = useState("");
+    const [previa, setPrevia] = useState(null); const [fila, setFila] = useState(null); const [prog, setProg] = useState(""); const [rodando, setRodando] = useState(false); const [feitos, setFeitos] = useState({});
+    const base = clientes.filter(c => invAtivo(c) || (sug && invSugerido(c)));
+    const norm = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    const lista = base.filter(c => {
+        const i = c.investidor || {}, p = c.perfilWhatsApp || {};
+        if (busca && !norm(c.nome + " " + c.email + " " + c.celular).includes(norm(busca))) return false;
+        if (cid && !norm((i.cidades || "") + " " + (p.cidades || "")).includes(norm(cid))) return false;
+        if (tipo && !(i.tipos || []).includes(tipo)) return false;
+        return true;
+    });
+    const escolhidos = lista.filter(c => sel[c.id]);
+    const temCanal = c => canal === "email" ? /@/.test(c.email || "") : vDig(c.celular || c.tel).length >= 10;
+    const aptos = escolhidos.filter(temCanal);
+    const opcoes = imoveis.filter(i => i.status === "Disponível").map(i => ({ v: "im:" + i.id, l: i.nome, x: i, k: "im" })).concat(emps.map(e => ({ v: "em:" + e.id, l: "🏢 " + e.nome, x: e, k: "em" })));
+    const it = opcoes.find(o => o.v === item);
+    const itemRef = it ? { kind: it.k, id: it.x.id } : null;
+    function ofertaBase() {
+        if (!it) return;
+        const x = it.x;
+        const txt = it.k === "im" ? `Tenho uma oportunidade que combina com investidor: ${x.nome}${x.bairro ? ", no " + x.bairro : ""}${x.cidade ? " (" + String(x.cidade).replace(/-SC$/i, "") + ")" : ""}${x.valor ? ", por R$ " + Number(x.valor).toLocaleString("pt-BR") : ""}. Posso te mandar o estudo com fotos, condições e potencial de retorno?` : `Abriu uma oportunidade no ${x.nome}${x.cidade ? ", em " + x.cidade : ""}${x.preco ? " (" + x.preco + ")" : ""}. Para investidor, é uma boa entrada. Posso te mandar a tabela e o estudo de rentabilidade?`;
+        setOferta(txt);
+    }
+    async function chamar(ids, enviar) {
+        const r = await holyFetch("/api/crm", { method: "POST", body: JSON.stringify({ acao: "investPersonalizar", ids, oferta, item: itemRef, canal, enviar, rotulo: it ? it.x.nome : "" }) });
+        const j = await r.json(); if (!j.success) throw new Error(j.error || "erro"); return j.mensagens || [];
+    }
+    async function verPrevia() {
+        if (!aptos.length || oferta.trim().length < 10) return alert("Selecione investidores com " + (canal === "email" ? "e-mail" : "telefone") + " e escreva a oferta.");
+        setRodando(true); setPrevia(null);
+        try { setPrevia(await chamar(aptos.slice(0, 3).map(c => c.id), false)); } catch (e) { alert(e.message); }
+        setRodando(false);
+    }
+    async function executar() {
+        if (!aptos.length) return;
+        if (canal === "email" && !confirm(`Enviar ${aptos.length} e-mail(s) personalizado(s) agora? Quem se descadastrou é pulado automaticamente.`)) return;
+        setRodando(true); setFila(null); const out = [];
+        for (let i = 0; i < aptos.length; i += 5) {
+            setProg(`${canal === "email" ? "Enviando" : "Personalizando"} ${Math.min(i + 5, aptos.length)} de ${aptos.length}…`);
+            try { out.push(...await chamar(aptos.slice(i, i + 5).map(c => c.id), canal === "email")); } catch (e) { out.push(...aptos.slice(i, i + 5).map(c => ({ id: c.id, nome: c.nome, erro: e.message }))); }
+        }
+        setFila(out); setRodando(false);
+        setProg(canal === "email" ? `✅ ${out.filter(m => m.enviado).length} enviados · ${out.filter(m => !m.enviado).length} não enviados` : `✅ ${out.length} mensagens prontas. Envie uma a uma abaixo.`);
+    }
+    async function abrirWa(m) {
+        const c = clientes.find(x => x.id === m.id); if (!c) return;
+        const w = window.open("about:blank", "_blank");
+        const link = it ? await vLink(vItemLink(it.x, it.k), c, it.x.nome) : "";
+        if (w) w.location.href = vWa(c.celular || c.tel, m.texto + (link ? "\n\n" + link : ""));
+        vTL(c, "WhatsApp", "💼 Oferta para investidor" + (it ? ": " + it.x.nome : "") + " (mensagem personalizada)", { imovelId: it && it.k === "im" ? it.x.id : "" });
+        setFeitos(p => Object.assign({}, p, { [m.id]: "enviado" }));
+    }
+    function resultadoLigacao(m, r) {
+        const c = clientes.find(x => x.id === m.id); if (!c) return;
+        vTL(c, "Ligação", "💼 Oferta ativa" + (it ? " (" + it.x.nome + ")" : "") + ": " + r, { imovelId: it && it.k === "im" ? it.x.id : "" });
+        if (r === "interessado") HolyStore.update("clientes", l => (l || []).map(x => x.id === c.id ? Object.assign({}, x, { temp: "hot" }) : x));
+        setFeitos(p => Object.assign({}, p, { [m.id]: r }));
+    }
+    const caixa = { background: C.white, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: 14 };
+    const todosMarcados = lista.length > 0 && lista.every(c => sel[c.id]);
+    return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
+        React.createElement("div", { style: caixa },
+            React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, "💼 Investidores"),
+            React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.6 } }, `${clientes.filter(invAtivo).length} investidor(es) marcados · ${clientes.filter(invSugerido).length} cliente(s) com perfil de investidor ainda não marcados. Marque na ficha do cliente (cartão 💼). Selecione, escolha o produto e escreva a oferta uma vez: a IA personaliza para cada pessoa.`),
+            React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 } },
+                React.createElement("input", { style: Object.assign({}, mkInput, { maxWidth: 220 }), value: busca, placeholder: "Buscar nome, e-mail, telefone", onChange: e => setBusca(e.target.value) }),
+                React.createElement("input", { style: Object.assign({}, mkInput, { maxWidth: 160 }), value: cid, placeholder: "Cidade", onChange: e => setCid(e.target.value) }),
+                React.createElement("select", { style: Object.assign({}, mkInput, { maxWidth: 200 }), value: tipo, onChange: e => setTipo(e.target.value) }, React.createElement("option", { value: "" }, "Todos os tipos"), INV_TIPOS.map(t => React.createElement("option", { key: t }, t))),
+                React.createElement("label", { style: { fontSize: 12, display: "flex", gap: 6, alignItems: "center" } }, React.createElement("input", { type: "checkbox", checked: sug, onChange: e => setSug(e.target.checked) }), "Incluir sugeridos"))),
+        React.createElement("div", { style: caixa },
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 } },
+                React.createElement("label", { style: { fontSize: 12, display: "flex", gap: 6, alignItems: "center", fontWeight: 700 } }, React.createElement("input", { type: "checkbox", checked: todosMarcados, onChange: e => { const n = Object.assign({}, sel); lista.forEach(c => { n[c.id] = e.target.checked; }); setSel(n); } }), `Selecionar todos (${lista.length})`),
+                React.createElement("span", { style: { fontSize: 12, color: C.muted } }, `${escolhidos.length} selecionado(s)`)),
+            !lista.length && React.createElement("div", { style: { fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" } }, "Nenhum investidor ainda. Abra um cliente e use o cartão 💼 Investidor, ou marque \"Incluir sugeridos\"."),
+            React.createElement("div", { style: { maxHeight: 360, overflowY: "auto" } }, lista.map(c => { const i = c.investidor || {}, p = c.perfilWhatsApp || {}; return React.createElement("label", { key: c.id, style: { display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", borderTop: `0.5px solid ${C.border}`, cursor: "pointer" } },
+                React.createElement("input", { type: "checkbox", checked: !!sel[c.id], onChange: e => setSel(Object.assign({}, sel, { [c.id]: e.target.checked })), style: { marginTop: 3 } }),
+                React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                    React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, c.nome, !invAtivo(c) && React.createElement("span", { style: { fontSize: 10, color: C.gold, marginLeft: 6 } }, "sugerido")),
+                    React.createElement("div", { style: { fontSize: 11, color: C.muted } }, [i.faixa || p.faixa_valor, i.cidades || p.cidades, (i.tipos || []).join(", ") || p.objetivo, c.email ? "✉" : "", vDig(c.celular || c.tel).length >= 10 ? "📱" : ""].filter(Boolean).join(" · ")))); }))),
+        escolhidos.length > 0 && React.createElement("div", { style: Object.assign({}, caixa, { borderLeft: `3px solid ${C.gold}` }) },
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 8 } }, `Oferta para ${escolhidos.length} investidor(es)`),
+            React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" } }, [["whatsapp", "💬 WhatsApp"], ["email", "📧 E-mail"], ["ligacao", "📞 Oferta ativa (ligação)"]].map(([k, l]) => React.createElement("button", { key: k, onClick: () => { setCanal(k); setPrevia(null); setFila(null); setProg(""); }, style: { fontSize: 12, padding: "6px 12px", borderRadius: 16, cursor: "pointer", border: `1px solid ${canal === k ? C.olive : C.border}`, background: canal === k ? C.olive : C.white, color: canal === k ? "#fff" : C.ink } }, l))),
+            aptos.length < escolhidos.length && React.createElement("div", { style: { fontSize: 11, color: C.warn || C.muted, marginBottom: 6 } }, `${escolhidos.length - aptos.length} selecionado(s) sem ${canal === "email" ? "e-mail" : "telefone"} ficam de fora.`),
+            React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" } },
+                React.createElement("select", { style: Object.assign({}, mkInput, { flex: 1, minWidth: 220 }), value: item, onChange: e => setItem(e.target.value) }, React.createElement("option", { value: "" }, "Produto da oferta (opcional)"), opcoes.map(o => React.createElement("option", { key: o.v, value: o.v }, o.l))),
+                it && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: ofertaBase }, "Texto base do produto")),
+            React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 90 }), value: oferta, placeholder: "Escreva a oferta uma vez (produto, condição, prazo). A IA mantém tudo igual e personaliza o cumprimento e a conexão com o perfil de cada um.", onChange: e => setOferta(e.target.value) }),
+            React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" } },
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, disabled: rodando, onClick: verPrevia }, "👁 Prévia (3 pessoas)"),
+                React.createElement(PBtn, { sm: true, disabled: rodando || !aptos.length, onClick: executar }, canal === "email" ? `📧 Enviar ${aptos.length} e-mail(s)` : canal === "whatsapp" ? `💬 Preparar ${aptos.length} mensagem(ns)` : `📞 Preparar roteiros (${aptos.length})`),
+                prog && React.createElement("span", { style: { fontSize: 12, color: C.muted } }, prog)),
+            canal === "whatsapp" && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 6, lineHeight: 1.5 } }, "No WhatsApp, você envia uma a uma (um toque cada): disparar em massa pelo WhatsApp comum bloqueia o número. Com o WhatsApp oficial liberado, o envio em lote passa a ser por modelo aprovado."),
+            previa && React.createElement("div", { style: { marginTop: 10, display: "grid", gap: 8 } }, previa.map(m => React.createElement("div", { key: m.id, style: { background: C.cream || "#f5f3ee", borderRadius: 8, padding: 10, fontSize: 12, whiteSpace: "pre-wrap", lineHeight: 1.5 } }, React.createElement("b", null, m.nome), "\n", m.assunto ? "Assunto: " + m.assunto + "\n\n" + (m.paragrafos || []).join("\n\n") : m.texto)))),
+        fila && React.createElement("div", { style: caixa },
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 6 } }, canal === "email" ? "Resultado do envio" : canal === "whatsapp" ? "Fila de envio no WhatsApp" : "Lista de oferta ativa"),
+            fila.map(m => { const c = clientes.find(x => x.id === m.id) || {}; return React.createElement("div", { key: m.id, style: { borderTop: `0.5px solid ${C.border}`, padding: "8px 0", background: feitos[m.id] ? (C.oliveGhost || "#f2f5ec") : "transparent" } },
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" } },
+                    React.createElement("b", { style: { fontSize: 13 } }, m.nome),
+                    canal === "email" ? React.createElement("span", { style: { fontSize: 12, color: m.enviado ? C.success : C.danger } }, m.enviado ? "✓ enviado" : "✗ " + (m.erro || "não enviado"))
+                        : canal === "whatsapp" ? React.createElement(PBtn, { sm: true, variant: feitos[m.id] ? "ghost" : undefined, color: C.success, onClick: () => abrirWa(m) }, feitos[m.id] ? "✓ Enviado (abrir de novo)" : "Abrir no WhatsApp")
+                        : React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, React.createElement("a", { href: "tel:+" + (vDig(c.celular || c.tel).length <= 11 ? "55" : "") + vDig(c.celular || c.tel), style: { fontSize: 12, fontWeight: 700, color: C.blue } }, "📞 Ligar"), ["interessado", "sem interesse", "retornar depois", "não atendeu"].map(r => React.createElement("button", { key: r, onClick: () => resultadoLigacao(m, r), style: { fontSize: 11, padding: "3px 8px", borderRadius: 12, cursor: "pointer", border: `1px solid ${feitos[m.id] === r ? C.olive : C.border}`, background: C.white } }, r)))),
+                canal !== "email" && React.createElement("div", { style: { fontSize: 12, color: C.inkMid, whiteSpace: "pre-wrap", marginTop: 4, lineHeight: 1.5 } }, m.texto)); })));
+}
 function ClienteVendas({ cliente, imoveis }) {
     const [m, setM] = useState(null);
     const emps = HolyStore.get("empreendimentos", []);
@@ -19700,6 +19863,8 @@ function ClienteVendas({ cliente, imoveis }) {
     }
     return React.createElement("div", { style: { marginBottom: 14 } },
         React.createElement(QualificacaoCard, { key: cliente.id + JSON.stringify(cliente.perfilWhatsApp || {}) + (cliente.maturidade || ""), cliente }),
+        React.createElement(EmailSeqCard, { key: "em" + cliente.id, cliente }),
+        React.createElement(InvestidorCard, { key: "inv" + cliente.id + JSON.stringify(cliente.investidor || {}), cliente }),
         React.createElement("div", { style: { display: "flex", gap: 7, flexWrap: "wrap", marginBottom: top.length ? 10 : 0 } },
             React.createElement(PBtn, { sm: true, variant: "ghost", color: C.blue, onClick: () => setM("visita") }, "📅 Agendar visita"),
             React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, onClick: () => setM("proposta") }, "📄 Proposta"),
@@ -19855,6 +20020,33 @@ function RelatorioSemana({ clientes, timeline, ranking, visitas, onClose }) {
 // ── SEO, Google Ads e navegação no site ──
 const vSlug = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70);
 const vPagina = (item, kind) => location.origin + "/" + (kind === "im" ? "imovel" : "empreendimento") + "/" + encodeURIComponent(item.id) + "/" + vSlug(item.nome);
+function EmailAutoConfig() {
+    const [cfg, setCfg] = usePS("site_config", {});
+    const e = (cfg && cfg.emailAuto) || {};
+    const [st, setSt] = useState(null); const [para, setPara] = useState(""); const [msg, setMsg] = useState("");
+    const set = (k, v) => setCfg(Object.assign({}, cfg || {}, { emailAuto: Object.assign({}, e, { [k]: v }) }));
+    useEffect(() => { holyFetch("/api/crm?acao=emailStatus").then(r => r.json()).then(j => setSt(j.success ? !!j.configurado : false)).catch(() => setSt(false)); }, []);
+    async function testar() { setMsg("Enviando…"); try { const r = await holyFetch("/api/crm", { method: "POST", body: JSON.stringify({ acao: "emailTeste", para }) }); const j = await r.json(); setMsg(j.success ? "✅ Enviado! Confira a caixa de entrada (e o spam, na 1ª vez)." : "⚠️ " + j.error); } catch (x) { setMsg("⚠️ " + x.message); } }
+    const passo = (n, t) => React.createElement("div", { style: { fontSize: 12, color: C.ink, lineHeight: 1.6, marginBottom: 4 } }, React.createElement("b", null, n + ". "), t);
+    return React.createElement("div", { style: { padding: "16px 18px", background: "#fff", borderRadius: 12, border: "0.5px solid #dde0d6", borderLeft: "3px solid #b8993a" } },
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 6 } }, "📧 E-mails automáticos para leads ", st === true ? React.createElement("span", { style: { color: e.ativo ? C.success : C.muted, fontSize: 12 } }, e.ativo ? "· ligado" : "· pronto, mas desligado") : st === false ? React.createElement("span", { style: { color: C.muted, fontSize: 12 } }, "· falta configurar") : null),
+        React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 10 } }, "Todo lead com e-mail recebe boas-vindas na hora e depois uma sequência leve: o imóvel em detalhe (dia 2), um guia da forma de pagamento dele (dia 5), outras opções compatíveis (dia 9), um convite pessoal (dia 16) e novidades 1x por mês, só quando houver. Para sozinho quando o cliente vai para Proposta ou Negociação, se você pausar na ficha, ou se ele se descadastrar."),
+        st === false && React.createElement("div", { style: { marginBottom: 10 } },
+            passo(1, "Crie uma conta grátis em resend.com (3 mil e-mails por mês)."),
+            passo(2, "Em Domains, adicione holyimoveis.com e copie os registros DNS que ele mostrar para onde o domínio é administrado. Espere ficar Verified."),
+            passo(3, "Em API Keys, crie uma chave. Na Vercel (Settings > Environment Variables) crie RESEND_API_KEY = a chave; EMAIL_REMETENTE = Édipo | Holy Imóveis <contato@holyimoveis.com>; EMAIL_RESPOSTA = o e-mail onde você quer receber as respostas."),
+            passo(4, "Redeploy na Vercel e volte aqui para enviar um teste.")),
+        React.createElement("label", { style: { display: "flex", gap: 8, alignItems: "center", fontSize: 13, marginBottom: 10, cursor: "pointer" } },
+            React.createElement("input", { type: "checkbox", checked: !!e.ativo, onChange: ev => set("ativo", ev.target.checked) }), "Enviar automaticamente para todo lead novo com e-mail"),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
+            React.createElement("label", { style: { fontSize: 11, color: C.muted } }, "Assinatura dos e-mails", React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 64, marginTop: 3 }), value: e.assinatura != null ? e.assinatura : "Édipo Junior\nHoly Curadoria Imobiliária", onChange: ev => set("assinatura", ev.target.value) })),
+            React.createElement("label", { style: { fontSize: 11, color: C.muted } }, "Como você se apresenta (a IA usa no texto)", React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 64, marginTop: 3 }), value: e.apresentacao || "", placeholder: "Ex.: corretor há 16 anos, faço curadoria de imóveis em Chapecó e no litoral de SC", onChange: ev => set("apresentacao", ev.target.value) })),
+            React.createElement("label", { style: { fontSize: 11, color: C.muted } }, "WhatsApp do botão (com DDI e DDD)", React.createElement("input", { style: Object.assign({}, mkInput, { marginTop: 3 }), value: e.whatsapp || "", placeholder: "5549988454873", onChange: ev => set("whatsapp", ev.target.value) }))),
+        st === true && React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 12, flexWrap: "wrap" } },
+            React.createElement("input", { style: Object.assign({}, mkInput, { maxWidth: 260 }), value: para, placeholder: "seu e-mail para o teste", onChange: ev => setPara(ev.target.value) }),
+            React.createElement(PBtn, { sm: true, onClick: testar, color: C.olive }, "Enviar e-mail de teste"),
+            msg && React.createElement("span", { style: { fontSize: 12, color: C.muted } }, msg)));
+}
 function AvisoPessoalConfig() {
     const [st, setSt] = useState(null); const [msg, setMsg] = useState("");
     useEffect(() => { holyFetch("/api/crm", { method: "POST", body: JSON.stringify({ acao: "avisoStatus" }) }).then(r => r.json()).then(j => setSt(j.success ? !!j.configurado : false)).catch(() => setSt(false)); }, []);
@@ -21138,6 +21330,7 @@ function ConfigPage() {
         slot('venda', 'Venda seu imóvel', 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=600&q=70'))),
     holyPode('configCompleta') && React.createElement(RastreamentoConfig, null),
     holyPode('configCompleta') && React.createElement(AvisoPessoalConfig, null),
+    holyPode('configCompleta') && React.createElement(EmailAutoConfig, null),
     React.createElement('div', { style: box('#4a5c2f') },
       h('☁ Conexão com a nuvem'),
       p('Seus dados ficam salvos na nuvem e aparecem em qualquer computador ou celular onde você entrar com a senha do CRM.'),
@@ -21618,6 +21811,7 @@ function App() {
         { k: "dashboard", i: "⌂", l: "Dashboard" },
         { k: "esquentar", i: "🔥", l: "Vender hoje" },
         { k: "leads", i: "📊", l: "Leads" },
+        { k: "investidores", i: "💼", l: "Investidores" },
         { k: "clientes", i: "◎", l: "Clientes" },
         { k: "conversas", i: "💬", l: "Conversas" },
         { k: "campanhas", i: "📣", l: "Campanhas" },
@@ -21633,7 +21827,7 @@ function App() {
         { k: "usuarios", i: "🔑", l: "Usuários" },
     ].filter(n => ({
         campanhas: holyPode("campanhas"), conversas: holyPode("conversas"), equipe: holyPode("equipe"), usuarios: holyPode("usuarios"),
-        matching: holyPerfil() !== "secretaria", ia: holyPerfil() !== "secretaria", leads: holyPerfil() !== "secretaria", esquentar: holyPerfil() !== "secretaria",
+        investidores: holyPerfil() !== "secretaria", matching: holyPerfil() !== "secretaria", ia: holyPerfil() !== "secretaria", leads: holyPerfil() !== "secretaria", esquentar: holyPerfil() !== "secretaria",
     })[n.k] !== false).map(n => n.k === "config" && !holyPode("configCompleta") ? Object.assign({}, n, { l: "Minha conta" }) : n);
     const totC = imoveis.filter(i => i.status === "Disponível").reduce((s, i) => s + i.valor, 0);
     return React.createElement(React.Fragment, null,
@@ -21686,6 +21880,7 @@ function App() {
                     page === "dashboard" && React.createElement(Dashboard, { clientes: clientes, imoveis: imoveis, timeline: timeline, setPage: setPage }),
                     page === "leads" && React.createElement(LeadsDashboard, { clientes: clientes, timeline: timeline }),
                     page === "esquentar" && React.createElement(EsquentarPage, { clientes: clientes, imoveis: imoveis, timeline: timeline }),
+                    page === "investidores" && React.createElement(InvestidoresPage, { clientes: clientes, imoveis: imoveis }),
                     page === "clientes" && React.createElement(ClientesPage, { clientes: clientes, imoveis: imoveis, timeline: timeline, onAdd: addCli, onEdit: editCli, onAddTL: addTL, onDelete: holyPode("excluirCliente") ? delCli : null }),
                     page === "imoveis" && React.createElement(ImoveisPage, { imoveis: imoveis, clientes: clientes, onAdd: addIm, onEdit: editIm, onDelete: id => setImoveis(p => p.filter(i => i.id !== id)) }),
                     page === "empreendimentos" && React.createElement(EmpreendimentosPage, null),
