@@ -19744,6 +19744,27 @@ function InvestidorCard({ cliente }) {
                 inv.ativo && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.muted, onClick: () => salvar(false) }, "Não é investidor"),
                 React.createElement(PBtn, { sm: true, onClick: () => salvar(true) }, "Salvar como investidor"))));
 }
+// 📇 No computador: QR Code para abrir o contato direto no celular (gerado no próprio navegador)
+function vQrContato(url, nome) {
+    const fundo = document.createElement("div");
+    fundo.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px";
+    const cx = document.createElement("div");
+    cx.style.cssText = "background:#fff;border-radius:14px;padding:22px;max-width:340px;width:100%;text-align:center;font-family:inherit;color:#222";
+    cx.innerHTML = '<div style="font-size:15px;font-weight:700;margin-bottom:4px">📇 Salvar contato no celular</div><div style="font-size:12px;color:#777;margin-bottom:14px"></div><div class="qr" style="display:flex;justify-content:center;min-height:220px;align-items:center">Gerando…</div><div style="font-size:12px;color:#555;line-height:1.6;margin-top:14px;text-align:left">1. Abra a <b>Câmera</b> do iPhone e aponte para o código.<br>2. Toque no aviso amarelo que aparece.<br>3. Toque em <b>Criar Novo Contato</b> (ou Adicionar a Contato Existente).</div><div style="display:flex;gap:8px;justify-content:center;margin-top:14px"><button class="bx" style="padding:8px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer">Baixar arquivo</button><button class="fc" style="padding:8px 14px;border-radius:8px;border:0;background:#556b2f;color:#fff;cursor:pointer">Fechar</button></div>';
+    cx.children[1].textContent = nome || "";
+    fundo.appendChild(cx); document.body.appendChild(fundo);
+    const fechar = () => fundo.remove();
+    fundo.onclick = e => { if (e.target === fundo) fechar(); };
+    cx.querySelector(".fc").onclick = fechar;
+    cx.querySelector(".bx").onclick = () => { location.href = url; };
+    const desenhar = () => { const q = cx.querySelector(".qr"); q.innerHTML = ""; new window.QRCode(q, { text: url, width: 220, height: 220, correctLevel: window.QRCode.CorrectLevel.M }); };
+    if (window.QRCode) return desenhar();
+    const sc = document.createElement("script");
+    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
+    sc.onload = desenhar;
+    sc.onerror = () => { cx.querySelector(".qr").textContent = "Não carregou o QR. Use Baixar arquivo ou o link do aviso no seu WhatsApp."; };
+    document.head.appendChild(sc);
+}
 // 📲 Importar investidores dos contatos do celular (vCard do iPhone/Android ou seletor de contatos)
 function vcfLer(txt) {
     const linhas = String(txt || "").replace(/\r\n/g, "\n").replace(/=\n/g, "").replace(/\n[ \t]/g, "").split("\n");
@@ -19958,6 +19979,79 @@ function InvestidoresPage({ clientes, imoveis }) {
                         : React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, React.createElement("a", { href: "tel:+" + (vDig(c.celular || c.tel).length <= 11 ? "55" : "") + vDig(c.celular || c.tel), style: { fontSize: 12, fontWeight: 700, color: C.blue } }, "📞 Ligar"), ["interessado", "sem interesse", "retornar depois", "não atendeu"].map(r => React.createElement("button", { key: r, onClick: () => resultadoLigacao(m, r), style: { fontSize: 11, padding: "3px 8px", borderRadius: 12, cursor: "pointer", border: `1px solid ${feitos[m.id] === r ? C.olive : C.border}`, background: C.white } }, r)))),
                 canal !== "email" && React.createElement("div", { style: { fontSize: 12, color: C.inkMid, whiteSpace: "pre-wrap", marginTop: 4, lineHeight: 1.5 } }, m.texto)); })));
 }
+// 📘 Dossiê premium: página exclusiva do imóvel para este cliente (rastreada)
+function DossieModal({ cliente, imoveis, onClose }) {
+    const disp = imoveis.filter(i => i.status !== "Vendido");
+    const sugerido = (() => {
+        const t = String(cliente.obs || "").toLowerCase();
+        const porNome = disp.find(i => i.nome && t.includes(String(i.nome).toLowerCase().slice(0, 25)));
+        if (porNome) return porNome.id;
+        const top = disp.map(i => ({ i, s: vMatch(cliente, i, "im").score })).sort((a, b) => b.s - a.s)[0];
+        return top ? top.i.id : "";
+    })();
+    const [imId, setImId] = useState(sugerido);
+    const [intro, setIntro] = useState("");
+    const [ia, setIa] = useState(false); const [gerando, setGerando] = useState(false);
+    const [res, setRes] = useState(null); const [hist, setHist] = useState(null);
+    const im = disp.find(i => i.id === imId);
+    const nome1 = vPrimeiro(cliente.nome);
+    useEffect(() => { holyFetch("/api/crm?acao=dossies&cliente=" + encodeURIComponent(cliente.id)).then(r => r.json()).then(j => setHist(j.success ? j.dossies : [])).catch(() => setHist([])); }, [res]);
+    async function escreverIA() {
+        if (!im) return;
+        setIa(true);
+        const p = vPerfil(cliente);
+        const r = await holyIA(`Cliente: ${cliente.nome}. O que sabemos dele (use só o que for útil e verdadeiro): ${JSON.stringify(p)}. Observações: ${String(cliente.obs || "").slice(-600)}\nImóvel: ${im.nome} | ${im.tipo} | ${im.bairro || ""}, ${String(im.cidade || "").replace(/-SC$/i, "")} | ${im.quartos || 0} quartos, ${im.suites || 0} suítes | ${im.areaPrivativa || im.area || ""} m² | diferenciais: ${(im.diferenciais || []).concat(im.lazer || []).join(", ")}\nEscreva a carta de abertura do dossiê.`, 500,
+            "Você escreve a carta de abertura de um dossiê exclusivo de imóvel, assinada pelo corretor (Holy Curadoria Imobiliária, alto padrão em SC). 2 parágrafos curtos, no máximo 70 palavras no total. Comece pelo primeiro nome do cliente. Ligue 2 ou 3 características reais do imóvel ao que o cliente busca. Tom pessoal, elegante e calmo, sem exageros, sem 'imperdível', 'perfeito', 'top', sem emojis, sem pressão. Não invente nada que não esteja nos dados. Não assine. Responda só com o texto.");
+        setIa(false);
+        if (r && !r.error && r.text) setIntro(String(r.text).trim()); else alert("A IA não respondeu agora. Escreva à mão ou tente de novo.");
+    }
+    async function gerar() {
+        if (!im) return alert("Escolha o imóvel.");
+        setGerando(true);
+        try {
+            const r = await holyFetch("/api/crm", { method: "POST", body: JSON.stringify({ acao: "dossie", clienteId: cliente.id, imovelId: im.id, intro }) });
+            const j = await r.json(); if (!j.success) throw new Error(j.error || "erro");
+            setRes(j);
+        } catch (e) { alert("Não foi possível gerar o dossiê: " + e.message); }
+        setGerando(false);
+    }
+    function enviarWa() {
+        const t = `${nome1 ? nome1 + ", " : ""}preparei um material exclusivo do ${im.nome} para você ver com calma: fotos, localização, o que tem por perto e uma simulação de pagamento.\n\n${res.url}`;
+        window.open(vWa(cliente.celular || cliente.tel, t), "_blank");
+        vTL(cliente, "WhatsApp", "📘 Dossiê enviado: " + im.nome, { imovelId: im.id });
+    }
+    const quando = d => d ? new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+    const EV = { abriu: "📘 abriu", sim: "🧮 simulou", visita: "📅 pediu visita", duvida: "💬 dúvida", tempo: "⏱ leu" };
+    return React.createElement(Modal, { onClose, width: 620 },
+        React.createElement(MHead, { title: "📘 Dossiê exclusivo", sub: "Página premium do imóvel, personalizada para " + (nome1 || "o cliente") + ". Você é avisado quando ele abrir.", onClose }),
+        !res && React.createElement("div", null,
+            React.createElement("label", { style: { fontSize: 12, color: C.muted } }, "Imóvel",
+                React.createElement("select", { style: Object.assign({}, mkInput, { marginTop: 4 }), value: imId, onChange: e => setImId(e.target.value) },
+                    React.createElement("option", { value: "" }, "Escolha…"), disp.map(i => React.createElement("option", { key: i.id, value: i.id }, i.nome + (i.valor ? " · " + fmt(i.valor) : ""))))),
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, marginBottom: 4 } },
+                React.createElement("span", { style: { fontSize: 12, color: C.muted } }, "Carta de abertura (aparece no topo, assinada por você)"),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, disabled: ia || !im, onClick: escreverIA }, ia ? "Escrevendo…" : "✨ Escrever com IA")),
+            React.createElement("textarea", { style: Object.assign({}, mkInput, { minHeight: 110 }), value: intro, placeholder: `Se deixar em branco: "${nome1 ? nome1 + ", s" : "S"}eparei este material sobre o imóvel para você ver com calma…"`, onChange: e => setIntro(e.target.value) }),
+            React.createElement("div", { style: { fontSize: 11, color: C.muted, lineHeight: 1.6, marginTop: 8 } }, "O dossiê traz: fotos em galeria, números do imóvel, mapa com o que tem por perto (sem o número do endereço), simulação de financiamento, selo \"Imóvel curado Holy\" e botão de agendar visita. Dados do proprietário nunca aparecem."),
+            React.createElement("div", { style: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 } },
+                React.createElement(PBtn, { variant: "ghost", color: C.muted, onClick: onClose }, "Cancelar"),
+                React.createElement(PBtn, { disabled: gerando || !im, onClick: gerar }, gerando ? "Gerando (mapa e arredores)…" : "Gerar dossiê"))),
+        res && React.createElement("div", { style: { background: C.oliveGhost || "#f2f5ec", borderRadius: 10, padding: 14 } },
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 6 } }, "✅ Dossiê pronto"),
+            React.createElement("div", { style: { fontSize: 12, wordBreak: "break-all", color: C.inkMid, marginBottom: 10 } }, res.url),
+            React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+                vDig(cliente.celular || cliente.tel) && React.createElement(PBtn, { sm: true, color: C.success, onClick: enviarWa }, "💬 Enviar no WhatsApp"),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: () => { navigator.clipboard && navigator.clipboard.writeText(res.url); vTL(cliente, "Nota interna", "📘 Dossiê gerado: " + im.nome + " (link copiado)", { imovelId: im.id }); alert("Link copiado."); } }, "Copiar link"),
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: () => window.open(res.url + "?previa=1", "_blank") }, "Ver como o cliente vê")),
+            React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 8 } }, "\"Ver como o cliente vê\" não conta como abertura. Só as aberturas do cliente avisam você e entram na timeline.")),
+        hist && hist.length > 0 && React.createElement("div", { style: { marginTop: 18 } },
+            React.createElement("div", { style: { fontSize: 12, fontWeight: 700, marginBottom: 6 } }, "Dossiês enviados para " + (nome1 || "este cliente")),
+            hist.map(d => React.createElement("div", { key: d.code, style: { borderTop: `0.5px solid ${C.border}`, padding: "8px 0", fontSize: 12 } },
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 8 } },
+                    React.createElement("a", { href: d.url + "?previa=1", target: "_blank", rel: "noopener", style: { fontWeight: 600, color: C.ink } }, d.item_nome),
+                    React.createElement("span", { style: { color: d.aberturas ? C.success : C.muted, whiteSpace: "nowrap" } }, d.aberturas ? `👀 ${d.aberturas}x · ${quando(d.ultima)}` : "ainda não abriu")),
+                React.createElement("div", { style: { color: C.muted, marginTop: 2 } }, "Criado " + quando(d.criado_em) + (Object.keys(d.eventos || {}).filter(k => k !== "abriu").length ? " · " + Object.keys(d.eventos).filter(k => k !== "abriu").map(k => EV[k] || k).join(" · ") : ""))))));
+}
 function ClienteVendas({ cliente, imoveis }) {
     const [m, setM] = useState(null);
     const emps = HolyStore.get("empreendimentos", []);
@@ -19975,12 +20069,14 @@ function ClienteVendas({ cliente, imoveis }) {
         React.createElement(InvestidorCard, { key: "inv" + cliente.id + JSON.stringify(cliente.investidor || {}), cliente }),
         React.createElement("div", { style: { display: "flex", gap: 7, flexWrap: "wrap", marginBottom: top.length ? 10 : 0 } },
             React.createElement(PBtn, { sm: true, variant: "ghost", color: C.blue, onClick: () => setM("visita") }, "📅 Agendar visita"),
+            React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: () => setM("dossie") }, "📘 Dossiê"),
             React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, onClick: () => setM("proposta") }, "📄 Proposta"),
-            vDig(cliente.celular || cliente.tel) && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: async () => { try { const r = await holyFetch("/api/crm?acao=linkContato&cliente=" + encodeURIComponent(cliente.id)); const j = await r.json(); if (!j.success) throw new Error(j.error); location.href = j.url; } catch (e) { alert("Não foi possível gerar o contato: " + e.message); } } }, "📇 Salvar no celular"),
+            vDig(cliente.celular || cliente.tel) && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: async () => { try { const r = await holyFetch("/api/crm?acao=linkContato&cliente=" + encodeURIComponent(cliente.id)); const j = await r.json(); if (!j.success) throw new Error(j.error); if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) location.href = j.url; else vQrContato(j.url, cliente.nome); } catch (e) { alert("Não foi possível gerar o contato: " + e.message); } } }, "📇 Salvar no celular"),
             vDig(cliente.celular || cliente.tel) && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.success, onClick: () => window.open(vWa(cliente.celular || cliente.tel, "Oi, " + vPrimeiro(cliente.nome) + "! Aqui é " + vPrimeiro(vEu()) + ", da Holy. "), "_blank") }, "💬 WhatsApp")),
         top.length > 0 && React.createElement("div", { style: { fontSize: 11, color: C.muted } }, "Enviar opção compatível (link rastreado): ",
             top.map(o => React.createElement("button", { key: o.k + o.x.id, onClick: () => enviarItem(o), style: { margin: "3px 4px 0 0", fontSize: 11, padding: "4px 9px", borderRadius: 14, border: `0.5px solid ${C.border}`, background: C.white, cursor: "pointer", color: C.inkMid } }, (o.k === "em" ? "🏢 " : "🏠 ") + o.x.nome.slice(0, 34) + " · " + o.s + "%"))),
         m === "visita" && React.createElement(VisitaModal, { cliente, imoveis, onClose: () => setM(null) }),
+        m === "dossie" && React.createElement(DossieModal, { cliente, imoveis, onClose: () => setM(null) }),
         m === "proposta" && React.createElement(PropostaModal, { cliente, imoveis, onClose: () => setM(null) }));
 }
 
@@ -20757,6 +20853,38 @@ function MarketingHost() {
 }
 
 // ── Assistente de campanha ─────────────────────────────────────────────
+// 📱 Criativo vertical 9:16 do anúncio (Stories e Reels): nos Stories o texto do anúncio não aparece, então ele vai na imagem.
+// Faixas livres: topo ~250 px (perfil) e base ~340 px (botão Cadastre-se) ficam sem texto.
+async function adStoryRender(foto, item, kind) {
+    await mkFonts();
+    const img = await mkImg(foto);
+    const W = 1080, H = 1920, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const ctx = cv.getContext("2d"), P = 76;
+    mkCover(ctx, img, 0, 0, W, H);
+    let g = ctx.createLinearGradient(0, 0, 0, 520); g.addColorStop(0, "rgba(18,22,14,.62)"); g.addColorStop(1, "rgba(18,22,14,0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, 520);
+    g = ctx.createLinearGradient(0, H * 0.4, 0, H); g.addColorStop(0, "rgba(18,22,14,0)"); g.addColorStop(0.55, "rgba(18,22,14,.78)"); g.addColorStop(1, "rgba(18,22,14,.96)"); ctx.fillStyle = g; ctx.fillRect(0, H * 0.4, W, H * 0.6);
+    const logo = MK_LOGO.claro; if (logo) { const lw = 230, lh = lw * logo.height / logo.width; ctx.drawImage(logo, P, 270, lw, lh); }
+    const cidade = String(item.cidade || "").replace(/-SC$/i, "");
+    const kicker = (kind === "im" ? [item.bairro, cidade] : [cidade, item.status]).filter(Boolean).join(" · ");
+    const preco = kind === "im" ? (+item.valor ? "R$ " + Number(item.valor).toLocaleString("pt-BR") : "") : String(item.preco || "");
+    const specs = kind === "im"
+        ? [(item.areaPrivativa || item.area) ? (item.areaPrivativa || item.area) + " m²" : "", item.quartos ? item.quartos + " quartos" : "", item.suites ? item.suites + " suítes" : "", item.vagas ? item.vagas + " vagas" : ""].filter(Boolean).join("  ·  ")
+        : (item.destaques || []).slice(0, 3).map(d => (d.n ? d.n + " " : "") + (d.l || "")).filter(Boolean).join("  ·  ");
+    let y = H - 360;
+    // chamada para o botão
+    ctx.font = "600 30px Inter, Arial"; const chamada = "Cadastre-se e receba fotos, planta e condições";
+    const cw = Math.min(W - P * 2, ctx.measureText(chamada).width + 64), ch = 72;
+    ctx.fillStyle = "rgba(184,153,58,.95)"; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(P, y - ch, cw, ch, 36); else ctx.rect(P, y - ch, cw, ch); ctx.fill();
+    ctx.fillStyle = "#1b1d17"; ctx.textBaseline = "middle"; ctx.fillText(chamada, P + 32, y - ch / 2 + 1); ctx.textBaseline = "alphabetic";
+    y -= ch + 56;
+    if (preco) { ctx.font = "600 58px Inter, Arial"; ctx.fillStyle = MK.goldLt; ctx.fillText(preco, P, y); y -= 76; }
+    if (specs) { ctx.font = "500 32px Inter, Arial"; ctx.fillStyle = "rgba(255,255,255,.9)"; mkLines(ctx, specs, W - P * 2, 1).forEach(l => ctx.fillText(l, P, y)); y -= 66; }
+    ctx.font = "700 86px 'Playfair Display', Georgia, serif"; ctx.fillStyle = "#fff";
+    const linhas = mkLines(ctx, item.nome, W - P * 2, 3);
+    linhas.slice().reverse().forEach(l => { ctx.fillText(l, P, y); y -= 98; });
+    if (kicker) { ctx.font = "600 27px Inter, Arial"; ctx.fillStyle = MK.goldLt; ctx.fillText(kicker.toUpperCase().split("").join(String.fromCharCode(8202)), P, y + 22); }
+    return cv.toDataURL("image/jpeg", 0.9);
+}
 function CampanhaWizard({ item, kind, onClose }) {
     const [passo, setPasso] = useState(1);
     const [meta, setMeta] = useState(null);
@@ -20768,6 +20896,8 @@ function CampanhaWizard({ item, kind, onClose }) {
     const [, setCamps] = usePS("campanhas", []);
     const fotos = mktFotos(item);
     const vit = mktVitrine(item, kind);
+    const [story, setStory] = useState(""); const [usarStory, setUsarStory] = useState(true);
+    useEffect(() => { let vivo = true; setStory(""); if (foto) adStoryRender(foto, item, kind).then(u => { if (vivo) setStory(u); }).catch(() => { }); return () => { vivo = false; }; }, [foto]);
     useEffect(() => { metaApi("status").then(setMeta).catch(er => setMeta({ configurado: false, erro: er.message })); setFoto(fotos[0] || ""); }, []);
     const E = (k, v) => setE(p => Object.assign({}, p, { [k]: v }));
     async function gerar() {
@@ -20779,7 +20909,9 @@ function CampanhaWizard({ item, kind, onClose }) {
     async function criar() {
         setErro(""); setLoad("Criando campanha, formulário, público e anúncios na Meta…");
         try {
-            const d = await metaApi("criar", { nome: item.nome, foto, link: vit.link, pracas: e.pracas, interesses: e.interesses, orcamento_diario: e.orcamento_diario, duracao_dias: e.duracao_dias,
+            let fotoStory = "";
+            if (usarStory && story) { setLoad("Enviando a versão vertical (Stories e Reels)…"); try { fotoStory = await holyEnviarDataUrl(story, "stories-" + String(item.nome || "anuncio").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) + ".jpg", "anuncios"); } catch (x) { fotoStory = ""; } setLoad("Criando campanha, formulário, público e anúncios na Meta…"); }
+            const d = await metaApi("criar", { nome: item.nome, foto, fotoStory, link: vit.link, pracas: e.pracas, interesses: e.interesses, orcamento_diario: e.orcamento_diario, duracao_dias: e.duracao_dias,
                 textos: e.textos.filter(t => t.texto_principal && t.texto_principal.trim()), perguntas: e.perguntas, agradecimento: e.agradecimento });
             setRes(d);
             setCamps(p => [{ id: "cp" + uid(), itemId: item.id, kind, itemNome: item.nome, criadoEm: new Date().toISOString(), campanha: d.campanha, conjunto: d.conjunto, anuncios: d.anuncios, formulario: d.formulario,
@@ -20841,6 +20973,14 @@ function CampanhaWizard({ item, kind, onClose }) {
                 React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(90px,1fr))", gap: 6, maxHeight: 170, overflowY: "auto" } },
                     fotos.map(u => React.createElement("button", { key: u, onClick: () => setFoto(u), style: { padding: 0, height: 64, borderRadius: 8, overflow: "hidden", cursor: "pointer", border: foto === u ? `3px solid ${C.gold}` : `1px solid ${C.border}` } },
                         React.createElement("img", { src: u, alt: "", style: { width: "100%", height: "100%", objectFit: "cover" } }))))),
+            React.createElement("div", { style: Object.assign(mkBox("#fff"), { display: "flex", gap: 14, alignItems: "flex-start" }) },
+                React.createElement("div", { style: { width: 120, flexShrink: 0, aspectRatio: "9/16", borderRadius: 10, overflow: "hidden", background: C.cream, border: `0.5px solid ${C.border}` } },
+                    story ? React.createElement("img", { src: story, alt: "Prévia Stories", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }) : React.createElement("div", { style: { fontSize: 10, color: C.muted, padding: 10 } }, foto ? "Gerando…" : "Escolha a foto")),
+                React.createElement("div", { style: { flex: 1 } },
+                    mkLbl("Versão Stories e Reels (9:16)"),
+                    React.createElement("div", { style: { fontSize: 12, color: C.inkMid, lineHeight: 1.6 } }, "Nos Stories e Reels a Meta não mostra o texto do anúncio, só a imagem. Esta versão vertical leva nome, local, números e preço na própria foto, com espaço livre para o perfil (em cima) e o botão Cadastre-se (embaixo). No feed continua a foto normal com os textos."),
+                    React.createElement("label", { style: { fontSize: 12, display: "flex", gap: 6, alignItems: "center", marginTop: 8 } }, React.createElement("input", { type: "checkbox", checked: usarStory, onChange: ev => setUsarStory(ev.target.checked) }), "Usar nos Stories e Reels"),
+                    story && React.createElement("a", { href: story, download: "stories-" + (item.id || "anuncio") + ".jpg", style: { fontSize: 12, color: C.olive, display: "inline-block", marginTop: 6 } }, "⬇ Baixar imagem"))),
             React.createElement("div", null, mkLbl("Textos (3 variações para teste A/B)"),
                 e.textos.map((t, i) => React.createElement("div", { key: i, style: Object.assign(mkBox("#fff"), { marginBottom: 8, display: "flex", flexDirection: "column", gap: 6 }) },
                     React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: C.gold } }, "Variação " + String.fromCharCode(65 + i) + (t.angulo ? " · " + t.angulo : "")),

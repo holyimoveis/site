@@ -14,6 +14,7 @@ import { sincronizarLeads } from './_sync.js';
 import { enviarAviso, avisoConfigurado } from './_avisos.js';
 import { linkContato } from './_contato.js';
 import { personalizarLote } from './_investidores.js';
+import { criarDossie, listarDossies } from './_dossie.js';
 import { statusCliente, iniciarSequencia, pausarSequencia, emailTeste, emailConfigurado } from './_email.js';
 import { esquemaRastreio } from './leads.js'; // /api/usuarios é atendido aqui (limite de 12 funções do plano Hobby da Vercel)
 
@@ -111,6 +112,12 @@ export default async function handler(req, res) {
         if (s.perfil === 'corretor' && !(await clientesDe(s)).some((c) => c.id === cid)) return err(res, 403, 'Cliente de outro corretor.');
         return ok(res, await statusCliente(cid));
       }
+      if (q.acao === 'dossies') { // dossiês já enviados a um cliente, com aberturas
+        const cid = String(q.cliente || '');
+        if (s.perfil === 'corretor' && !(await clientesDe(s)).some((c) => c.id === cid)) return err(res, 403, 'Cliente de outro corretor.');
+        const base = process.env.SITE_URL || ('https://' + (req.headers['x-forwarded-host'] || req.headers.host));
+        return ok(res, { dossies: (await listarDossies(cid)).map((d) => Object.assign({}, d, { url: base + '/d/' + d.code })) });
+      }
       if (q.acao === 'linkContato') { // 📇 salvar o cliente nos contatos do celular
         const cid = String(q.cliente || '');
         if (s.perfil === 'corretor' && !(await clientesDe(s)).some((c) => c.id === cid)) return err(res, 403, 'Cliente de outro corretor.');
@@ -192,6 +199,12 @@ export default async function handler(req, res) {
         if (!avisoConfigurado()) return err(res, 400, 'Falta criar AVISO_WHATSAPP e AVISO_CALLMEBOT_KEY na Vercel (e fazer Redeploy).');
         const r = await enviarAviso('✅ Teste do Holy CRM: os avisos de lead novo vão chegar aqui.');
         return r.ok ? ok(res, { enviado: true }) : err(res, 502, 'O CallMeBot não aceitou (' + r.motivo + '). Confira o número e a chave.');
+      }
+      if (b.acao === 'dossie') { // 📘 dossiê exclusivo do imóvel para um cliente
+        if (!b.imovelId) return err(res, 400, 'Escolha o imóvel.');
+        if (b.clienteId && s.perfil === 'corretor') { const c = arr((await ler('clientes')).data).find((x) => x.id === b.clienteId); if (!c || !ehDoUsuario(c, s.uid)) return err(res, 403, 'Cliente de outro corretor.'); }
+        const d = await criarDossie({ clienteId: b.clienteId || null, imovelId: String(b.imovelId), intro: b.intro, autor: s.nome || '' });
+        return ok(res, d);
       }
       if (b.acao === 'link') {
         const url = String(b.url || '');

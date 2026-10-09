@@ -241,6 +241,9 @@ async function criar(b, req) {
     // criativos e anúncios (1 por variação de texto)
     etapa = 'Imagem do anúncio';
     const hash = await subirImagem(b.foto);
+    // versão vertical 9:16 (Stories e Reels) com o texto na imagem, gerada pelo CRM
+    let hashStory = null, storyOk = 0, storyErro = '';
+    if (b.fotoStory && /^https:/.test(b.fotoStory)) { try { hashStory = await subirImagem(b.fotoStory); } catch (e) { storyErro = e.message; } }
     const ig = await igUser();
     const ads = [];
     for (let i = 0; i < textos.length; i++) {
@@ -249,11 +252,31 @@ async function criar(b, req) {
       const story = { page_id: PAGE(), link_data: { image_hash: hash, link: linkPagina, message: String(t.texto_principal).slice(0, 2000), name: String(t.titulo || nome).slice(0, 80), description: String(t.descricao || '').slice(0, 60), call_to_action: { type: 'SIGN_UP', value: { lead_gen_form_id: form.id } } } };
       if (ig) story.instagram_user_id = ig;
       const rot = `${nome} | Variação ${String.fromCharCode(65 + i)}` + (t.angulo ? ' · ' + String(t.angulo).slice(0, 30) : '');
-      const cr = await graph(`${ACT()}/adcreatives`, 'POST', { name: rot, object_story_spec: story });
+      let cr = null;
+      if (hashStory) { // mesma peça, imagem certa em cada lugar: foto no feed, versão vertical nos Stories e Reels
+        const base = { page_id: PAGE() }; if (ig) base.instagram_user_id = ig;
+        const feed = {
+          images: [{ hash, adlabels: [{ name: 'holy_feed' }] }, { hash: hashStory, adlabels: [{ name: 'holy_story' }] }],
+          bodies: [{ text: story.link_data.message }], titles: [{ text: story.link_data.name }],
+          ...(story.link_data.description ? { descriptions: [{ text: story.link_data.description }] } : {}),
+          link_urls: [{ website_url: linkPagina }], ad_formats: ['SINGLE_IMAGE'], optimization_type: 'PLACEMENT',
+          call_to_action_types: ['SIGN_UP'], call_to_actions: [{ type: 'SIGN_UP', value: { lead_gen_form_id: form.id } }],
+          asset_customization_rules: [
+            { customization_spec: { publisher_platforms: ig ? ['facebook', 'instagram'] : ['facebook'], facebook_positions: ['story', 'facebook_reels'], ...(ig ? { instagram_positions: ['story', 'reels'] } : {}) }, image_label: { name: 'holy_story' }, priority: 1 },
+            { customization_spec: {}, image_label: { name: 'holy_feed' }, priority: 2 },
+          ],
+        };
+        for (const tentativa of [feed, (({ call_to_action_types, ...x }) => x)(feed)]) {
+          try { cr = await graph(`${ACT()}/adcreatives`, 'POST', { name: rot, object_story_spec: base, asset_feed_spec: tentativa }); storyOk++; break; }
+          catch (e) { storyErro = e.message; }
+        }
+      }
+      if (!cr) cr = await graph(`${ACT()}/adcreatives`, 'POST', { name: rot, object_story_spec: story });
       const ad = await graph(`${ACT()}/ads`, 'POST', { name: rot, adset_id: adset.id, creative: { creative_id: cr.id }, status: 'PAUSED' });
       ads.push(ad.id);
     }
     passos.push(ads.length + ' anúncio(s) para teste A/B' + (ig ? ' (Facebook + Instagram)' : ' (Facebook; Instagram não vinculado à Página)'));
+    if (b.fotoStory) passos.push(storyOk ? `Stories e Reels: versão vertical com texto na imagem em ${storyOk} anúncio(s); no feed fica a foto com os textos` : 'Stories e Reels: a Meta não aceitou a versão vertical agora (' + String(storyErro).slice(0, 140) + '). Os anúncios saíram com a foto padrão; dá para trocar a imagem dos Stories no Gerenciador.');
     return { campanha: camp.id, conjunto: adset.id, anuncios: ads, formulario: form.id, passos, orcamento_diario: diario, dias,
       nomeCampanha: `Holy | ${nome} | Leads | ${sufixo}`,
       link: `https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${ACT().replace('act_', '')}&selected_campaign_ids=${camp.id}` };
@@ -305,9 +328,17 @@ async function atualizarFormulario(b, req) {
   const passos = ['Formulário novo criado com as mesmas perguntas e o botão "Falar agora"'];
   const trocados = [];
   for (const adId of b.anuncios.slice(0, 10)) {
-    const ad = await graph(String(adId), 'GET', { fields: 'name,creative{name,object_story_spec}' });
+    const ad = await graph(String(adId), 'GET', { fields: 'name,creative{name,object_story_spec,asset_feed_spec}' });
     const spec = ad.creative && ad.creative.object_story_spec;
     if (!spec) { passos.push('Anúncio ' + adId + ': sem criativo editável, mantido'); continue; }
+    const afs = ad.creative.asset_feed_spec;
+    if (afs && Array.isArray(afs.call_to_actions) && afs.call_to_actions.some((c) => c && c.value && c.value.lead_gen_form_id)) { // criativo com versão de Stories
+      const novoAfs = JSON.parse(JSON.stringify(afs));
+      novoAfs.call_to_actions.forEach((c) => { if (c && c.value && c.value.lead_gen_form_id) c.value.lead_gen_form_id = novo.id; });
+      const cr = await graph(`${ACT()}/adcreatives`, 'POST', { name: String((ad.creative.name || ad.name || 'Criativo') + ' · v2').slice(0, 100), object_story_spec: spec, asset_feed_spec: novoAfs });
+      await graph(String(adId), 'POST', { creative: { creative_id: cr.id } });
+      trocados.push(adId); continue;
+    }
     const novoSpec = JSON.parse(JSON.stringify(spec));
     const blocos = [novoSpec.link_data, novoSpec.video_data].filter(Boolean);
     let achou = false;

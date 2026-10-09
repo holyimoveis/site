@@ -4,6 +4,7 @@ import { abrirLink } from './_links.js';
 import { pagina, sitemap, robots } from './_seo.js';
 import { vcardDoToken } from './_contato.js';
 import { descadastrar } from './_email.js';
+import { paginaDossie, eventoDossie } from './_dossie.js';
 const https = (u) => typeof u === 'string' && /^https:\/\//.test(u);
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -13,6 +14,14 @@ export default async function handler(req, res) {
     if (req.method === 'POST') return res.status(okS ? 200 : 400).end();
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.status(okS ? 200 : 400).send('<!DOCTYPE html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Holy Imóveis</title><body style="font-family:Arial,sans-serif;background:#f5f3ee;color:#1a1c18;display:flex;min-height:90vh;align-items:center;justify-content:center;text-align:center;padding:20px"><div><h1 style="font-family:Georgia,serif;color:#2d3a1f">' + (okS ? 'Pronto, você não vai mais receber nossos e-mails.' : 'Link inválido ou expirado.') + '</h1><p>' + (okS ? 'Se mudar de ideia ou quiser falar com a gente, é só chamar.' : 'Responda qualquer e-mail nosso pedindo o descadastro que resolvemos na hora.') + '</p><p><a href="/" style="color:#2d3a1f">Voltar ao site</a></p></div></body></html>');
+  }
+  if ((req.query || {}).d) { // 📘 dossiê exclusivo do cliente (GET abre; POST registra o que ele fez na página)
+    res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    if (req.method === 'POST') { await eventoDossie(String(req.query.d), req.query || {}, req).catch((e) => console.error('[dossie] evento', e.message)); return res.status(204).end(); }
+    const html = await paginaDossie(String(req.query.d), req).catch((e) => { console.error('[dossie]', e); return null; });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    if (!html) return res.status(404).send('<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Holy Imóveis</title><body style="font-family:Arial,sans-serif;background:#f6f3ec;display:flex;min-height:90vh;align-items:center;justify-content:center;text-align:center;padding:20px"><div><h2 style="font-family:Georgia,serif;color:#2d3a1f">Este link não está mais ativo.</h2><p>Fale com a Holy que enviamos o material atualizado.</p><p><a href="https://wa.me/5549988454873" style="color:#2d3a1f">Falar no WhatsApp</a></p></div></body></html>');
+    return res.status(200).send(html);
   }
   if (req.method !== 'GET') return err(res, 405, 'Somente leitura.');
   const pg = (req.query || {}).pg;
