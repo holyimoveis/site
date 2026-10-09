@@ -263,13 +263,14 @@ ${pf.permuta ? `<section class="sec rev perm"><h2>Seu imóvel na negociação</h
 <div id="lb" class="lb" onclick="if(event.target===this)lbx()"><button class="lbx" onclick="lbx()" aria-label="Fechar">×</button><button class="lbp" onclick="lbn(-1)" aria-label="Anterior">‹</button><img id="lbi" alt=""><button class="lbn" onclick="lbn(1)" aria-label="Próxima">›</button><div id="lbc" class="lbc"></div></div>
 <script>window.D=${JSON.stringify(dados).replace(/</g, '\\u003c')};window.F=${JSON.stringify(fotos).replace(/</g, '\\u003c')};</script>
 <script>${JS}</script>`;
-  return pagina(corpo, `Dossiê exclusivo · ${it.nome}`, capa, geo && geo.coords);
+  return pagina(corpo, nome1 ? `${nome1}, seu dossiê exclusivo · ${it.nome}` : `Dossiê exclusivo · ${it.nome}`, capa, geo && geo.coords,
+    r.cliente ? `Material exclusivo preparado para ${r.cliente} pela Holy Curadoria Imobiliária.` : '');
 }
 
-function pagina(corpo, titulo, img, mapa) {
+function pagina(corpo, titulo, img, mapa, descricao) {
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(titulo)} | Holy</title><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#1f2a15">
-<meta property="og:title" content="${esc(titulo)}"><meta property="og:description" content="Material exclusivo preparado pela Holy Curadoria Imobiliária.">${img ? `<meta property="og:image" content="${esc(img)}">` : ''}
+<meta property="og:title" content="${esc(titulo)}"><meta property="og:description" content="${esc(descricao || 'Material exclusivo preparado pela Holy Curadoria Imobiliária.')}"><meta name="description" content="${esc(descricao || 'Material exclusivo preparado pela Holy Curadoria Imobiliária.')}">${img ? `<meta property="og:image" content="${esc(img)}">` : ''}
 <link rel="icon" href="/assets/holy-coroa.svg"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 ${mapa ? '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>' : ''}
