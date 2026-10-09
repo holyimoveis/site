@@ -19744,10 +19744,116 @@ function InvestidorCard({ cliente }) {
                 inv.ativo && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.muted, onClick: () => salvar(false) }, "Não é investidor"),
                 React.createElement(PBtn, { sm: true, onClick: () => salvar(true) }, "Salvar como investidor"))));
 }
+// 📲 Importar investidores dos contatos do celular (vCard do iPhone/Android ou seletor de contatos)
+function vcfLer(txt) {
+    const linhas = String(txt || "").replace(/\r\n/g, "\n").replace(/=\n/g, "").replace(/\n[ \t]/g, "").split("\n");
+    const out = []; let cur = null;
+    const qp = s => { try { return decodeURIComponent(s.replace(/=([0-9A-F]{2})/gi, "%$1")); } catch (e) { return s; } };
+    const des = s => s.replace(/\\n/gi, " ").replace(/\\([,;\\])/g, "$1").trim();
+    for (const ln of linhas) {
+        const up = ln.toUpperCase();
+        if (up.startsWith("BEGIN:VCARD")) { cur = { nome: "", n: "", tels: [], emails: [], empresa: "" }; continue; }
+        if (up.startsWith("END:VCARD")) { if (cur) out.push(cur); cur = null; continue; }
+        if (!cur) continue;
+        const i = ln.indexOf(":"); if (i < 0) continue;
+        const chave = ln.slice(0, i), k = chave.toUpperCase(); let v = ln.slice(i + 1);
+        if (/QUOTED-PRINTABLE/.test(k)) v = qp(v);
+        const prop = k.replace(/^ITEM\d+\./, "").split(";")[0];
+        if (prop === "FN") cur.nome = des(v);
+        else if (prop === "N") cur.n = des(v.split(";").slice(0, 2).reverse().filter(Boolean).join(" "));
+        else if (prop === "TEL") cur.tels.push({ num: v.replace(/^tel:/i, "").trim(), cel: /CELL|IPHONE|MOBILE|CELULAR/.test(k) });
+        else if (prop === "EMAIL") cur.emails.push(v.replace(/^mailto:/i, "").trim());
+        else if (prop === "ORG") cur.empresa = des(v.split(";")[0]);
+    }
+    return out.map(c => ({ nome: c.nome || c.n || c.empresa || "", tel: ((c.tels.find(t => t.cel) || c.tels[0]) || {}).num || "", email: c.emails[0] || "", empresa: c.empresa }));
+}
+function telBR(t) {
+    let d = vDig(t);
+    if (!d) return "";
+    if (/^\+/.test(String(t).trim())) return "+" + d;
+    d = d.replace(/^0+/, "");
+    if ((d.length === 12 || d.length === 13) && !d.startsWith("55")) d = d.slice(2); // operadora + DDD + número
+    if (d.length === 8 || d.length === 9) d = "49" + d; // salvo sem DDD: assume 49 (Chapecó)
+    if (d.length === 10 || d.length === 11) d = "55" + d;
+    return "+" + d;
+}
+function ImportarContatosInv({ clientes, onFechar }) {
+    const [lista, setLista] = useState(null); const [marc, setMarc] = useState({}); const [msg, setMsg] = useState("");
+    const [tipos, setTipos] = useState([]); const [cidades, setCidades] = useState(""); const [faixa, setFaixa] = useState("");
+    const temPicker = typeof navigator !== "undefined" && navigator.contacts && navigator.contacts.select;
+    const chave8 = t => vDig(t).slice(-8);
+    function preparar(arr) {
+        const vistos = {};
+        const l = arr.map((c, i) => {
+            const tel = telBR(c.tel), email = String(c.email || "").toLowerCase();
+            const existe = clientes.find(x => (tel && vDig(tel).length >= 8 && chave8(x.celular || x.tel) === chave8(tel)) || (email && String(x.email || "").toLowerCase() === email));
+            return { k: "c" + i, nome: String(c.nome || "").trim() || "(sem nome)", tel, email, empresa: c.empresa || "", existe };
+        }).filter(c => (c.tel && vDig(c.tel).length >= 10) || /@/.test(c.email)).filter(c => { const id = chave8(c.tel) || c.email; if (vistos[id]) return false; vistos[id] = 1; return true; });
+        const m = {}; l.forEach(c => { m[c.k] = !(c.existe && invAtivo(c.existe)); });
+        setLista(l); setMarc(m);
+        setMsg(l.length ? "" : "Nenhum contato com telefone ou e-mail encontrado no arquivo.");
+    }
+    function arquivo(e) {
+        const f = e.target.files && e.target.files[0]; if (!f) return;
+        const r = new FileReader(); r.onload = () => preparar(vcfLer(r.result)); r.readAsText(f); e.target.value = "";
+    }
+    async function picker() {
+        try {
+            const cs = await navigator.contacts.select(["name", "tel", "email"], { multiple: true });
+            preparar(cs.map(c => ({ nome: (c.name || [])[0] || "", tel: (c.tel || [])[0] || "", email: (c.email || [])[0] || "" })));
+        } catch (e) { setMsg("Não foi possível abrir os contatos: " + e.message); }
+    }
+    function importar() {
+        const esc = lista.filter(c => marc[c.k]); if (!esc.length) return;
+        const hoje = today();
+        const perfil = { ativo: true, tipos, cidades, faixa, objetivo: "", canal: "WhatsApp", obs: "", atualizadoEm: hoje, importado: "contatos do celular" };
+        const novos = [], atualizados = [];
+        esc.forEach(c => {
+            if (c.existe) atualizados.push(c.existe.id);
+            else novos.push({ id: "cl" + uid(), nome: c.nome, avatar: c.nome.trim().split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2), email: c.email, celular: c.tel, tel: "", cpf: "", nascimento: "", profissao: "", empresa: c.empresa, renda: 0, patrimonioEst: 0, origem: "Outros", stage: "Prospecção", temp: "warm", obs: "Importado dos contatos do celular como investidor.", interesses: [], interacoes: [], createdAt: hoje, investidor: Object.assign({}, perfil) });
+        });
+        HolyStore.update("clientes", l => novos.concat((l || []).map(x => atualizados.includes(x.id) ? Object.assign({}, x, { investidor: Object.assign({}, perfil, x.investidor || {}, { ativo: true, tipos: ((x.investidor || {}).tipos || []).concat(tipos.filter(t => !((x.investidor || {}).tipos || []).includes(t))), atualizadoEm: hoje }) }) : x)));
+        atualizados.forEach(id => { const x = clientes.find(c => c.id === id); if (x && !invAtivo(x)) vTL(x, "Nota interna", "💼 Marcado como investidor (importação de contatos)"); });
+        alert(`✅ ${novos.length} investidor(es) novo(s) criado(s)` + (atualizados.length ? ` e ${atualizados.length} cliente(s) que já estavam no CRM marcados como investidor.` : "."));
+        onFechar();
+    }
+    const n = lista ? lista.filter(c => marc[c.k]).length : 0;
+    const todos = lista && lista.length && lista.every(c => marc[c.k]);
+    return React.createElement("div", { style: { background: C.white, border: `1px solid ${C.gold}`, borderRadius: 12, padding: 14 } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 } },
+            React.createElement("div", { style: { fontSize: 14, fontWeight: 700 } }, "📲 Importar investidores do celular"),
+            React.createElement(PBtn, { sm: true, variant: "ghost", color: C.muted, onClick: onFechar }, "Fechar")),
+        !lista && React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.7, marginTop: 8 } },
+            React.createElement("b", { style: { color: C.ink } }, "No iPhone: "), "app Contatos → toque em ‹ Listas (canto superior esquerdo) → crie a lista \"Investidores\" e adicione as pessoas → volte em Listas, segure o dedo sobre \"Investidores\" → Exportar → Salvar em Arquivos. Depois toque no botão abaixo e escolha esse arquivo.",
+            React.createElement("br"), React.createElement("b", { style: { color: C.ink } }, "No Android: "), temPicker ? "use \"Escolher nos contatos\" e marque as pessoas." : "no app Contatos, selecione as pessoas → Compartilhar → salve o arquivo .vcf e escolha abaixo."),
+        !lista && React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 } },
+            React.createElement("label", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, padding: "8px 14px", borderRadius: 8, cursor: "pointer", background: C.olive, color: "#fff" } }, "📁 Escolher arquivo de contatos (.vcf)",
+                React.createElement("input", { type: "file", accept: ".vcf,text/vcard,text/x-vcard,text/directory", onChange: arquivo, style: { display: "none" } })),
+            temPicker && React.createElement(PBtn, { sm: true, variant: "ghost", color: C.olive, onClick: picker }, "👥 Escolher nos contatos")),
+        msg && React.createElement("div", { style: { fontSize: 12, color: C.warn || C.muted, marginTop: 8 } }, msg),
+        lista && lista.length > 0 && React.createElement("div", { style: { marginTop: 10 } },
+            React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 8 } }, `${lista.length} contato(s) no arquivo · ${lista.filter(c => c.existe).length} já estão no CRM (não serão duplicados, só marcados como investidor).`),
+            React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 4 } }, "Aplicar a todos (opcional; dá para ajustar depois em cada ficha):"),
+            React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 } }, INV_TIPOS.map(t => { const on = tipos.includes(t); return React.createElement("button", { key: t, onClick: () => setTipos(on ? tipos.filter(x => x !== t) : tipos.concat(t)), style: { fontSize: 11, padding: "4px 10px", borderRadius: 14, cursor: "pointer", border: `1px solid ${on ? C.gold : C.border}`, background: on ? C.gold + "1f" : C.white } }, t); })),
+            React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 } },
+                React.createElement("input", { style: Object.assign({}, mkInput, { maxWidth: 220 }), value: cidades, placeholder: "Cidades (ex.: Itapema, Porto Belo)", onChange: e => setCidades(e.target.value) }),
+                React.createElement("input", { style: Object.assign({}, mkInput, { maxWidth: 220 }), value: faixa, placeholder: "Faixa (ex.: até R$ 1 milhão)", onChange: e => setFaixa(e.target.value) })),
+            React.createElement("label", { style: { fontSize: 12, display: "flex", gap: 6, alignItems: "center", fontWeight: 700, padding: "6px 0" } }, React.createElement("input", { type: "checkbox", checked: !!todos, onChange: e => { const m = {}; lista.forEach(c => { m[c.k] = e.target.checked; }); setMarc(m); } }), `Selecionar todos (${lista.length})`),
+            React.createElement("div", { style: { maxHeight: 340, overflowY: "auto" } }, lista.map(c => React.createElement("label", { key: c.k, style: { display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0", borderTop: `0.5px solid ${C.border}`, cursor: "pointer" } },
+                React.createElement("input", { type: "checkbox", checked: !!marc[c.k], onChange: e => setMarc(Object.assign({}, marc, { [c.k]: e.target.checked })), style: { marginTop: 3 } }),
+                React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                    React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, c.nome,
+                        c.existe && React.createElement("span", { style: { fontSize: 10, color: C.gold, marginLeft: 6 } }, invAtivo(c.existe) ? "já é investidor" : "já no CRM · vai ser marcado")),
+                    React.createElement("div", { style: { fontSize: 11, color: C.muted } }, [c.tel, c.email, c.empresa].filter(Boolean).join(" · ")))))),
+            React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10, flexWrap: "wrap" } },
+                React.createElement(PBtn, { sm: true, variant: "ghost", color: C.muted, onClick: () => { setLista(null); setMsg(""); } }, "Outro arquivo"),
+                React.createElement(PBtn, { sm: true, disabled: !n, onClick: importar }, `💼 Importar ${n} como investidor(es)`))));
+}
 function InvestidoresPage({ clientes, imoveis }) {
     const emps = HolyStore.get("empreendimentos", []);
     const [busca, setBusca] = useState(""); const [cid, setCid] = useState(""); const [tipo, setTipo] = useState(""); const [sug, setSug] = useState(false);
     const [sel, setSel] = useState({}); const [canal, setCanal] = useState("whatsapp"); const [item, setItem] = useState(""); const [oferta, setOferta] = useState("");
+    const [importando, setImportando] = useState(false);
     const [previa, setPrevia] = useState(null); const [fila, setFila] = useState(null); const [prog, setProg] = useState(""); const [rodando, setRodando] = useState(false); const [feitos, setFeitos] = useState({});
     const base = clientes.filter(c => invAtivo(c) || (sug && invSugerido(c)));
     const norm = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -19811,16 +19917,18 @@ function InvestidoresPage({ clientes, imoveis }) {
         React.createElement("div", { style: caixa },
             React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, "💼 Investidores"),
             React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.6 } }, `${clientes.filter(invAtivo).length} investidor(es) marcados · ${clientes.filter(invSugerido).length} cliente(s) com perfil de investidor ainda não marcados. Marque na ficha do cliente (cartão 💼). Selecione, escolha o produto e escreva a oferta uma vez: a IA personaliza para cada pessoa.`),
+            React.createElement("div", { style: { marginTop: 10 } }, React.createElement(PBtn, { sm: true, onClick: () => setImportando(!importando) }, "📲 Importar do celular")),
             React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 } },
                 React.createElement("input", { style: Object.assign({}, mkInput, { maxWidth: 220 }), value: busca, placeholder: "Buscar nome, e-mail, telefone", onChange: e => setBusca(e.target.value) }),
                 React.createElement("input", { style: Object.assign({}, mkInput, { maxWidth: 160 }), value: cid, placeholder: "Cidade", onChange: e => setCid(e.target.value) }),
                 React.createElement("select", { style: Object.assign({}, mkInput, { maxWidth: 200 }), value: tipo, onChange: e => setTipo(e.target.value) }, React.createElement("option", { value: "" }, "Todos os tipos"), INV_TIPOS.map(t => React.createElement("option", { key: t }, t))),
                 React.createElement("label", { style: { fontSize: 12, display: "flex", gap: 6, alignItems: "center" } }, React.createElement("input", { type: "checkbox", checked: sug, onChange: e => setSug(e.target.checked) }), "Incluir sugeridos"))),
+        importando && React.createElement(ImportarContatosInv, { clientes, onFechar: () => setImportando(false) }),
         React.createElement("div", { style: caixa },
             React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 } },
                 React.createElement("label", { style: { fontSize: 12, display: "flex", gap: 6, alignItems: "center", fontWeight: 700 } }, React.createElement("input", { type: "checkbox", checked: todosMarcados, onChange: e => { const n = Object.assign({}, sel); lista.forEach(c => { n[c.id] = e.target.checked; }); setSel(n); } }), `Selecionar todos (${lista.length})`),
                 React.createElement("span", { style: { fontSize: 12, color: C.muted } }, `${escolhidos.length} selecionado(s)`)),
-            !lista.length && React.createElement("div", { style: { fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" } }, "Nenhum investidor ainda. Abra um cliente e use o cartão 💼 Investidor, ou marque \"Incluir sugeridos\"."),
+            !lista.length && React.createElement("div", { style: { fontSize: 13, color: C.muted, padding: "20px 0", textAlign: "center" } }, "Nenhum investidor ainda. Use 📲 Importar do celular, abra um cliente e use o cartão 💼 Investidor, ou marque \"Incluir sugeridos\"."),
             React.createElement("div", { style: { maxHeight: 360, overflowY: "auto" } }, lista.map(c => { const i = c.investidor || {}, p = c.perfilWhatsApp || {}; return React.createElement("label", { key: c.id, style: { display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", borderTop: `0.5px solid ${C.border}`, cursor: "pointer" } },
                 React.createElement("input", { type: "checkbox", checked: !!sel[c.id], onChange: e => setSel(Object.assign({}, sel, { [c.id]: e.target.checked })), style: { marginTop: 3 } }),
                 React.createElement("div", { style: { flex: 1, minWidth: 0 } },
