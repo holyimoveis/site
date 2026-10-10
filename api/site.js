@@ -6,6 +6,7 @@ import { vcardDoToken } from './_contato.js';
 import { descadastrar } from './_email.js';
 import { paginaDossie, eventoDossie } from './_dossie.js';
 const https = (u) => typeof u === 'string' && /^https:\/\//.test(u);
+export const maxDuration = 60; // dossiê: localização e arredores podem levar alguns segundos
 export default async function handler(req, res) {
   if (cors(req, res)) return;
   if ((req.query || {}).sair) { // descadastro dos e-mails automáticos (GET pelo link; POST pelo botão do Gmail)

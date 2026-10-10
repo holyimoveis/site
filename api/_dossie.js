@@ -68,23 +68,28 @@ async function geocodificar(q) {
   const j = await r.json();
   return j && j[0] ? [+j[0].lat, +j[0].lon] : null;
 }
+let ultimoErroPerto = '';
 async function pertos(c) {
   const [la, ln] = c;
-  const q = `[out:json][timeout:9];(
-nwr(around:2000,${la},${ln})[shop=supermarket];nwr(around:2000,${la},${ln})[amenity=school];nwr(around:2000,${la},${ln})[amenity=pharmacy];
-nwr(around:3000,${la},${ln})[amenity~"^(hospital|clinic)$"];nwr(around:2000,${la},${ln})[leisure=park];nwr(around:2000,${la},${ln})[leisure=fitness_centre];
-nwr(around:1500,${la},${ln})[amenity~"^(restaurant|cafe)$"];nwr(around:2000,${la},${ln})[amenity=bank];nwr(around:4000,${la},${ln})[natural=beach];nwr(around:4000,${la},${ln})[shop=mall];
-);out center tags 400;`;
-  // tenta servidores alternativos do OpenStreetMap (o principal às vezes recusa por excesso de uso)
-  let els = null;
+  // uma consulta curta por categoria (com limite próprio), para não estourar o tempo do OpenStreetMap em áreas densas
+  const A = (r, f, n) => `nwr(around:${r},${la},${ln})${f};out center tags ${n};`;
+  const q = '[out:json][timeout:25];' + [
+    A(1500, '[shop=supermarket]', 25), A(1500, '[amenity=school]', 25), A(1200, '[amenity=pharmacy]', 25),
+    A(3000, '[amenity~"^(hospital|clinic)$"]', 25), A(1500, '[leisure=park]', 25), A(1500, '[leisure=fitness_centre]', 25),
+    A(800, '[amenity~"^(restaurant|cafe)$"]', 40), A(1500, '[amenity=bank]', 25), A(3000, '[natural=beach]', 10), A(4000, '[shop=mall]', 10),
+  ].join('');
+  let els = null; ultimoErroPerto = '';
   for (const url of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter']) {
     try {
-      const r = await fetch(url, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/x-www-form-urlencoded' }, UA), body: 'data=' + encodeURIComponent(q), signal: AbortSignal.timeout(11000) });
-      if (!r.ok) continue;
+      const r = await fetch(url, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/x-www-form-urlencoded' }, UA), body: 'data=' + encodeURIComponent(q), signal: AbortSignal.timeout(20000) });
+      if (!r.ok) { ultimoErroPerto += (ultimoErroPerto ? ' · ' : '') + new URL(url).host + ' respondeu ' + r.status; continue; }
       const j = await r.json().catch(() => null);
-      if (j && Array.isArray(j.elements)) { els = j.elements; break; }
-    } catch (e) { /* tenta o próximo */ }
+      if (!j || !Array.isArray(j.elements)) { ultimoErroPerto += (ultimoErroPerto ? ' · ' : '') + new URL(url).host + ' respondeu algo inválido'; continue; }
+      if (j.remark && /error|timed out/i.test(j.remark) && !j.elements.length) { ultimoErroPerto += (ultimoErroPerto ? ' · ' : '') + new URL(url).host + ': ' + String(j.remark).slice(0, 120); continue; }
+      els = j.elements; break;
+    } catch (e) { ultimoErroPerto += (ultimoErroPerto ? ' · ' : '') + new URL(url).host + ': ' + (e.name === 'TimeoutError' ? 'demorou demais' : e.message); }
   }
+  if (!els) console.error('[dossie] arredores falharam:', ultimoErroPerto);
   if (!els) return null; // falhou: não guarda como "nada por perto"
 
   const out = [];
@@ -135,9 +140,9 @@ export async function geoImovel(im) {
   const c = (await sql.query("SELECT valor, atualizado FROM geo_cache WHERE chave = $1 AND atualizado > now() - interval '90 days'", [chave]))[0];
   if (c && c.valor && c.valor.coords) {
     // "nada por perto" de uma tentativa que falhou: tenta de novo depois de 1 hora
-    if ((!c.valor.perto || !c.valor.perto.length) && Date.now() - new Date(c.atualizado).getTime() > 3600 * 1000) {
+    if ((!c.valor.perto || !c.valor.perto.length) && Date.now() - new Date(c.atualizado).getTime() > 600 * 1000) {
       const perto = await pertos(c.valor.coords).catch(() => null);
-      const v = Object.assign({}, c.valor, { perto: perto || [] });
+      const v = Object.assign({}, c.valor, { perto: perto || [], erro: perto ? (perto.length ? '' : 'nenhum lugar com nome encontrado no raio') : ultimoErroPerto });
       await sql.query('UPDATE geo_cache SET valor = $2, atualizado = now() WHERE chave = $1', [chave, JSON.stringify(v)]);
       return v;
     }
@@ -151,7 +156,7 @@ export async function geoImovel(im) {
   }
   if (!coords) return null;
   const perto = await pertos(coords).catch(() => null);
-  const valor = { coords, exato, local: local || partes[partes.length - 1] || '', perto: perto || [] };
+  const valor = { coords, exato, local: local || partes[partes.length - 1] || '', perto: perto || [], erro: perto ? (perto.length ? '' : 'nenhum lugar com nome encontrado no raio') : ultimoErroPerto };
   await sql.query('INSERT INTO geo_cache (chave, valor) VALUES ($1, $2) ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado = now()', [chave, JSON.stringify(valor)]);
   return valor;
 }
@@ -276,6 +281,7 @@ ${(it.condominio || it.iptu) ? `<section class="sec rev custos">${it.condominio 
   ${geo && geo.coords ? `<div id="mapa" class="mapa"></div>` : `<iframe class="mapa" loading="lazy" src="https://www.google.com/maps?q=${encodeURIComponent(local + ', SC')}&output=embed" title="Mapa"></iframe>`}
   <div class="nota">📍 ${esc(local)} · localização aproximada. O endereço exato é passado no agendamento da visita.</div>
   ${perto.length ? `<h3>O que tem por perto</h3><ul class="perto">${perto.map((p) => `<li><div><b>${esc(p.cat)}</b><span>${esc(p.nome)}</span></div><div class="d"><b>${dist(p.d)}</b><span>${modo(p.d)}</span></div></li>`).join('')}</ul><div class="nota">Distâncias em linha reta, aproximadas. Fonte: OpenStreetMap.</div>` : ''}
+  ${!perto.length && (req.query || {}).previa ? `<div class="nota" style="color:#a3402e;margin-top:14px">Nota só para você (prévia): o "o que tem por perto" ainda não carregou${geo && geo.erro ? ' — motivo: ' + esc(geo.erro) : geo ? '' : ' — a localização do imóvel não foi encontrada; cole as coordenadas no campo Localização no mapa'}. O sistema tenta de novo a cada 10 minutos; abra esta página de novo mais tarde.</div>` : ''}
 </section>
 ${it.valor && it.finalidade !== 'Locação' ? `<section class="sec rev" id="sim">
   ${avista ? `<details><summary><h2>Simulação de financiamento</h2><span>Se quiser financiar uma parte</span></summary>` : '<h2>Simulação de financiamento</h2>'}

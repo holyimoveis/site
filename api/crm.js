@@ -95,6 +95,7 @@ function mesclar(s, chave, servidor, enviado) {
   return novos.concat(out);
 }
 
+export const maxDuration = 60; // dossiê: localização e arredores podem levar alguns segundos
 export default async function handler(req, res) {
   if ((req.query || {}).modulo === 'usuarios') return usuarios(req, res);
   if (cors(req, res)) return;
