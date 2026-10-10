@@ -39,8 +39,10 @@ export function confereSenha(senha, hash) {
 }
 
 const VALIDADE_DIAS = 30;
+// Marca da senha atual dentro do token: trocar a senha derruba todas as sessões antigas daquele usuário
+const marcaSenha = (h) => crypto.createHash('sha256').update('sv|' + String(h || '')).digest('base64url').slice(0, 12);
 export function emitirToken(u) {
-  const corpo = b64(JSON.stringify({ uid: u.id, exp: Date.now() + VALIDADE_DIAS * 86400000 }));
+  const corpo = b64(JSON.stringify({ uid: u.id, h: marcaSenha(u.senha_hash), exp: Date.now() + VALIDADE_DIAS * 86400000 }));
   const sig = crypto.createHmac('sha256', segredo()).update(corpo).digest('base64url');
   return corpo + '.' + sig;
 }
@@ -58,9 +60,10 @@ export async function sessao(req) {
   const p = lerToken(req.headers['x-holy-token']);
   if (!p) return null;
   await ensureSchema();
-  const r = await sql.query('SELECT id, nome, email, perfil, ativo FROM usuarios WHERE id = $1', [p.uid]);
+  const r = await sql.query('SELECT id, nome, email, perfil, ativo, senha_hash FROM usuarios WHERE id = $1', [p.uid]);
   const u = r[0];
   if (!u || !u.ativo || !PERFIS[u.perfil]) return null;
+  if (p.h !== marcaSenha(u.senha_hash)) return null; // senha trocada (ou token antigo): pede login de novo
   return { uid: u.id, nome: u.nome, email: u.email, perfil: u.perfil };
 }
 

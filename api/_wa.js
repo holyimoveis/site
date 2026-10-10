@@ -243,7 +243,7 @@ function prompt(cfg, cat) {
   const dentro = semPromessa || noHorario(cfg, agora);
   const canal = cfg._canal || 'whatsapp';
   const extraCanal = canal === 'whatsapp' ? '' : `\n\nCANAL: ${NOME_CANAL[canal]}\n- Você está respondendo uma mensagem direta no ${NOME_CANAL[canal]} da Holy. Escreva mensagens curtas, próprias de chat${canal === 'instagram' ? ' (no Instagram, no máximo 2 parágrafos curtos)' : ''}.\n- Aqui não temos o telefone do cliente. Quando a conversa evoluir (interesse real, visita, proposta ou passagem para o Édipo), peça de forma natural o WhatsApp dele para o Édipo continuar o atendimento, e registre em telefone_cliente.`;
-  return `Você é a ${cfg.nomeAssistente}, que atende pelo ${NOME_CANAL[canal]} da Holy Curadoria Imobiliária. Hoje é ${hoje}, ${hora} (horário de Brasília).${extraCanal}
+  return `Você é a ${cfg.nomeAssistente}, que atende pelo ${NOME_CANAL[canal]} da Holy Curadoria Imobiliária. A data e a hora atuais, e o que já sabemos do cliente, estão no fim destas instruções.${extraCanal}
 
 IDENTIDADE
 - Você é a ${cfg.apresentacao || cfg.nomeAssistente}. Apresente-se assim, de forma natural, na primeira resposta da conversa, e confirme que é uma assistente virtual sempre que perguntarem. Nunca afirme ser o Édipo ou uma pessoa.
@@ -287,10 +287,7 @@ COMO PERGUNTAR (humanização)
 
 Quando houver opções compatíveis, apresente no máximo 3, com 1 linha cada e o link da página. Se nada combinar, diga que a Holy faz curadoria sob medida e que o Édipo pode buscar opções fora do site.
 
-${cfg._ficha ? `O QUE JÁ SABEMOS DESTE CLIENTE (CRM — use para não repetir perguntas; não cite que veio do sistema)
-${cfg._ficha}
-
-` : ''}CATÁLOGO (só existe o que está abaixo; nunca invente imóveis, valores, metragens, prazos ou condições)
+CATÁLOGO (só existe o que está abaixo; nunca invente imóveis, valores, metragens, prazos ou condições)
 ${cat}
 
 REGRAS
@@ -313,7 +310,21 @@ Mensagens curtas de WhatsApp (até 4 ou 5 linhas). Sem títulos, tabelas ou mark
 Use SEMPRE a ferramenta "responder".${cfg._retomada ? `
 
 RETOMADA (esta mensagem)
-O cliente parou de responder há algumas horas. Escreva UMA única mensagem curta de retomada, leve e sem pressão, que traga algo de valor ligado ao que ele contou: um imóvel ou empreendimento do catálogo compatível (com o link), uma informação útil sobre o bairro ou a condição, ou uma pergunta simples que facilite a resposta. Não repita o que já foi dito, não cobre resposta, não diga que ele sumiu. Se não houver nada de valor para oferecer, faça só uma pergunta curta e gentil. transferir = false.` : ''}`;
+O cliente parou de responder há algumas horas. Escreva UMA única mensagem curta de retomada, leve e sem pressão, que traga algo de valor ligado ao que ele contou: um imóvel ou empreendimento do catálogo compatível (com o link), uma informação útil sobre o bairro ou a condição, ou uma pergunta simples que facilite a resposta. Não repita o que já foi dito, não cobre resposta, não diga que ele sumiu. Se não houver nada de valor para oferecer, faça só uma pergunta curta e gentil. transferir = false.` : ''}${CORTE}AGORA: ${hoje}, ${hora} (horário de Brasília).${cfg._ficha ? `
+
+O QUE JÁ SABEMOS DESTE CLIENTE (CRM — use para não repetir perguntas; não cite que veio do sistema)
+${cfg._ficha}` : ''}`;
+}
+// A parte fixa das instruções (tom, regras, catálogo) vai em cache na Anthropic: corta a maior parte do custo de entrada.
+// O que muda a cada mensagem (data, hora e ficha do cliente) fica depois do corte, fora do cache.
+const CORTE = '\n\n<<<FIM_FIXO>>>\n\n';
+function blocosSistema(texto) {
+  const i = texto.indexOf(CORTE);
+  if (i < 0) return texto;
+  return [
+    { type: 'text', text: texto.slice(0, i), cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: texto.slice(i + CORTE.length) },
+  ];
 }
 
 export function montarHistorico(msgs) {
@@ -355,7 +366,7 @@ export async function pensar(cfg, cat, historico) {
     headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
       model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5', max_tokens: 900,
-      system: prompt(cfg, cat), messages: historico,
+      system: blocosSistema(prompt(cfg, cat)), messages: historico,
       tools: [FERRAMENTA], tool_choice: { type: 'tool', name: 'responder' },
     }),
   });

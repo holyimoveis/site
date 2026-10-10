@@ -18,7 +18,7 @@ export async function carregarItem(ref) {
   return { item: ref.kind === 'em' ? emSite(bruto) : imSite(bruto), kind: ref.kind === 'em' ? 'em' : 'im' };
 }
 const resumo = (kind, it) => !it ? '' : kind === 'im'
-  ? [it.nome, it.tipo + (it.bairro ? ' no ' + it.bairro : '') + (it.cidade ? ', ' + it.cidade : ''), it.quartos ? it.quartos + ' quartos' : '', it.areaPrivativa || it.area ? (it.areaPrivativa || it.area) + ' m²' : '', it.valor ? brl(it.valor) : ''].filter(Boolean).join(' · ')
+  ? [it.nome, it.tipo + (it.bairro ? ' no ' + it.bairro : '') + (it.cidade ? ', ' + it.cidade : ''), it.quartos ? it.quartos + ' quartos' : '', it.areaPrivativa ? it.areaPrivativa + ' m² privativos' : '', it.valor ? brl(it.valor) : ''].filter(Boolean).join(' · ')
   : [it.nome, it.cidade, it.tipoLabel, it.preco, (it.diferenciais || []).slice(0, 4).join(', ')].filter(Boolean).join(' · ');
 
 function fatosCliente(c) {

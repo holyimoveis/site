@@ -18022,7 +18022,7 @@ function PhotoGallery({ fotos = [], onChange, readOnly = false }) {
 // ═══════════════════════════════════════════════════════════════════════
 // IMOVEL FORM
 // ═══════════════════════════════════════════════════════════════════════
-const IM_EMPTY = { nome: "", tipo: "Apartamento", cidade: "Chapecó-SC", bairro: "Centro", rua: "", numero: "", cep: "", area: "", areaPrivativa: "", areaUtil: "", quadra: "", lote: "", matricula: "", quartos: "", suites: "", banheiros: "", lavabos: "", vagas: "", lazer: [], valor: "", iptu: "", condominio: "", status: "Disponível", finalidade: "Moradia", anoConstrucao: "", andares: "", orientacao: "", diferenciais: [], descricao: "", proprietario: "", proprietarioTel: "", proprietarioEmail: "", proprietarioCpf: "", proprietarioNascimento: "", exclusividade: false, fotos: [] };
+const IM_EMPTY = { nome: "", tipo: "Apartamento", cidade: "Chapecó-SC", bairro: "Centro", rua: "", numero: "", cep: "", mapa: "", area: "", areaPrivativa: "", areaUtil: "", quadra: "", lote: "", matricula: "", quartos: "", suites: "", banheiros: "", lavabos: "", vagas: "", lazer: [], valor: "", iptu: "", condominio: "", status: "Disponível", finalidade: "Moradia", anoConstrucao: "", andares: "", orientacao: "", diferenciais: [], descricao: "", proprietario: "", proprietarioTel: "", proprietarioEmail: "", proprietarioCpf: "", proprietarioNascimento: "", exclusividade: false, fotos: [] };
 function ImovelForm({ initial, onSave, onClose }) {
     const [tab, setTab] = useState("basico");
     const [f, setF] = useState(() => {
@@ -18044,7 +18044,7 @@ function ImovelForm({ initial, onSave, onClose }) {
         setAiL(true);
         const _prompt = "Gere descricao de venda premium (3 paragrafos aspiracionais) para: "
             + f.nome + " | " + f.tipo + " | " + (f.cidade || "") + " - " + f.bairro
-            + " | " + (f.area || 0) + "m2 | " + (f.quartos || 0) + " quartos | "
+            + " | área privativa: " + ((+f.areaPrivativa || +f.areaUtil) ? (+f.areaPrivativa || +f.areaUtil) + " m² (única metragem que pode ser citada; nunca cite área total)" : "não informada (não cite metragem)") + " | " + (f.quartos || 0) + " quartos | "
             + fmt(+f.valor || 0) + " | Diferenciais: " + (f.diferenciais || []).join(", ")
             + " | " + (f.descricao || "");
         const r = await ai(_prompt, 900);
@@ -18072,6 +18072,7 @@ function ImovelForm({ initial, onSave, onClose }) {
             React.createElement(FI, { label: "Rua / Avenida", value: f.rua, onChange: v => F("rua", v), placeholder: "R. Joaquim Floriano" }),
             React.createElement(FI, { label: "N\u00FAmero", value: f.numero, onChange: v => F("numero", v), placeholder: "466" }),
             React.createElement(FI, { label: "CEP", value: f.cep, onChange: v => F("cep", v), placeholder: "04534-002" }),
+            React.createElement("div", { style: { gridColumn: "1/-1" } }, React.createElement(FI, { label: "Localização no mapa (cole o link do Google Maps)", value: f.mapa || "", onChange: v => F("mapa", v), placeholder: "https://maps.app.goo.gl/... ou -27.0986, -52.6155" }), React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: -6 } }, "Opcional. Deixa o mapa e \"o que tem por perto\" do dossiê exatos. No Google Maps: segure o dedo no local › Compartilhar › Copiar link. O cliente vê só a região aproximada.")),
             React.createElement(FI, { label: "Andar / Unidade", value: f.andares, onChange: v => F("andares", v), placeholder: "22\u00BA/23\u00BA duplex" }),
             React.createElement(FI, { label: "Orienta\u00E7\u00E3o Solar", value: f.orientacao, onChange: v => F("orientacao", v), placeholder: "Nascente/Poente" }),
             React.createElement(FI, { label: "Ano de Constru\u00E7\u00E3o", value: f.anoConstrucao, onChange: v => F("anoConstrucao", v), type: "number", placeholder: "2019" }),
@@ -18168,7 +18169,7 @@ function ImovelDetail({ imovel, clientes, onEdit, onDelete, onClose }) {
         setAiL(true);
         const _cp = "Descricao premium (3 paragrafos aspiracionais) para: "
             + imovel.nome + " | " + imovel.tipo + " | " + (imovel.cidade||"") + " - " + imovel.bairro
-            + " | " + imovel.area + "m2 | " + imovel.quartos + "q / " + (imovel.suites||0) + " suites | "
+            + " | área privativa: " + ((+imovel.areaPrivativa || +imovel.areaUtil) ? (+imovel.areaPrivativa || +imovel.areaUtil) + " m² (única metragem que pode ser citada; nunca cite área total)" : "não informada (não cite metragem)") + " | " + imovel.quartos + "q / " + (imovel.suites||0) + " suites | "
             + fmt(imovel.valor) + " | Diferenciais: " + ((imovel.diferenciais||[]).join(", "))
             + " | " + (imovel.descricao||"");
         const r = await ai(_cp, 900);
@@ -18176,6 +18177,7 @@ function ImovelDetail({ imovel, clientes, onEdit, onDelete, onClose }) {
         setAiL(false);
     }
     function printDossier() {
+        const E = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); // nada do cadastro entra como código
         var _a, _b;
         const w = window.open("", "_blank");
         const fotosSrc = ((_a = imovel.fotos) === null || _a === void 0 ? void 0 : _a.slice(0, 4)) || [];
@@ -18204,21 +18206,21 @@ function ImovelDetail({ imovel, clientes, onEdit, onDelete, onClose }) {
 <div class="page">
 <div class="hd"><div><img src="${location.origin}/assets/holy-logo-escuro.svg" alt="Holy Curadoria Imobiliária" style="width:120px;height:auto;display:block"></div>
 <div style="text-align:right;font-size:11px;color:#7a7d72">Dossier Exclusivo<br>${new Date().toLocaleDateString("pt-BR")}</div></div>
-${capa ? `<img src="${capa.url}" class="hero" alt="foto principal"/>` : `<div class="hero" style="display:flex;align-items:center;justify-content:center">🏛️</div>`}
-${fotosSrc.length > 1 ? `<div class="thumb-row">${fotosSrc.slice(1, 4).map(f => `<img src="${f.url}" class="thumb" alt=""/>`).join("")}</div>` : ""}
-<div class="tit">${imovel.nome}</div>
-<div class="sub">${imovel.bairro} · ${imovel.tipo}${imovel.andares ? " · " + imovel.andares : ""}</div>
+${capa ? `<img src="${E(capa.url)}" class="hero" alt="foto principal"/>` : `<div class="hero" style="display:flex;align-items:center;justify-content:center">🏛️</div>`}
+${fotosSrc.length > 1 ? `<div class="thumb-row">${fotosSrc.slice(1, 4).map(f => `<img src="${E(f.url)}" class="thumb" alt=""/>`).join("")}</div>` : ""}
+<div class="tit">${E(imovel.nome)}</div>
+<div class="sub">${E(imovel.bairro)} · ${E(imovel.tipo)}${imovel.andares ? " · " + E(imovel.andares) : ""}</div>
 <div class="specs">
-<div><div class="sl">Área Total</div><div class="sv">${imovel.area}m²</div></div>
-${+(imovel.areaPrivativa || imovel.areaUtil) ? `<div><div class="sl">Área Privativa</div><div class="sv">${imovel.areaPrivativa || imovel.areaUtil}m²</div></div>` : ""}
-<div><div class="sl">Quartos</div><div class="sv">${imovel.quartos}</div></div>
-<div><div class="sl">Suítes</div><div class="sv">${imovel.suites || "—"}</div></div>
-<div><div class="sl">Banheiros</div><div class="sv">${imovel.banheiros || "—"}</div></div>
-${+imovel.lavabos ? `<div><div class="sl">Lavabos</div><div class="sv">${imovel.lavabos}</div></div>` : ""}
-<div><div class="sl">Vagas</div><div class="sv">${imovel.vagas}</div></div>
+<div><div class="sl">Área Total</div><div class="sv">${E(imovel.area)}m²</div></div>
+${+(imovel.areaPrivativa || imovel.areaUtil) ? `<div><div class="sl">Área Privativa</div><div class="sv">${E(imovel.areaPrivativa || imovel.areaUtil)}m²</div></div>` : ""}
+<div><div class="sl">Quartos</div><div class="sv">${E(imovel.quartos)}</div></div>
+<div><div class="sl">Suítes</div><div class="sv">${E(imovel.suites || "—")}</div></div>
+<div><div class="sl">Banheiros</div><div class="sv">${E(imovel.banheiros || "—")}</div></div>
+${+imovel.lavabos ? `<div><div class="sl">Lavabos</div><div class="sv">${E(imovel.lavabos)}</div></div>` : ""}
+<div><div class="sl">Vagas</div><div class="sv">${E(imovel.vagas)}</div></div>
 </div>
-<div class="txt">${(aiCopy || imovel.descricao || "").replace(/\n/g, "<br>")}</div>
-${((_b = imovel.diferenciais) === null || _b === void 0 ? void 0 : _b.length) ? `<div class="difs">${imovel.diferenciais.map(d => `<span class="dif">${d}</span>`).join("")}</div>` : ""}
+<div class="txt">${E(aiCopy || imovel.descricao || "").replace(/\n/g, "<br>")}</div>
+${((_b = imovel.diferenciais) === null || _b === void 0 ? void 0 : _b.length) ? `<div class="difs">${imovel.diferenciais.map(d => `<span class="dif">${E(d)}</span>`).join("")}</div>` : ""}
 <div style="font-size:13px;color:#3d4237;margin-bottom:18px"><strong>IPTU:</strong> ${fmt(imovel.iptu || 0)}/ano &nbsp;·&nbsp; <strong>Cond.:</strong> ${fmt(imovel.condominio || 0)}/mês</div>
 ${imovel.exclusividade ? `<div style="font-size:10px;padding:5px 12px;background:#4a5c2f18;border-radius:6px;color:#4a5c2f;display:inline-block;margin-bottom:16px;font-weight:700">✦ Exclusividade Holy Curadoria</div><br>` : ""}
 <div class="val"><div class="vl">Valor</div><div class="vn">${fmt(imovel.valor)}</div></div>
@@ -18737,7 +18739,7 @@ function EmprDetalhe({ e, onClose, onEdit }) {
 .ficha div{font-size:13px;padding:4px 0;border-bottom:.5px solid #e4e7dd}.val{margin-top:22px;background:#4a5c2f;color:#fff;padding:15px 24px;border-radius:10px;display:flex;justify-content:space-between;align-items:center}
 .vn{font-size:22px;font-weight:700;font-family:'DM Mono',monospace}.ft{margin-top:32px;border-top:1px solid #d6dfc8;padding-top:14px;font-size:11px;color:#7a7d72;text-align:center}</style></head><body><div class="page">
 <div class="hd"><img src="${location.origin}/assets/holy-logo-escuro.svg" style="width:120px"><div style="text-align:right;font-size:11px;color:#7a7d72">Dossiê Exclusivo<br>${new Date().toLocaleDateString("pt-BR")}</div></div>
-${fotos[0] ? `<img class="hero" src="${fotos[0]}">` : ""}${fotos.length > 1 ? `<div class="thumbs">${fotos.slice(1, 4).map(u => `<img class="thumb" src="${u}">`).join("")}</div>` : ""}
+${fotos[0] ? `<img class="hero" src="${esc(fotos[0])}">` : ""}${fotos.length > 1 ? `<div class="thumbs">${fotos.slice(1, 4).map(u => `<img class="thumb" src="${esc(u)}">`).join("")}</div>` : ""}
 <div class="tit">${esc(e.nome)}</div><div class="sub">${esc([e.cidade, e.tipoLabel, e.status].filter(Boolean).join(" · "))}</div>
 ${(e.destaques || []).length ? `<div class="dest">${e.destaques.slice(0, 4).map(d => `<div><div class="dn">${esc(d.n)}</div><div class="dl">${esc(d.l)}</div></div>`).join("")}</div>` : ""}
 ${copy ? `<div class="txt">${esc(copy).replace(/\n/g, "<br>")}</div>` : ""}
@@ -19367,7 +19369,7 @@ function AIPage({ clientes, imoveis }) {
         const cli = clientes.find(c => c.id === selCli);
         let p = "";
         if (mode === "copy" && im)
-            p = `Descrição premium (3 parágrafos aspiracionais) para: ${im.nome} | ${im.tipo} | ${im.bairro} | ${im.area}m² | ${im.quartos}q | ${fmt(im.valor)} | Difs: ${(_a = im.diferenciais) === null || _a === void 0 ? void 0 : _a.join(", ")} | ${im.descricao}`;
+            p = `Descrição premium (3 parágrafos aspiracionais) para: ${im.nome} | ${im.tipo} | ${im.bairro} | área privativa ${(+im.areaPrivativa || +im.areaUtil) || "não informada"} m² (cite só esta metragem, nunca a área total) | ${im.quartos}q | ${fmt(im.valor)} | Difs: ${(_a = im.diferenciais) === null || _a === void 0 ? void 0 : _a.join(", ")} | ${im.descricao}`;
         else if (mode === "strategy" && cli) {
             const int = (_b = cli.interesses) === null || _b === void 0 ? void 0 : _b[0];
             p = `Roteiro de abordagem (5 passos) para: ${cli.nome} | ${cli.profissao || "—"} | ${cli.stage} | Origem: ${cli.origem}\nInteresse: ${(int === null || int === void 0 ? void 0 : int.finalidade) || "—"} | ${((_c = int === null || int === void 0 ? void 0 : int.tipos) === null || _c === void 0 ? void 0 : _c.join("/")) || "—"} | ${((_d = int === null || int === void 0 ? void 0 : int.bairros) === null || _d === void 0 ? void 0 : _d.join(", ")) || "—"} | ${fmt((int === null || int === void 0 ? void 0 : int.orcMin) || 0)}–${fmt((int === null || int === void 0 ? void 0 : int.orcMax) || 0)}`;
@@ -19377,7 +19379,7 @@ function AIPage({ clientes, imoveis }) {
         else if (mode === "email" && inp)
             p = `E-mail imobiliário de luxo (máx 150 palavras) sobre: "${inp}". Assunto: e Corpo:`;
         else if (mode === "price" && im)
-            p = `Análise de precificação e posicionamento de mercado para: ${im.nome} | ${im.tipo} | ${im.bairro} | ${im.area}m² | ${fmt(im.valor)} (${im.area > 0 ? fmt(Math.round(im.valor / im.area)) : ""}/m²). Avalie se o preço é competitivo, como justificar o valor para o cliente e 3 argumentos de valor que o corretor deve usar.`;
+            p = `Análise de precificação e posicionamento de mercado para: ${im.nome} | ${im.tipo} | ${im.bairro} | área privativa ${(+im.areaPrivativa || +im.areaUtil) || "não informada"} m² | ${fmt(im.valor)} (${(+im.areaPrivativa || +im.areaUtil) > 0 ? fmt(Math.round(im.valor / (+im.areaPrivativa || +im.areaUtil))) + "/m² privativo" : "sem área privativa"}). Avalie se o preço é competitivo, como justificar o valor para o cliente e 3 argumentos de valor que o corretor deve usar.`;
         else {
             setRes("⚠️ Preencha os campos.");
             setLoad(false);
@@ -19507,7 +19509,7 @@ const vItemLink = (item, kind) => location.origin + "/" + (kind === "im" ? "imov
 function vMsgMatch(c, item, kind, link) {
     const nome = vPrimeiro(c.nome);
     const desc = kind === "im"
-        ? [item.tipo + (item.bairro ? " no " + item.bairro : "") + (item.cidade ? ", " + String(item.cidade).replace(/-SC$/i, "") : ""), item.quartos ? item.quartos + " quartos" + (item.suites ? " (" + item.suites + " suítes)" : "") : "", (item.areaPrivativa || item.area) ? (item.areaPrivativa || item.area) + " m²" : "", item.valor ? fmt(item.valor) : ""].filter(Boolean).join(" · ")
+        ? [item.tipo + (item.bairro ? " no " + item.bairro : "") + (item.cidade ? ", " + String(item.cidade).replace(/-SC$/i, "") : ""), item.quartos ? item.quartos + " quartos" + (item.suites ? " (" + item.suites + " suítes)" : "") : "", (+item.areaPrivativa || +item.areaUtil) ? (+item.areaPrivativa || +item.areaUtil) + " m² privativos" : "", item.valor ? fmt(item.valor) : ""].filter(Boolean).join(" · ")
         : [item.nome + (item.cidade ? ", em " + item.cidade : ""), item.tipoLabel, item.preco].filter(Boolean).join(" · ");
     return `Oi${nome ? ", " + nome : ""}! Aqui é ${vPrimeiro(vEu())}, da Holy. Lembrei de você: ${kind === "im" ? "entrou um imóvel" : "tenho um empreendimento"} que tem muito a ver com o que você procura.\n\n${desc}\n\nFotos e detalhes: ${link}\n\nQuer que eu te conte mais ou agendamos uma visita?`;
 }
@@ -20000,8 +20002,8 @@ function DossieModal({ cliente, imoveis, onClose }) {
         if (!im) return;
         setIa(true);
         const p = vPerfil(cliente);
-        const r = await holyIA(`Cliente: ${cliente.nome}. O que sabemos dele (use só o que for útil e verdadeiro): ${JSON.stringify(p)}. Observações: ${String(cliente.obs || "").slice(-600)}\nImóvel: ${im.nome} | ${im.tipo} | ${im.bairro || ""}, ${String(im.cidade || "").replace(/-SC$/i, "")} | ${im.quartos || 0} quartos, ${im.suites || 0} suítes | ${im.areaPrivativa || im.area || ""} m² | diferenciais: ${(im.diferenciais || []).concat(im.lazer || []).join(", ")}\nEscreva a carta de abertura do dossiê.`, 500,
-            "Você escreve a carta de abertura de um dossiê exclusivo de imóvel, assinada pelo corretor (Holy Curadoria Imobiliária, alto padrão em SC). 2 parágrafos curtos, no máximo 70 palavras no total. Comece pelo primeiro nome do cliente. Ligue 2 ou 3 características reais do imóvel ao que o cliente busca. Tom pessoal, elegante e calmo, sem exageros, sem 'imperdível', 'perfeito', 'top', sem emojis, sem pressão. Não invente nada que não esteja nos dados. Não assine. Responda só com o texto.");
+        const r = await holyIA(`Cliente: ${cliente.nome}. O que sabemos dele (use só o que for útil e verdadeiro): ${JSON.stringify(p)}. Observações: ${String(cliente.obs || "").slice(-600)}\nImóvel: ${im.nome} | ${im.tipo} | ${im.bairro || ""}, ${String(im.cidade || "").replace(/-SC$/i, "")} | ${im.quartos || 0} quartos, ${im.suites || 0} suítes | ${(+im.areaPrivativa || +im.areaUtil) ? "área privativa: " + (+im.areaPrivativa || +im.areaUtil) + " m² (é a única metragem que você pode citar)" : "metragem: não cite nenhuma"} | diferenciais: ${(im.diferenciais || []).concat(im.lazer || []).join(", ")}\nEscreva a carta de abertura do dossiê.`, 500,
+            "Você escreve a carta de abertura de um dossiê exclusivo de imóvel, assinada pelo corretor (Holy Curadoria Imobiliária, alto padrão em SC). 2 parágrafos curtos, no máximo 70 palavras no total. Comece pelo primeiro nome do cliente. Ligue 2 ou 3 características reais do imóvel ao que o cliente busca. Tom pessoal, elegante e calmo, sem exageros, sem 'imperdível', 'perfeito', 'top', sem emojis, sem pressão. Não invente nada que não esteja nos dados. Se citar metragem, use somente a área privativa informada e chame de \"área privativa\"; nunca use área total. Não assine. Responda só com o texto.");
         setIa(false);
         if (r && !r.error && r.text) setIntro(String(r.text).trim()); else alert("A IA não respondeu agora. Escreva à mão ou tente de novo.");
     }
@@ -20868,7 +20870,7 @@ async function adStoryRender(foto, item, kind) {
     const kicker = (kind === "im" ? [item.bairro, cidade] : [cidade, item.status]).filter(Boolean).join(" · ");
     const preco = kind === "im" ? (+item.valor ? "R$ " + Number(item.valor).toLocaleString("pt-BR") : "") : String(item.preco || "");
     const specs = kind === "im"
-        ? [(item.areaPrivativa || item.area) ? (item.areaPrivativa || item.area) + " m²" : "", item.quartos ? item.quartos + " quartos" : "", item.suites ? item.suites + " suítes" : "", item.vagas ? item.vagas + " vagas" : ""].filter(Boolean).join("  ·  ")
+        ? [(+item.areaPrivativa || +item.areaUtil) ? (+item.areaPrivativa || +item.areaUtil) + " m²" : "", item.quartos ? item.quartos + " quartos" : "", item.suites ? item.suites + " suítes" : "", item.vagas ? item.vagas + " vagas" : ""].filter(Boolean).join("  ·  ")
         : (item.destaques || []).slice(0, 3).map(d => (d.n ? d.n + " " : "") + (d.l || "")).filter(Boolean).join("  ·  ");
     let y = H - 360;
     // chamada para o botão
@@ -21276,7 +21278,7 @@ function mpLink(destino, nome) {
 }
 function MarketplaceKit({ item, kind, vit, fotos }) {
     const im = kind === "im";
-    const area = im ? (+item.areaPrivativa || +item.areaUtil || +item.area || "") : "";
+    const area = im ? (+item.areaPrivativa || +item.areaUtil || "") : ""; // só a privativa
     const [f, setF] = useState(() => ({
         anuncio: im && /loca|alug/i.test(item.finalidade || "") ? "Aluguel" : "Venda",
         tipo: mpTipo(im ? item.tipo : (item.tipoLabel || "Apartamento")),
@@ -22014,7 +22016,7 @@ function MinhaConta() {
     const [msg, setMsg] = useState("");
     const trocar = async () => {
         setMsg("Salvando…");
-        try { const r = await holyFetch("/api/usuarios", { method: "POST", body: JSON.stringify({ acao: "minhaSenha", atual: f.atual, nova: f.nova }) }); const d = await r.json(); if (!d.success) throw new Error(d.error); setMsg("✅ Senha alterada."); setF({ atual: "", nova: "" }); }
+        try { const r = await holyFetch("/api/usuarios", { method: "POST", body: JSON.stringify({ acao: "minhaSenha", atual: f.atual, nova: f.nova }) }); const d = await r.json(); if (!d.success) throw new Error(d.error); if (d.token) HolyAuth.setToken(d.token); setMsg("✅ Senha alterada. Os outros aparelhos vão pedir login de novo."); setF({ atual: "", nova: "" }); }
         catch (e) { setMsg("❌ " + e.message); }
     };
     const sair = () => { if (confirm("Sair do CRM neste aparelho?")) { HolyStore.flush(); HolyAuth.clear(); setTimeout(() => location.reload(), 600); } };

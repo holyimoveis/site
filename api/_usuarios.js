@@ -6,7 +6,7 @@
 // PATCH { id, nome?, perfil?, ativo?, senha? }                          (admin)
 // DELETE ?id=  (admin; só usuário desativado; clientes dele ficam sem responsável)
 // POST { acao:'minhaSenha', atual, nova }                               (o próprio usuário)
-import { sql, ensureSchema, cors, body, ok, err, fail, newId, str, atualizarDoc } from './_lib.js';
+import { sql, ensureSchema, cors, body, ok, err, fail, newId, str, atualizarDoc, ipHash } from './_lib.js';
 import { PERFIS, sessao, pode, hashSenha, confereSenha, emitirToken } from './_auth.js';
 
 const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
@@ -21,12 +21,20 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST' && b.acao === 'login') {
       const email = String(b.email || '').trim().toLowerCase();
+      // Limite de tentativas: 8 erros por e-mail ou 20 por conexão em 15 minutos bloqueiam por um tempo
+      const ip = ipHash(req);
+      await sql.query('CREATE TABLE IF NOT EXISTS login_falhas (id BIGSERIAL PRIMARY KEY, email TEXT, ip TEXT, em TIMESTAMPTZ NOT NULL DEFAULT now())');
+      const f = (await sql.query("SELECT count(*) FILTER (WHERE email = $1)::int AS e, count(*) FILTER (WHERE ip = $2)::int AS i FROM login_falhas WHERE em > now() - interval '15 minutes'", [email, ip]))[0] || {};
+      if (f.e >= 8 || f.i >= 20) return err(res, 429, 'Muitas tentativas erradas. Aguarde 15 minutos e tente de novo.');
       const r = await sql.query('SELECT * FROM usuarios WHERE lower(email) = $1', [email]);
       const u = r[0];
       if (!u || !u.ativo || !confereSenha(String(b.senha || ''), u.senha_hash)) {
+        await sql.query('INSERT INTO login_falhas (email, ip) VALUES ($1, $2)', [email.slice(0, 160), ip]);
+        if (Math.random() < 0.05) await sql.query("DELETE FROM login_falhas WHERE em < now() - interval '1 day'");
         await new Promise((ok2) => setTimeout(ok2, 800)); // freia tentativas de adivinhar a senha
         return err(res, 401, 'E-mail ou senha incorretos.');
       }
+      await sql.query('DELETE FROM login_falhas WHERE email = $1', [email]);
       await sql.query('UPDATE usuarios SET ultimo_acesso = now() WHERE id = $1', [u.id]);
       return ok(res, { token: emitirToken(u), usuario: pub(u, true) });
     }
@@ -46,8 +54,9 @@ export default async function handler(req, res) {
       if (String(b.nova || '').length < 8) return err(res, 400, 'A nova senha precisa de pelo menos 8 caracteres.');
       const r = await sql.query('SELECT senha_hash FROM usuarios WHERE id = $1', [s.uid]);
       if (!r[0] || !confereSenha(String(b.atual || ''), r[0].senha_hash)) return err(res, 400, 'Senha atual incorreta.');
-      await sql.query('UPDATE usuarios SET senha_hash = $2 WHERE id = $1', [s.uid, hashSenha(b.nova)]);
-      return ok(res);
+      const novoHash = hashSenha(b.nova);
+      await sql.query('UPDATE usuarios SET senha_hash = $2 WHERE id = $1', [s.uid, novoHash]);
+      return ok(res, { token: emitirToken({ id: s.uid, senha_hash: novoHash }) }); // este aparelho continua logado; os outros saem
     }
 
     if (!pode(s, 'usuarios')) return err(res, 403, 'Só o administrador gerencia usuários.');

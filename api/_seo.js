@@ -55,7 +55,7 @@ export async function pagina(req, kind, id) {
   const cidade = it.cidade || 'SC';
   const preco = kind === 'im' ? brl(it.valor) : it.preco;
   const specs = kind === 'im'
-    ? [[it.areaPrivativa || it.area, 'm² privativos'], [it.quartos, 'quartos'], [it.suites, 'suítes'], [it.vagas, 'vagas'], [it.banheiros, 'banheiros']].filter((s) => +s[0])
+    ? [[it.areaPrivativa, 'm² privativos'], [it.quartos, 'quartos'], [it.suites, 'suítes'], [it.vagas, 'vagas'], [it.banheiros, 'banheiros']].filter((s) => +s[0])
     : (it.destaques || []).slice(0, 5).map((d) => [d.n, d.l]);
   const titulo = kind === 'im'
     ? `${it.tipo}${it.quartos ? ' com ' + it.quartos + ' quartos' : ''}${it.bairro ? ' no ' + it.bairro : ''}, ${cidade} | ${it.nome}`
@@ -67,7 +67,7 @@ export async function pagina(req, kind, id) {
   const ld = kind === 'im' ? {
     '@context': 'https://schema.org', '@type': 'RealEstateListing', name: it.nome, description: resumo, url, image: (it.fotos || []).slice(0, 6), datePosted: new Date().toISOString().slice(0, 10),
     offers: it.valor ? { '@type': 'Offer', price: it.valor, priceCurrency: 'BRL', availability: 'https://schema.org/InStock', seller: { '@type': 'RealEstateAgent', name: 'Holy Curadoria Imobiliária' } } : undefined,
-    about: { '@type': it.tipo === 'Apartamento' ? 'Apartment' : 'SingleFamilyResidence', numberOfRooms: it.quartos || undefined, floorSize: (it.areaPrivativa || it.area) ? { '@type': 'QuantitativeValue', value: it.areaPrivativa || it.area, unitCode: 'MTK' } : undefined,
+    about: { '@type': it.tipo === 'Apartamento' ? 'Apartment' : 'SingleFamilyResidence', numberOfRooms: it.quartos || undefined, floorSize: it.areaPrivativa ? { '@type': 'QuantitativeValue', value: it.areaPrivativa, unitCode: 'MTK' } : undefined,
       address: { '@type': 'PostalAddress', addressLocality: cidade, addressRegion: 'SC', addressCountry: 'BR', streetAddress: it.bairro || undefined } },
   } : {
     '@context': 'https://schema.org', '@type': 'RealEstateListing', name: it.nome, description: resumo, url, image: (it.fotos || []).slice(0, 6),

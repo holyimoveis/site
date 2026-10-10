@@ -105,7 +105,7 @@ async function contexto(cli, itemNome) {
 }
 const urlItem = (kind, it) => `${SITE()}/${kind === 'im' ? 'imovel' : 'empreendimento'}/${encodeURIComponent(it.id)}/${slug(it.nome)}`;
 const resumoItem = (kind, it) => !it ? '' : kind === 'im'
-  ? [it.tipo + (it.bairro ? ' no ' + it.bairro : '') + (it.cidade ? ', ' + it.cidade : ''), it.quartos ? it.quartos + ' quartos' + (it.suites ? ' (' + it.suites + ' suítes)' : '') : '', it.areaPrivativa || it.area ? (it.areaPrivativa || it.area) + ' m²' : '', it.vagas ? it.vagas + ' vagas' : '', it.valor ? brl(it.valor) : ''].filter(Boolean).join(' · ')
+  ? [it.tipo + (it.bairro ? ' no ' + it.bairro : '') + (it.cidade ? ', ' + it.cidade : ''), it.quartos ? it.quartos + ' quartos' + (it.suites ? ' (' + it.suites + ' suítes)' : '') : '', it.areaPrivativa ? it.areaPrivativa + ' m² privativos' : '', it.vagas ? it.vagas + ' vagas' : '', it.valor ? brl(it.valor) : ''].filter(Boolean).join(' · ')
   : [it.cidade, it.tipoLabel, it.preco].filter(Boolean).join(' · ');
 
 async function linkRastreado(url, cli, item) {

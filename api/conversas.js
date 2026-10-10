@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 // Conversas do WhatsApp para o CRM (só com X-Admin-Key)
 import { sql, ensureSchema, cors, body, ok, err, fail } from './_lib.js';
 import { processarEmails } from './_email.js';
@@ -15,8 +16,10 @@ export default async function handler(req, res) {
     // Cron diário da Vercel (vercel.json): retomadas da Helena
     if ((req.query || {}).cron) {
       const auth = String(req.headers.authorization || ''), seg = process.env.CRON_SECRET;
-      const okCron = seg ? auth === 'Bearer ' + seg : /vercel-cron/i.test(String(req.headers['user-agent'] || ''));
-      if (!okCron) return err(res, 401, 'não autorizado');
+      // Só a Vercel chama: ela envia "Authorization: Bearer <CRON_SECRET>" (variável obrigatória, mínimo 16 caracteres)
+      if (!seg || seg.length < 16) { console.error('[cron] CRON_SECRET ausente ou curto: crie a variável na Vercel'); return err(res, 503, 'CRON_SECRET não configurado'); }
+      const esperado = Buffer.from('Bearer ' + seg), veio = Buffer.from(auth);
+      if (esperado.length !== veio.length || !crypto.timingSafeEqual(esperado, veio)) return err(res, 401, 'não autorizado');
       const r1 = await retomadas(site, true).catch((e) => ({ erro: e.message }));
       const r2 = await processarEmails().catch((e) => ({ erro: e.message }));
       return ok(res, { retomadas: r1, emails: r2 });

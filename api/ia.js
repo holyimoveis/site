@@ -1,5 +1,5 @@
 // Consultor IA do CRM: a chave da Anthropic fica no servidor (variável ANTHROPIC_API_KEY)
-import { cors, body, ok, err } from './_lib.js';
+import { sql, ensureSchema, cors, body, ok, err } from './_lib.js';
 import { sessao, pode } from './_auth.js';
 export const maxDuration = 60;
 
@@ -9,8 +9,18 @@ export default async function handler(req, res) {
   const s = await sessao(req).catch(() => null);
   if (!pode(s, 'ia')) return err(res, 401, 'Senha do CRM inválida.');
   const b = body(req);
-  const key = process.env.ANTHROPIC_API_KEY || (String(b.apiKey || '').startsWith('sk-ant-') ? b.apiKey : '');
-  if (!key) return err(res, 400, 'IA sem chave. Cadastre ANTHROPIC_API_KEY na Vercel (LEIA-ME, passo 5).');
+  // Só a chave do servidor: o navegador não pode mais enviar uma chave própria
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return err(res, 400, 'IA sem chave. Cadastre ANTHROPIC_API_KEY na Vercel.');
+  // Limite por pessoa (protege a conta da Anthropic se um login vazar): IA_LIMITE_HORA chamadas por hora (padrão 200)
+  try {
+    await ensureSchema();
+    await sql.query('CREATE TABLE IF NOT EXISTS ia_uso (uid TEXT NOT NULL, hora TIMESTAMPTZ NOT NULL, n INT NOT NULL DEFAULT 0, PRIMARY KEY (uid, hora))');
+    const lim = Math.max(20, +process.env.IA_LIMITE_HORA || 200);
+    const u = (await sql.query("INSERT INTO ia_uso (uid, hora, n) VALUES ($1, date_trunc('hour', now()), 1) ON CONFLICT (uid, hora) DO UPDATE SET n = ia_uso.n + 1 RETURNING n", [String(s.uid)]))[0];
+    if (u && u.n > lim) return err(res, 429, 'Limite de uso da IA atingido nesta hora. Tente de novo em alguns minutos.');
+    if (Math.random() < 0.02) await sql.query("DELETE FROM ia_uso WHERE hora < now() - interval '3 days'");
+  } catch (e) { console.error('[ia] limite', e.message); }
   const msg = String(b.msg || '').slice(0, 60000);
   if (!msg) return err(res, 400, 'Mensagem vazia.');
   // Fotos para a IA analisar (estúdio de fotos): até 16 imagens JPEG/PNG pequenas, em base64

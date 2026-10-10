@@ -126,10 +126,11 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const bruto = await corpoBruto(req);
-  if (!kapsoOk(req, bruto) && !assinaturaOk(req, bruto) && !chaveOk(req)) {
+  // Só entregas assinadas (Meta: X-Hub-Signature-256; Kapso: X-Webhook-Signature). A chave no endereço (?k=) não vale mais.
+  if (!kapsoOk(req, bruto) && !assinaturaOk(req, bruto)) {
     let obj = ''; try { obj = JSON.parse(bruto || '{}').object || ''; } catch {}
     const temSig = !!req.headers['x-hub-signature-256'];
-    await registrar({ status: 401, object: obj, motivo: temSig ? 'assinatura não confere: META_APP_SECRET na Vercel diferente da Chave Secreta do app (ou faltou Redeploy)' : 'chegou sem assinatura', tamanho: bruto.length });
+    await registrar({ status: 401, object: obj, motivo: temSig ? 'assinatura não confere: META_APP_SECRET na Vercel diferente da Chave Secreta do app (ou faltou Redeploy)' : (chaveOk(req) ? 'chegou com a chave no endereço, sem assinatura: configure o segredo de assinatura no provedor' : 'chegou sem assinatura'), tamanho: bruto.length });
     return res.status(401).json({ ok: false });
   }
   let body; try { body = JSON.parse(bruto || '{}'); } catch { await registrar({ status: 400, motivo: 'corpo não é JSON', tamanho: bruto.length }); return res.status(400).json({ ok: false }); }

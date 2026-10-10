@@ -135,6 +135,8 @@ export async function atualizarDoc(chave, fn, padrao = []) {
       ok = await sql.query(`INSERT INTO crm_docs (chave, valor, versao) VALUES ($1, $2::jsonb, 1) ON CONFLICT (chave) DO NOTHING RETURNING versao`, [chave, json]);
     } else {
       await sql.query('INSERT INTO crm_historico (chave, valor, versao) VALUES ($1, $2::jsonb, $3)', [chave, JSON.stringify(atual), versao]);
+      // guarda só as 30 últimas cópias por documento (antes crescia sem fim a cada gravação automática)
+      if (Math.random() < 0.2) await sql.query('DELETE FROM crm_historico WHERE chave = $1 AND id NOT IN (SELECT id FROM crm_historico WHERE chave = $1 ORDER BY id DESC LIMIT 30)', [chave]).catch(() => null);
       ok = await sql.query(`UPDATE crm_docs SET valor = $2::jsonb, versao = versao + 1, atualizado_em = now() WHERE chave = $1 AND versao = $3 RETURNING versao`, [chave, json, versao]);
     }
     if (ok.length) return novo;

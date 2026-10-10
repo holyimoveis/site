@@ -75,9 +75,18 @@ nwr(around:2000,${la},${ln})[shop=supermarket];nwr(around:2000,${la},${ln})[amen
 nwr(around:3000,${la},${ln})[amenity~"^(hospital|clinic)$"];nwr(around:2000,${la},${ln})[leisure=park];nwr(around:2000,${la},${ln})[leisure=fitness_centre];
 nwr(around:1500,${la},${ln})[amenity~"^(restaurant|cafe)$"];nwr(around:2000,${la},${ln})[amenity=bank];nwr(around:4000,${la},${ln})[natural=beach];nwr(around:4000,${la},${ln})[shop=mall];
 );out center tags 400;`;
-  const r = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/x-www-form-urlencoded' }, UA), body: 'data=' + encodeURIComponent(q), signal: AbortSignal.timeout(12000) });
-  if (!r.ok) return [];
-  const els = ((await r.json()) || {}).elements || [];
+  // tenta servidores alternativos do OpenStreetMap (o principal às vezes recusa por excesso de uso)
+  let els = null;
+  for (const url of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter']) {
+    try {
+      const r = await fetch(url, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/x-www-form-urlencoded' }, UA), body: 'data=' + encodeURIComponent(q), signal: AbortSignal.timeout(11000) });
+      if (!r.ok) continue;
+      const j = await r.json().catch(() => null);
+      if (j && Array.isArray(j.elements)) { els = j.elements; break; }
+    } catch (e) { /* tenta o próximo */ }
+  }
+  if (!els) return null; // falhou: não guarda como "nada por perto"
+
   const out = [];
   for (const [rot, ok] of CATS) {
     let melhor = null;
@@ -93,22 +102,56 @@ nwr(around:1500,${la},${ln})[amenity~"^(restaurant|cafe)$"];nwr(around:2000,${la
   }
   return out.sort((a, b) => a.d - b.d);
 }
+// Coordenadas coladas no cadastro (link do Google Maps ou "-27.10, -52.61"); links curtos (maps.app.goo.gl) são abertos para achar o endereço completo
+async function coordsDoLink(t) {
+  let s = String(t || '').trim();
+  if (!s) return null;
+  const ler = (x) => {
+    const m = x.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || x.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || x.match(/[?&](?:q|query|ll|destination)=(-?\d+\.\d+)(?:,|%2C)\s*(-?\d+\.\d+)/i) || x.match(/^(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)$/);
+    if (!m) return null;
+    const la = +m[1], ln = +m[2];
+    return Math.abs(la) <= 90 && Math.abs(ln) <= 180 ? [la, ln] : null;
+  };
+  let c = ler(s);
+  if (!c && /^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|maps\.google\.|www\.google\.[a-z.]+\/maps)/i.test(s)) {
+    for (let i = 0; i < 3 && !c; i++) {
+      const r = await fetch(s, { redirect: 'manual', headers: UA, signal: AbortSignal.timeout(6000) }).catch(() => null);
+      const loc = r && r.headers.get('location');
+      if (!loc) break;
+      s = new URL(loc, s).toString(); c = ler(decodeURIComponent(s));
+    }
+  }
+  return c;
+}
+
 export async function geoImovel(im) {
   const cidade = String(im.cidade || '').replace(/-SC$/i, '').trim();
   const partes = [[im.rua, im.bairro, cidade], [im.bairro, cidade]].map((p) => p.filter(Boolean).join(', ')).filter((s, i, a) => s && a.indexOf(s) === i);
-  if (!partes.length) return null;
-  const chave = 'g2:' + partes[0].toLowerCase();
+  const local = [im.bairro, cidade].filter(Boolean).join(', ');
+  const mapa = String(im.mapa || '').trim();
+  if (!partes.length && !mapa) return null;
+  const chave = 'g3:' + (mapa ? 'mapa:' + mapa.slice(0, 300) : partes[0].toLowerCase());
   await esquemaDossie();
-  const c = (await sql.query("SELECT valor FROM geo_cache WHERE chave = $1 AND atualizado > now() - interval '90 days'", [chave]))[0];
-  if (c) return c.valor;
-  let coords = null, exato = false;
+  const c = (await sql.query("SELECT valor, atualizado FROM geo_cache WHERE chave = $1 AND atualizado > now() - interval '90 days'", [chave]))[0];
+  if (c && c.valor && c.valor.coords) {
+    // "nada por perto" de uma tentativa que falhou: tenta de novo depois de 1 hora
+    if ((!c.valor.perto || !c.valor.perto.length) && Date.now() - new Date(c.atualizado).getTime() > 3600 * 1000) {
+      const perto = await pertos(c.valor.coords).catch(() => null);
+      const v = Object.assign({}, c.valor, { perto: perto || [] });
+      await sql.query('UPDATE geo_cache SET valor = $2, atualizado = now() WHERE chave = $1', [chave, JSON.stringify(v)]);
+      return v;
+    }
+    return c.valor;
+  }
+  let coords = mapa ? await coordsDoLink(mapa).catch(() => null) : null, exato = !!coords;
   for (let i = 0; i < partes.length && !coords; i++) {
     coords = await geocodificar(partes[i] + ', SC, Brasil').catch(() => null);
     exato = !!coords && i === 0 && !!im.rua;
     if (!coords && i < partes.length - 1) await new Promise((r) => setTimeout(r, 1100)); // regra de uso do Nominatim: 1 pedido por segundo
   }
   if (!coords) return null;
-  const valor = { coords, exato, local: partes[partes.length - 1], perto: await pertos(coords).catch(() => []) };
+  const perto = await pertos(coords).catch(() => null);
+  const valor = { coords, exato, local: local || partes[partes.length - 1] || '', perto: perto || [] };
   await sql.query('INSERT INTO geo_cache (chave, valor) VALUES ($1, $2) ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado = now()', [chave, JSON.stringify(valor)]);
   return valor;
 }
@@ -195,7 +238,7 @@ export async function paginaDossie(code, req) {
   const autor = String(r.autor || 'Édipo Junior').split(/\s+/).slice(0, 2).join(' ');
   const fotos = (it.fotos || []).slice(0, 24);
   const capa = fotos[0] || '';
-  const priv = it.areaPrivativa || it.area;
+  const priv = it.areaPrivativa; // só a área privativa (a área total não aparece como se fosse do apartamento)
   const m2 = it.valor && priv ? Math.round(it.valor / priv) : 0;
   const local = [it.bairro, it.cidade].filter(Boolean).join(', ');
   const specs = [[priv, 'm² privativos'], [it.quartos, it.quartos == 1 ? 'quarto' : 'quartos'], [it.suites, it.suites == 1 ? 'suíte' : 'suítes'], [it.vagas, it.vagas == 1 ? 'vaga' : 'vagas'], [it.banheiros, 'banheiros']].filter((s) => +s[0]);
@@ -207,7 +250,7 @@ export async function paginaDossie(code, req) {
   const perto = (geo && geo.perto) || [];
   const dist = (d) => (d < 1000 ? Math.round(d / 10) * 10 + ' m' : (d / 1000).toFixed(1).replace('.', ',') + ' km');
   const modo = (d) => (d <= 1500 ? Math.max(1, Math.round(d / 80)) + ' min a pé' : Math.max(2, Math.round(d / 450)) + ' min de carro');
-  const dados = { code, valor: it.valor || 0, entrada: valorTexto(pf.entrada, it.valor), coords: geo && geo.coords, perto: perto.map((p) => ({ n: p.nome, c: p.cat, p: p.p })), exato: !!(geo && geo.exato) };
+  const dados = { code, valor: it.valor || 0, entrada: valorTexto(pf.entrada, it.valor), coords: geo && geo.coords && geo.coords.map((v) => Math.round(v * 1000) / 1000) /* ~100 m de margem: o endereço exato não vai para o cliente */, perto: perto.map((p) => ({ n: p.nome, c: p.cat, p: p.p })), exato: !!(geo && geo.exato) };
 
   const corpo = `
 <header class="top"><img src="/assets/holy-logo-claro.svg" alt="Holy Curadoria Imobiliária"><span>Dossiê exclusivo${nome1 ? ' · ' + esc(nome1) : ''}</span></header>
