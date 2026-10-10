@@ -68,8 +68,90 @@ async function geocodificar(q) {
   const j = await r.json();
   return j && j[0] ? [+j[0].lat, +j[0].lon] : null;
 }
-let ultimoErroPerto = '';
+// 📍 Endereço → coordenadas. Com GOOGLE_MAPS_KEY na Vercel usa o Google (precisão de número de casa); sem ela, OpenStreetMap (grátis, menos preciso no interior).
+function partesEndereco(im) {
+  const cid = String(im.cidade || '').trim();
+  const m = cid.match(/^(.*?)\s*[-\/,]\s*([A-Za-z]{2})$/);
+  return { rua: String(im.rua || '').trim(), numero: String(im.numero || '').trim(), bairro: String(im.bairro || '').trim(), cidade: (m ? m[1] : cid).trim(), uf: (m ? m[2] : 'SC').toUpperCase(), cep: String(im.cep || '').replace(/\D/g, '') };
+}
+const PREC = {
+  exata: 'no número exato', quarteirao: 'estimada no quarteirão (confira no mapa)', rua: 'só a rua — o número não foi encontrado (confira no mapa)', bairro: 'só o bairro — ajuste no mapa',
+};
+export async function localizarEndereco(im) {
+  const e = partesEndereco(im);
+  if (!e.rua && !e.bairro && !e.cep) return { erro: 'Preencha rua, número, bairro e cidade.' };
+  const texto = [[e.rua, e.numero].filter(Boolean).join(', '), e.bairro, e.cidade + ' - ' + e.uf, e.cep, 'Brasil'].filter(Boolean).join(', ');
+  const chave = process.env.GOOGLE_MAPS_KEY;
+  if (chave) {
+    const u = 'https://maps.googleapis.com/maps/api/geocode/json?' + new URLSearchParams({ address: texto, region: 'br', language: 'pt-BR', components: 'country:BR|administrative_area:' + e.uf, key: chave });
+    const r = await fetch(u, { signal: AbortSignal.timeout(8000) });
+    const j = await r.json().catch(() => ({}));
+    if (j.status === 'OK' && j.results && j.results[0]) {
+      const x = j.results[0], g = x.geometry || {}, t = x.types || [];
+      const nivel = g.location_type === 'ROOFTOP' && (t.includes('street_address') || t.includes('premise') || t.includes('subpremise')) ? 'exata'
+        : g.location_type === 'RANGE_INTERPOLATED' || (g.location_type === 'ROOFTOP') ? 'quarteirao'
+        : t.includes('route') ? 'rua' : 'bairro';
+      return { coords: [g.location.lat, g.location.lng], fonte: 'Google', nivel, precisao: PREC[nivel] + (x.partial_match && nivel === 'exata' ? ' (o Google ajustou parte do endereço — confira)' : ''), endereco: x.formatted_address };
+    }
+    if (j.status && j.status !== 'ZERO_RESULTS') console.error('[geocode] google:', j.status, j.error_message || '');
+    if (j.status === 'ZERO_RESULTS') return { erro: 'O Google não encontrou esse endereço. Confira a grafia da rua e o número.' };
+  }
+  // Grátis: OpenStreetMap (Nominatim, busca estruturada), tentando também o número sem a letra (1984D → 1984)
+  const nums = [...new Set([e.numero, e.numero.replace(/\D+$/, '')].filter(Boolean))];
+  for (const n of nums.length ? nums : ['']) {
+    const u = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({ format: 'jsonv2', limit: '1', addressdetails: '1', countrycodes: 'br', street: (n ? n + ' ' : '') + e.rua, city: e.cidade, state: e.uf === 'SC' ? 'Santa Catarina' : e.uf, country: 'Brasil' });
+    const r = await fetch(u, { headers: UA, signal: AbortSignal.timeout(7000) }).catch(() => null);
+    const j = r && r.ok ? await r.json().catch(() => null) : null;
+    if (j && j[0]) {
+      const nivel = j[0].address && j[0].address.house_number ? 'exata' : 'rua';
+      return { coords: [+j[0].lat, +j[0].lon], fonte: 'OpenStreetMap', nivel, precisao: PREC[nivel], endereco: j[0].display_name };
+    }
+    await new Promise((ok) => setTimeout(ok, 1100));
+  }
+  const c = await geocodificar([e.bairro, e.cidade].filter(Boolean).join(', ') + ', ' + e.uf + ', Brasil').catch(() => null);
+  if (c) return { coords: c, fonte: 'OpenStreetMap', nivel: 'bairro', precisao: PREC.bairro, endereco: [e.bairro, e.cidade].filter(Boolean).join(', ') };
+  return { erro: 'Não encontrei esse endereço. Cole o link do Google Maps no campo.' };
+}
+// Photon (komoot): mesmos dados do OpenStreetMap, com busca "o mais próximo deste ponto" por tipo de lugar. Rápido e estável.
+const PHOTON = [
+  ['Supermercado', ['shop:supermarket'], 2], ['Escola', ['amenity:school'], 2], ['Farmácia', ['amenity:pharmacy'], 2],
+  ['Hospital ou clínica', ['amenity:hospital', 'amenity:clinic'], 3], ['Parque ou praça', ['leisure:park'], 2], ['Academia', ['leisure:fitness_centre'], 2],
+  ['Restaurante ou café', ['amenity:restaurant', 'amenity:cafe'], 1.5], ['Banco', ['amenity:bank'], 2], ['Praia', ['natural:beach'], 4], ['Shopping', ['shop:mall'], 4],
+];
+async function pertosPhoton(c) {
+  const [la, ln] = c;
+  let falhas = 0, ultimo = '';
+  const res = await Promise.all(PHOTON.map(async ([rot, tags, km]) => {
+    try {
+      const u = 'https://photon.komoot.io/reverse?' + new URLSearchParams({ lat: String(la), lon: String(ln), limit: '8', radius: String(km), lang: 'default' }) + tags.map((t) => '&osm_tag=' + encodeURIComponent(t)).join('');
+      const r = await fetch(u, { headers: UA, signal: AbortSignal.timeout(9000) });
+      if (!r.ok) { falhas++; ultimo = 'photon respondeu ' + r.status; return null; }
+      const j = await r.json();
+      let melhor = null;
+      for (const f of (j && j.features) || []) {
+        const nome = f.properties && f.properties.name; const g = f.geometry && f.geometry.coordinates;
+        if (!nome || !g) continue;
+        const p = [g[1], g[0]], d = distancia(c, p);
+        if (d <= km * 1000 && (!melhor || d < melhor.d)) melhor = { cat: rot, nome: String(nome).slice(0, 60), d: Math.round(d), p };
+      }
+      return melhor;
+    } catch (e) { falhas++; ultimo = 'photon: ' + (e.name === 'TimeoutError' ? 'demorou demais' : e.message); return null; }
+  }));
+  if (falhas > PHOTON.length / 2) { ultimoErroPerto = ultimo; return null; } // a maioria falhou: tenta a outra fonte
+  return res.filter(Boolean).sort((a, b) => a.d - b.d);
+}
 async function pertos(c) {
+  const a = await pertosPhoton(c).catch((e) => { ultimoErroPerto = 'photon: ' + e.message; return null; });
+  if (a && a.length) return a;
+  const erroPhoton = ultimoErroPerto || 'photon não achou lugares';
+  const b = await pertosOverpass(c).catch(() => null);
+  if (b && b.length) return b;
+  if (!b) ultimoErroPerto = erroPhoton + ' · ' + ultimoErroPerto;
+  return a || b;
+}
+
+let ultimoErroPerto = '';
+async function pertosOverpass(c) {
   const [la, ln] = c;
   // uma consulta curta por categoria (com limite próprio), para não estourar o tempo do OpenStreetMap em áreas densas
   const A = (r, f, n) => `nwr(around:${r},${la},${ln})${f};out center tags ${n};`;
@@ -79,9 +161,9 @@ async function pertos(c) {
     A(800, '[amenity~"^(restaurant|cafe)$"]', 40), A(1500, '[amenity=bank]', 25), A(3000, '[natural=beach]', 10), A(4000, '[shop=mall]', 10),
   ].join('');
   let els = null; ultimoErroPerto = '';
-  for (const url of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter']) {
+  for (const url of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter']) {
     try {
-      const r = await fetch(url, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/x-www-form-urlencoded' }, UA), body: 'data=' + encodeURIComponent(q), signal: AbortSignal.timeout(20000) });
+      const r = await fetch(url, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/x-www-form-urlencoded' }, UA), body: 'data=' + encodeURIComponent(q), signal: AbortSignal.timeout(12000) });
       if (!r.ok) { ultimoErroPerto += (ultimoErroPerto ? ' · ' : '') + new URL(url).host + ' respondeu ' + r.status; continue; }
       const j = await r.json().catch(() => null);
       if (!j || !Array.isArray(j.elements)) { ultimoErroPerto += (ultimoErroPerto ? ' · ' : '') + new URL(url).host + ' respondeu algo inválido'; continue; }
@@ -149,6 +231,7 @@ export async function geoImovel(im) {
     return c.valor;
   }
   let coords = mapa ? await coordsDoLink(mapa).catch(() => null) : null, exato = !!coords;
+  if (!coords && process.env.GOOGLE_MAPS_KEY && im.rua) { const g = await localizarEndereco(im).catch(() => null); if (g && g.coords) { coords = g.coords; exato = g.nivel === 'exata' || g.nivel === 'quarteirao'; } }
   for (let i = 0; i < partes.length && !coords; i++) {
     coords = await geocodificar(partes[i] + ', SC, Brasil').catch(() => null);
     exato = !!coords && i === 0 && !!im.rua;

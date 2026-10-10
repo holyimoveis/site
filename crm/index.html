@@ -18038,6 +18038,25 @@ function ImovelForm({ initial, onSave, onClose }) {
     const [aiTxt, setAiTxt] = useState("");
     const [aiL, setAiL] = useState(false);
     const F = (k, v) => setF(p => (Object.assign(Object.assign({}, p), { [k]: v })));
+    // 📍 Endereço → coordenadas: preenche "Localização no mapa" sozinho quando rua e número estão digitados
+    const [geo, setGeo] = useState(null);
+    const geoAuto = useRef(null);
+    const buscarGeo = (auto) => {
+        if (!f.rua && !f.bairro) { if (!auto) setGeo({ erro: "Preencha rua, número e bairro primeiro." }); return; }
+        setGeo({ carregando: true });
+        const qs = new URLSearchParams({ acao: "geocode", rua: f.rua || "", numero: f.numero || "", bairro: f.bairro || "", cidade: f.cidade || "Chapecó-SC", cep: f.cep || "" });
+        holyFetch("/api/crm?" + qs).then(r => r.json()).then(j => {
+            if (!j.success || !j.coords) { setGeo({ erro: (j && (j.erro || j.error)) || "Não consegui localizar." }); return; }
+            const v = j.coords[0].toFixed(6) + ", " + j.coords[1].toFixed(6);
+            geoAuto.current = v; F("mapa", v); setGeo(j);
+        }).catch(() => setGeo({ erro: "Sem conexão para localizar agora." }));
+    };
+    useEffect(() => {
+        if (!f.rua || !f.numero) return;
+        if (f.mapa && f.mapa !== geoAuto.current) return; // já tem link colado à mão: não mexe
+        const t = setTimeout(() => buscarGeo(true), 1300);
+        return () => clearTimeout(t);
+    }, [f.rua, f.numero, f.bairro, f.cidade]);
     async function genDesc() {
         if (!f.nome)
             return;
@@ -18072,7 +18091,14 @@ function ImovelForm({ initial, onSave, onClose }) {
             React.createElement(FI, { label: "Rua / Avenida", value: f.rua, onChange: v => F("rua", v), placeholder: "R. Joaquim Floriano" }),
             React.createElement(FI, { label: "N\u00FAmero", value: f.numero, onChange: v => F("numero", v), placeholder: "466" }),
             React.createElement(FI, { label: "CEP", value: f.cep, onChange: v => F("cep", v), placeholder: "04534-002" }),
-            React.createElement("div", { style: { gridColumn: "1/-1" } }, React.createElement(FI, { label: "Localização no mapa (cole o link do Google Maps)", value: f.mapa || "", onChange: v => F("mapa", v), placeholder: "https://maps.app.goo.gl/... ou -27.0986, -52.6155" }), React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: -6 } }, "Opcional. Deixa o mapa e \"o que tem por perto\" do dossiê exatos. No Google Maps: segure o dedo no local › Compartilhar › Copiar link. O cliente vê só a região aproximada.")),
+            React.createElement("div", { style: { gridColumn: "1/-1" } },
+                React.createElement(FI, { label: "Localização no mapa (preenche sozinha pelo endereço)", value: f.mapa || "", onChange: v => { F("mapa", v); geoAuto.current = null; }, placeholder: "-27.0986, -52.6155 ou link do Google Maps" }),
+                React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: -4 } },
+                    React.createElement("button", { type: "button", onClick: () => buscarGeo(false), disabled: geo && geo.carregando, style: { background: C.gold, color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" } }, geo && geo.carregando ? "Localizando…" : "📍 Localizar pelo endereço"),
+                    /^\s*-?\d{1,2}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/.test(f.mapa || "") && React.createElement("a", { href: "https://www.google.com/maps?q=" + encodeURIComponent((f.mapa || "").replace(/\s/g, "")), target: "_blank", rel: "noopener", style: { fontSize: 12, color: C.gold, fontWeight: 600 } }, "🗺️ Conferir no Google Maps")),
+                geo && !geo.carregando && React.createElement("div", { style: { fontSize: 11.5, marginTop: 6, color: geo.erro ? "#a3402e" : geo.nivel === "exata" ? "#2e7d4f" : "#9a6b00" } },
+                    geo.erro ? "⚠ " + geo.erro : (geo.nivel === "exata" ? "✓ " : "⚠ ") + "Localizado (" + geo.fonte + "): " + geo.precisao + (geo.endereco ? " — " + geo.endereco : "")),
+                React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 4 } }, "Se o pino não estiver no lugar certo: no Google Maps, segure o dedo sobre a casa › copie as coordenadas › cole aqui. O cliente vê só a região aproximada.")),
             React.createElement(FI, { label: "Andar / Unidade", value: f.andares, onChange: v => F("andares", v), placeholder: "22\u00BA/23\u00BA duplex" }),
             React.createElement(FI, { label: "Orienta\u00E7\u00E3o Solar", value: f.orientacao, onChange: v => F("orientacao", v), placeholder: "Nascente/Poente" }),
             React.createElement(FI, { label: "Ano de Constru\u00E7\u00E3o", value: f.anoConstrucao, onChange: v => F("anoConstrucao", v), type: "number", placeholder: "2019" }),

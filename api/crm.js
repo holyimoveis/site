@@ -14,7 +14,7 @@ import { sincronizarLeads } from './_sync.js';
 import { enviarAviso, avisoConfigurado } from './_avisos.js';
 import { linkContato } from './_contato.js';
 import { personalizarLote } from './_investidores.js';
-import { criarDossie, listarDossies } from './_dossie.js';
+import { criarDossie, listarDossies, localizarEndereco } from './_dossie.js';
 import { statusCliente, iniciarSequencia, pausarSequencia, emailTeste, emailConfigurado } from './_email.js';
 import { esquemaRastreio } from './leads.js'; // /api/usuarios é atendido aqui (limite de 12 funções do plano Hobby da Vercel)
 
@@ -112,6 +112,9 @@ export default async function handler(req, res) {
         const cid = String(q.cliente);
         if (s.perfil === 'corretor' && !(await clientesDe(s)).some((c) => c.id === cid)) return err(res, 403, 'Cliente de outro corretor.');
         return ok(res, await statusCliente(cid));
+      }
+      if (q.acao === 'geocode') { // 📍 endereço → coordenadas (cadastro de imóvel)
+        return ok(res, await localizarEndereco({ rua: q.rua, numero: q.numero, bairro: q.bairro, cidade: q.cidade, cep: q.cep }));
       }
       if (q.acao === 'dossies') { // dossiês já enviados a um cliente, com aberturas
         const cid = String(q.cliente || '');
