@@ -323,7 +323,9 @@ export async function paginaDossie(code, req) {
   const it = paraSite(bruto);
   const geo = await geoImovel(bruto).catch(() => null);
   const pf = r.perfil || {};
-  const autor = String(r.autor || 'Édipo Junior').split(/\s+/).slice(0, 2).join(' ');
+  // Nome de quem assina: nomes genéricos de login (Administrador, admin, Sistema…) viram o corretor responsável
+  const autorBruto = String(r.autor || '').trim();
+  const autor = (!autorBruto || /^(administrador|admin|adm|sistema|usu[aá]rio|gestor|teste|holy)\b/i.test(autorBruto) ? (process.env.CORRETOR_NOME || 'Édipo Junior') : autorBruto).split(/\s+/).slice(0, 2).join(' ');
   const fotos = (it.fotos || []).slice(0, 24);
   const capa = fotos[0] || '';
   const priv = it.areaPrivativa; // só a área privativa (a área total não aparece como se fosse do apartamento)
@@ -332,8 +334,8 @@ export async function paginaDossie(code, req) {
   const specs = [[priv, 'm² privativos'], [it.quartos, it.quartos == 1 ? 'quarto' : 'quartos'], [it.suites, it.suites == 1 ? 'suíte' : 'suítes'], [it.vagas, it.vagas == 1 ? 'vaga' : 'vagas'], [it.banheiros, 'banheiros']].filter((s) => +s[0]);
   const tags = (it.diferenciais || []).concat(it.lazer || []).slice(0, 30);
   const avista = /vista/i.test(pf.pagamento || '') && !/financ/i.test(pf.pagamento || '');
-  const txtVisita = `Olá ${primeiro(autor)}! ${nome1 ? 'Aqui é ' + nome1 + '. ' : ''}Vi o dossiê de ${it.nome} e gostaria de agendar uma visita.`;
-  const txtDuvida = `Olá ${primeiro(autor)}! ${nome1 ? 'Aqui é ' + nome1 + '. ' : ''}Vi o dossiê de ${it.nome} e tenho uma dúvida:`;
+  const txtVisita = `Olá, ${primeiro(autor)}! ${nome1 ? 'Aqui é ' + nome1 + '. ' : ''}Vi o dossiê de ${it.nome} e gostaria de agendar uma visita.`;
+  const txtDuvida = `Olá, ${primeiro(autor)}! ${nome1 ? 'Aqui é ' + nome1 + '. ' : ''}Vi o dossiê de ${it.nome} e tenho uma dúvida:`;
   const intro = String(r.intro || '').trim() || `${nome1 ? nome1 + ', ' : ''}separei este material sobre o ${it.nome} para você ver com calma: fotos, localização, o que tem por perto e uma simulação de pagamento. Qualquer dúvida, é só me chamar.`;
   const perto = (geo && geo.perto) || [];
   const dist = (d) => (d < 1000 ? Math.round(d / 10) * 10 + ' m' : (d / 1000).toFixed(1).replace('.', ',') + ' km');
