@@ -22170,7 +22170,7 @@ function App() {
                     page === "voz" && React.createElement(VozPage, { onAddIm: addIm, onAddCli: addCli, setPage: setPage }),
                     page === "config" && (holyPode("configCompleta") ? React.createElement(React.Fragment, null,
                     React.createElement("h2", { style: { margin: 0, fontSize: 14, fontWeight: 700, color: "#1a1c18", marginBottom: 20 } }, "\u2699\uFE0F Configura\u00E7\u00F5es"),
-                    React.createElement(ConfigPage)) : React.createElement(MinhaConta)),
+                    React.createElement(ConfigPage), holyPerfil() === "admin" && React.createElement(BackupCard)) : React.createElement(MinhaConta)),
                     page === "equipe" && holyPode("equipe") && React.createElement(EquipePage, { clientes: clientes, timeline: timeline, onEditCli: editCli }),
                     page === "usuarios" && holyPode("usuarios") && React.createElement(UsuariosPage),
                     page === "timeline" && React.createElement(React.Fragment, null,
@@ -22179,6 +22179,46 @@ function App() {
 }
 
 
+
+// 🛡️ Backup diário do banco (cópia fora do Neon, em armazenamento privado)
+function BackupCard() {
+    const [st, setSt] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const [msg, setMsg] = useState("");
+    const carregar = () => holyFetch("/api/crm?acao=backups").then(r => r.json()).then(j => setSt(j.success ? j : { erro: j.error || "Falha ao carregar" })).catch(() => setSt({ erro: "Sem conexão" }));
+    useEffect(() => { carregar(); }, []);
+    const agora = () => {
+        setBusy(true); setMsg("");
+        holyFetch("/api/crm", { method: "POST", body: JSON.stringify({ acao: "backupAgora" }) }).then(r => r.json()).then(j => {
+            setMsg(j.success ? "✓ Backup feito: " + j.tabelas + " tabelas, " + j.linhas + " registros (" + Math.max(1, Math.round(j.tamanho / 1024)) + " KB)." : "⚠ " + (j.error || "Falhou"));
+            carregar();
+        }).catch(() => setMsg("⚠ Sem conexão")).finally(() => setBusy(false));
+    };
+    const baixar = (b) => holyFetch("/api/crm?acao=backupBaixar&p=" + encodeURIComponent(b.pathname)).then(r => { if (!r.ok) throw new Error(); return r.blob(); }).then(bl => {
+        const a = document.createElement("a"); a.href = URL.createObjectURL(bl); a.download = b.pathname.split("/").pop(); document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    }).catch(() => setMsg("⚠ Não consegui baixar esse backup."));
+    const fmt = (d) => new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    const lista = (st && st.backups) || [];
+    const ultimo = lista[0];
+    const atrasado = ultimo && (Date.now() - new Date(ultimo.criado).getTime() > 36 * 3600 * 1000);
+    return React.createElement("div", { style: { marginTop: 24, background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: 18 } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" } },
+            React.createElement("div", null,
+                React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#1a1c18" } }, "🛡️ Backup do banco de dados"),
+                React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 3 } }, "Cópia completa (clientes, imóveis, conversas, histórico) todo dia às 3h, guardada fora do banco principal. Mantém os últimos 30 dias.")),
+            st && st.configurado && React.createElement("button", { onClick: agora, disabled: busy, style: { background: C.gold, color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" } }, busy ? "Fazendo backup…" : "Fazer backup agora")),
+        !st ? React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 12 } }, "Carregando…")
+        : st.erro ? React.createElement("div", { style: { fontSize: 12, color: C.danger, marginTop: 12 } }, "⚠ " + st.erro)
+        : !st.configurado ? React.createElement("div", { style: { fontSize: 12, color: C.warn, marginTop: 12, lineHeight: 1.5 } }, "⚠ O armazenamento privado de backup ainda não está conectado. Na Vercel: Storage › Create › Blob (acesso Private) › conectar ao projeto com o prefixo BACKUP.")
+        : React.createElement("div", { style: { marginTop: 12 } },
+            React.createElement("div", { style: { fontSize: 12.5, color: !ultimo || atrasado ? C.danger : C.success, fontWeight: 600 } },
+                !ultimo ? "⚠ Nenhum backup feito ainda — clique em \"Fazer backup agora\"." : (atrasado ? "⚠ Último backup há mais de 1 dia: " : "✓ Último backup: ") + fmt(ultimo.criado) + " · " + Math.max(1, Math.round(ultimo.tamanho / 1024)) + " KB"),
+            lista.length > 0 && React.createElement("div", { style: { marginTop: 10, maxHeight: 220, overflowY: "auto", borderTop: "1px solid " + C.border } },
+                lista.map(b => React.createElement("div", { key: b.pathname, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid " + C.border, fontSize: 12 } },
+                    React.createElement("span", null, fmt(b.criado), /manual/.test(b.pathname) ? " · manual" : "", " · ", Math.max(1, Math.round(b.tamanho / 1024)), " KB"),
+                    React.createElement("button", { onClick: () => baixar(b), style: { background: "none", border: "1px solid " + C.border, borderRadius: 5, padding: "4px 10px", fontSize: 11.5, cursor: "pointer", color: C.gold, fontWeight: 600 } }, "⬇ Baixar"))))),
+        msg && React.createElement("div", { style: { fontSize: 12, marginTop: 10, color: msg.startsWith("✓") ? C.success : C.danger } }, msg));
+}
 
 function ServerConfigSection() {
   var [url, setUrl] = useState(localStorage.getItem('holy_server_url') || 'http://localhost:3000');

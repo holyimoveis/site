@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 // Conversas do WhatsApp para o CRM (só com X-Admin-Key)
 import { sql, ensureSchema, cors, body, ok, err, fail } from './_lib.js';
 import { processarEmails } from './_email.js';
+import { fazerBackup } from './_backup.js';
 import { sessao, pode, ehDoUsuario } from './_auth.js';
 import { waitUntil } from '@vercel/functions';
 import { retomadas, enviarTexto, salvarMensagem, whatsappConfigurado, provedor, conectarWebhookKapso, lerConfig, pensar, catalogo, montarHistorico, avisarEdipo, criarModeloAviso } from './_wa.js';
@@ -20,6 +21,7 @@ export default async function handler(req, res) {
       if (!seg || seg.length < 16) { console.error('[cron] CRON_SECRET ausente ou curto: crie a variável na Vercel'); return err(res, 503, 'CRON_SECRET não configurado'); }
       const esperado = Buffer.from('Bearer ' + seg), veio = Buffer.from(auth);
       if (esperado.length !== veio.length || !crypto.timingSafeEqual(esperado, veio)) return err(res, 401, 'não autorizado');
+      if (req.query.cron === 'backup') return ok(res, { backup: await fazerBackup('diario') }); // 🛡️ backup diário (03h)
       const r1 = await retomadas(site, true).catch((e) => ({ erro: e.message }));
       const r2 = await processarEmails().catch((e) => ({ erro: e.message }));
       return ok(res, { retomadas: r1, emails: r2 });

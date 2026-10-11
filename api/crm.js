@@ -15,6 +15,7 @@ import { enviarAviso, avisoConfigurado } from './_avisos.js';
 import { linkContato } from './_contato.js';
 import { personalizarLote } from './_investidores.js';
 import { criarDossie, listarDossies, localizarEndereco } from './_dossie.js';
+import { fazerBackup, listarBackups, baixarBackup, backupConfigurado } from './_backup.js';
 import { statusCliente, iniciarSequencia, pausarSequencia, emailTeste, emailConfigurado } from './_email.js';
 import { esquemaRastreio } from './leads.js'; // /api/usuarios é atendido aqui (limite de 12 funções do plano Hobby da Vercel)
 
@@ -113,6 +114,18 @@ export default async function handler(req, res) {
         if (s.perfil === 'corretor' && !(await clientesDe(s)).some((c) => c.id === cid)) return err(res, 403, 'Cliente de outro corretor.');
         return ok(res, await statusCliente(cid));
       }
+      if (q.acao === 'backups') { // 🛡️ lista de backups (só administrador)
+        if (s.perfil !== 'admin') return err(res, 403, 'Só o administrador.');
+        return ok(res, { configurado: backupConfigurado(), backups: (await listarBackups()).map(({ url, ...b }) => b) });
+      }
+      if (q.acao === 'backupBaixar') {
+        if (s.perfil !== 'admin') return err(res, 403, 'Só o administrador.');
+        const buf = await baixarBackup(q.p);
+        if (!buf) return err(res, 404, 'Backup não encontrado.');
+        res.setHeader('Content-Type', 'application/gzip');
+        res.setHeader('Content-Disposition', 'attachment; filename="' + String(q.p).split('/').pop() + '"');
+        return res.status(200).send(buf);
+      }
       if (q.acao === 'geocode') { // 📍 endereço → coordenadas (cadastro de imóvel)
         return ok(res, await localizarEndereco({ rua: q.rua, numero: q.numero, bairro: q.bairro, cidade: q.cidade, cep: q.cep }));
       }
@@ -203,6 +216,11 @@ export default async function handler(req, res) {
         if (!avisoConfigurado()) return err(res, 400, 'Falta criar AVISO_WHATSAPP e AVISO_CALLMEBOT_KEY na Vercel (e fazer Redeploy).');
         const r = await enviarAviso('✅ Teste do Holy CRM: os avisos de lead novo vão chegar aqui.');
         return r.ok ? ok(res, { enviado: true }) : err(res, 502, 'O CallMeBot não aceitou (' + r.motivo + '). Confira o número e a chave.');
+      }
+      if (b.acao === 'backupAgora') { // 🛡️ backup manual
+        if (s.perfil !== 'admin') return err(res, 403, 'Só o administrador.');
+        const r = await fazerBackup('manual');
+        return r.ok ? ok(res, r) : err(res, 500, r.erro);
       }
       if (b.acao === 'dossie') { // 📘 dossiê exclusivo do imóvel para um cliente
         if (!b.imovelId) return err(res, 400, 'Escolha o imóvel.');
