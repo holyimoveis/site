@@ -18471,7 +18471,7 @@ function IntForm({ clienteId, clienteNome, imoveis, onSave, onClose }) {
     const F = (k, v) => setF(p => (Object.assign(Object.assign({}, p), { [k]: v })));
     function save() { if (!f.desc.trim())
         return; onSave(Object.assign(Object.assign({}, f), { id: "int" + uid(), clienteId, cliente: clienteNome })); onClose(); }
-    return React.createElement(Modal, { onClose: onClose, width: 500 },
+    return React.createElement(Modal, { onClose: onClose, width: 500, z: 2600 },
         React.createElement(MHead, { title: "Registrar Intera\u00E7\u00E3o", sub: clienteNome, onClose: onClose }),
         React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
             React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 } },
@@ -20371,7 +20371,130 @@ Dados: ${JSON.stringify(mktVitrine(item, kind)).slice(0, 6000)}`, 1800, "Você �
 // ESTÚDIO DE FOTOS: melhora as fotos no próprio navegador (grátis), IA escolhe capa/ordem e sugere ajustes,
 // e gera a capa de venda (imagem e vídeo em movimento). As originais ficam guardadas.
 // ═══════════════════════════════════════════════════════════════════════
-const FS_PADRAO = { auto: 1, exp: 0, temp: 0, contraste: 0.3, sat: 0.3, nitidez: 0.5, rot: 0, sombras: 0.3 };
+// Motor de tratamento de fotos de imóveis (sem inventar nada): balanço de branco por neutros,
+// exposição por percentis, "HDR natural" (tom local com base desfocada), recuperação de altas luzes,
+// curva S suave, vivacidade seletiva (céu e verde), nitidez com limiar e vinheta discreta.
+const FS_ESTILOS = {
+    natural:   { rotulo: "Natural",            auto: 1, exp: 0,    temp: 0.05, contraste: 0.30, sat: 0.30, nitidez: 0.45, sombras: 0.35, hdr: 0.40, luzes: 0.50, vinheta: 0.10, ceu: 0.30 },
+    luminoso:  { rotulo: "Luminoso (interior)", auto: 1, exp: 0.20, temp: 0.12, contraste: 0.18, sat: 0.22, nitidez: 0.40, sombras: 0.60, hdr: 0.55, luzes: 0.70, vinheta: 0.00, ceu: 0.20 },
+    editorial: { rotulo: "Editorial (alto padrão)", auto: 1, exp: 0.05, temp: 0.12, contraste: 0.38, sat: 0.22, nitidez: 0.50, sombras: 0.35, hdr: 0.45, luzes: 0.55, vinheta: 0.16, ceu: 0.30, wb: 0.55 },
+    fachada:   { rotulo: "Fachada e área externa", auto: 1, exp: 0.05, temp: 0.02, contraste: 0.28, sat: 0.40, nitidez: 0.60, sombras: 0.40, hdr: 0.55, luzes: 0.60, vinheta: 0.12, ceu: 0.70 },
+};
+function fsMotor(d, W, H, aj) {
+    const n = W * H, A = Math.max(0, Math.min(1, aj.auto == null ? 1 : aj.auto));
+    const R = new Float32Array(n), G = new Float32Array(n), B = new Float32Array(n);
+    for (let i = 0, p = 0; p < n; i += 4, p++) { R[p] = d[i] / 255; G[p] = d[i + 1] / 255; B[p] = d[i + 2] / 255; }
+    const passo = Math.max(1, Math.floor(n / 60000));
+    // 1) balanço de branco em 2 passos: estima a dominante (média geral), depois mede só os pixels
+    //    que ficam neutros após essa correção (paredes, teto, tecidos claros). Força ajustável (aj.wb).
+    let gr = 0, gg = 0, gb = 0, cg = 0;
+    for (let p = 0; p < n; p += passo) { const l = (R[p] + G[p] + B[p]) / 3; if (l > 0.08 && l < 0.97) { gr += R[p]; gg += G[p]; gb += B[p]; cg++; } }
+    if (!cg) cg = 1;
+    const g0 = [gr / cg, gg / cg, gb / cg], gm = (g0[0] + g0[1] + g0[2]) / 3, pre = g0.map((m) => gm / Math.max(m, 0.02));
+    let sr = 0, sg = 0, sb = 0, c = 0;
+    for (let p = 0; p < n; p += passo) {
+        const r = R[p] * pre[0], g = G[p] * pre[1], b = B[p] * pre[2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (r + g + b) / 3;
+        if (l > 0.2 && mx < 0.98 && (mx - mn) < 0.12 + 0.08 * l) { sr += R[p]; sg += G[p]; sb += B[p]; c++; }
+    }
+    const conf = c > cg * 0.05;
+    const ref = conf ? [sr / c, sg / c, sb / c] : g0, rm = (ref[0] + ref[1] + ref[2]) / 3;
+    const desvio = Math.max(...ref.map((m) => Math.abs(m / Math.max(rm, 0.02) - 1)));          // tamanho da dominante de cor
+    const forca = (aj.wb == null ? 0.75 : aj.wb) * (conf ? 1 : 0.6) * A * Math.min(1, Math.max(0, (desvio - 0.03) / 0.12)); // foto já equilibrada: quase não mexe
+    const wb = ref.map((m) => Math.min(1.45, Math.max(0.7, Math.pow(rm / Math.max(m, 0.02), forca))));
+    wb[0] *= 1.02; wb[2] *= 0.98;                                                                // alvo levemente quente (mais acolhedor)
+    const tp = (aj.temp || 0) * 0.08; wb[0] *= 1 + tp; wb[1] *= 1 + tp * 0.25; wb[2] *= 1 - tp;
+    const L = new Float32Array(n);
+    for (let p = 0; p < n; p++) { R[p] *= wb[0]; G[p] *= wb[1]; B[p] *= wb[2]; L[p] = 0.2126 * R[p] + 0.7152 * G[p] + 0.0722 * B[p]; }
+    // 2) níveis por percentis + exposição (meio-tom alvo claro, típico de foto de imóvel)
+    const hist = new Uint32Array(1024); let cnt = 0;
+    for (let p = 0; p < n; p += passo) { hist[Math.min(1023, (L[p] * 1023) | 0)]++; cnt++; }
+    const pct = (q) => { let a = 0; for (let v = 0; v < 1024; v++) { a += hist[v]; if (a >= cnt * q) return v / 1023; } return 1; };
+    const lo = pct(0.003) * A * 0.9, hi = 1 - (1 - Math.max(pct(0.997), 0.6)) * A, med = pct(0.5);
+    const medN = Math.max(0.04, Math.min(0.9, (med - lo) / Math.max(hi - lo, 0.05)));
+    let gama = Math.log(0.46 + 0.04 * (aj.exp || 0)) / Math.log(medN); gama = 1 + (Math.max(0.55, Math.min(1.25, gama)) - 1) * A;
+    const expo = Math.pow(2, (aj.exp || 0) * 0.6);
+    for (let p = 0; p < n; p++) { let l = (L[p] - lo) / Math.max(hi - lo, 0.05); l = Math.max(0, l); L[p] = Math.pow(l, gama) * expo; }
+    // 3) HDR natural: base desfocada (escala reduzida, 3 caixas ≈ gaussiana) comprimida + detalhe reforçado
+    const hdr = aj.hdr || 0, somb = aj.sombras || 0, luzes = aj.luzes || 0;
+    let Lb = null;
+    if (hdr > 0 || somb > 0 || luzes > 0) {
+        const f = Math.max(1, Math.round(Math.max(W, H) / 256)), w = Math.ceil(W / f), h = Math.ceil(H / f);
+        let s = new Float32Array(w * h), cn = new Float32Array(w * h);
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const k = ((y / f) | 0) * w + ((x / f) | 0); s[k] += Math.log(L[y * W + x] + 0.02); cn[k]++; }
+        for (let k = 0; k < s.length; k++) s[k] /= cn[k] || 1;
+        const rad = Math.max(2, Math.round(Math.max(w, h) / 24)), N = w * h;
+        const caixa = (src) => { // média em caixa (raio rad), O(n)
+            const tmp = new Float32Array(N), out = new Float32Array(N), k = 2 * rad + 1;
+            for (let y = 0; y < h; y++) { let acc = 0; const o = y * w; for (let x = -rad; x <= rad; x++) acc += src[o + Math.min(w - 1, Math.max(0, x))]; for (let x = 0; x < w; x++) { tmp[o + x] = acc / k; acc += src[o + Math.min(w - 1, x + rad + 1)] - src[o + Math.max(0, x - rad)]; } }
+            for (let x = 0; x < w; x++) { let acc = 0; for (let y = -rad; y <= rad; y++) acc += tmp[Math.min(h - 1, Math.max(0, y)) * w + x]; for (let y = 0; y < h; y++) { out[y * w + x] = acc / k; acc += tmp[Math.min(h - 1, y + rad + 1) * w + x] - tmp[Math.max(0, y - rad) * w + x]; } }
+            return out; };
+        // filtro guiado (He et al.): base suave que respeita bordas fortes
+        const sq = new Float32Array(N); for (let k = 0; k < N; k++) sq[k] = s[k] * s[k];
+        const mI = caixa(s), mII = caixa(sq), eps = 0.06, ca = new Float32Array(N), cb = new Float32Array(N);
+        for (let k = 0; k < N; k++) { const v = mII[k] - mI[k] * mI[k]; ca[k] = v / (v + eps); cb[k] = mI[k] - ca[k] * mI[k]; }
+        const fa = caixa(ca), fb = caixa(cb);
+        Lb = new Float32Array(n);
+        for (let y = 0; y < H; y++) { const fy = Math.min(h - 1.001, Math.max(0, y / f - 0.5)), y0 = fy | 0, ty = fy - y0;
+            for (let x = 0; x < W; x++) { const fx = Math.min(w - 1.001, Math.max(0, x / f - 0.5)), x0 = fx | 0, tx = fx - x0, k = y0 * w + x0;
+                const bil = (m) => (m[k] * (1 - tx) + m[k + 1] * tx) * (1 - ty) + (m[k + w] * (1 - tx) + m[k + w + 1] * tx) * ty;
+                Lb[y * W + x] = Math.exp(bil(fa) * Math.log(L[y * W + x] + 0.02) + bil(fb)) - 0.02; } }
+        const alvo = Math.log(0.42 + 0.02);
+        for (let p = 0; p < n; p++) {
+            const l = L[p], lgL = Math.log(l + 0.02), lgB = Math.log(Math.max(Lb[p], 0) + 0.02);
+            let det = lgL - lgB; det = Math.max(-0.6, Math.min(0.6, det)); // limita halos em bordas fortes
+            let base = lgB;
+            base = base + (alvo - base) * hdr * 0.42;                                  // comprime a faixa (sombras sobem, janelas descem)
+            if (base < alvo) base += (alvo - base) * somb * 0.35;                      // sombras
+            else base -= (base - alvo) * luzes * 0.25;                                 // altas luzes
+            L[p] = Math.exp(base + det * (1 + hdr * 0.3)) - 0.02;                     // detalhe/clareza
+        }
+    }
+    // 4) curva S suave + joelho de altas luzes
+    const ctr = aj.contraste || 0;
+    const rw = new Float32Array(n);
+    for (let p = 0; p < n; p++) {
+        let l = Math.max(0, L[p]);
+        if (ctr) { const s = l < 1 ? l : 1, sc = s * s * (3 - 2 * s); l = l + (sc - s) * ctr * 0.8; }
+        if (l > 0.82) l = 0.82 + (1 - Math.exp(-(l - 0.82) / 0.18)) * 0.18;           // nunca estoura de forma dura
+        rw[p] = l;
+    }
+    // 5) aplica a nova luminância às cores (mantém a cor) + vivacidade seletiva
+    const sat = (aj.sat || 0) * 0.45, ceu = (aj.ceu || 0) * 0.35, vin = (aj.vinheta || 0) * 0.32, cx = W / 2, cy = H / 2, dmax = cx * cx + cy * cy;
+    for (let p = 0; p < n; p++) {
+        const l0 = 0.2126 * R[p] + 0.7152 * G[p] + 0.0722 * B[p];
+        const l1 = rw[p], k = l0 > 0.004 ? l1 / l0 : 0;
+        let r = l0 > 0.004 ? R[p] * k : l1, g = l0 > 0.004 ? G[p] * k : l1, b = l0 > 0.004 ? B[p] * k : l1;
+        if (k > 1.6) { const q = 1 / (1 + (Math.min(k, 6) - 1.6) * 0.12); r = l1 + (r - l1) * q; g = l1 + (g - l1) * q; b = l1 + (b - l1) * q; }
+        const mx = Math.max(r, g, b);
+        if (mx > 1) { const t = (mx - 1) / mx; r += (l1 - r) * t; g += (l1 - g) * t; b += (l1 - b) * t; } // dessatura o que passaria do branco
+        const mn = Math.min(r, g, b), m2 = Math.max(r, g, b), s0 = m2 > 0 ? (m2 - mn) / m2 : 0;
+        let fz = 1 + sat * (1 - s0) * (1 - s0);
+        if (ceu && m2 > 0.05 && s0 > 0.08) {
+            if (b >= g && b > r) fz += ceu * 0.9;                              // céu e água
+            else if (g > r && g > b) fz += ceu * 0.6;                          // verde
+        }
+        if (r > g && g > b && s0 < 0.55) fz = 1 + (fz - 1) * 0.5;              // tons de pele/madeira: com cuidado
+        const ll = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        r = ll + (r - ll) * fz; g = ll + (g - ll) * fz; b = ll + (b - ll) * fz;
+        if (vin) { const y = (p / W) | 0, x = p - y * W, dd = ((x - cx) * (x - cx) + (y - cy) * (y - cy)) / dmax, v = 1 - vin * dd * dd; r *= v; g *= v; b *= v; }
+        R[p] = r; G[p] = g; B[p] = b;
+    }
+    // 6) nitidez na luminância com limiar (não realça ruído), proporcional ao tamanho
+    const nit = (aj.nitidez || 0) * (Math.max(W, H) > 1200 ? 0.9 : 0.6);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const p = y * W + x, i = p * 4;
+        let r = R[p], g = G[p], b = B[p];
+        if (nit > 0 && x > 0 && y > 0 && x < W - 1 && y < H - 1) {
+            const lum = (q) => 0.2126 * R[q] + 0.7152 * G[q] + 0.0722 * B[q];
+            const lc = lum(p), bl = (lum(p - 1) + lum(p + 1) + lum(p - W) + lum(p + W)) * 0.125 + (lum(p - W - 1) + lum(p - W + 1) + lum(p + W - 1) + lum(p + W + 1)) * 0.0625 + lc * 0.25;
+            let dl = lc - bl; const lim = 0.008;
+            if (Math.abs(dl) > lim) { dl = (dl - Math.sign(dl) * lim) * nit * 1.6; r += dl; g += dl; b += dl; }
+        }
+        d[i] = Math.max(0, Math.min(255, r * 255 + 0.5)); d[i + 1] = Math.max(0, Math.min(255, g * 255 + 0.5)); d[i + 2] = Math.max(0, Math.min(255, b * 255 + 0.5));
+    }
+}
+const FS_PADRAO = Object.assign({ rot: 0, estilo: "natural" }, FS_ESTILOS.natural);
+const FS_NEUTRO = { auto: 0, exp: 0, temp: 0, contraste: 0, sat: 0, nitidez: 0, sombras: 0, hdr: 0, luzes: 0, vinheta: 0, ceu: 0, wb: 0, rot: 0, estilo: "original" };
 function fsCarregar(src) {
     if (/^https?:/.test(src)) return mkImg(src);
     return new Promise(r => { const i = new Image(); i.onload = () => r(i); i.onerror = () => r(null); i.src = src; });
@@ -20383,39 +20506,8 @@ function fsProcessar(img, aj, maxDim) {
     const cv = document.createElement("canvas"); cv.width = W; cv.height = H; const ctx = cv.getContext("2d", { willReadFrequently: true });
     if (aj.rot) { const r = aj.rot * Math.PI / 180, z = Math.abs(Math.cos(r)) + Math.abs(Math.sin(r)) * Math.max(W / H, H / W); ctx.translate(W / 2, H / 2); ctx.rotate(r); ctx.scale(z, z); ctx.drawImage(img, -W / 2, -H / 2, W, H); ctx.setTransform(1, 0, 0, 1, 0, 0); }
     else ctx.drawImage(img, 0, 0, W, H);
-    const id = ctx.getImageData(0, 0, W, H), d = id.data, n = W * H;
-    // estatísticas (amostra): primeiro o balanço de branco, depois os níveis sobre a imagem já neutra
-    const A = Math.max(0, Math.min(1, aj.auto));
-    let sr = 0, sg = 0, sb = 0, cnt = 0;
-    for (let i = 0; i < d.length; i += 16) { sr += d[i]; sg += d[i + 1]; sb += d[i + 2]; cnt++; }
-    const mr = sr / cnt, mg = sg / cnt, mb = sb / cnt, mm = (mr + mg + mb) / 3;
-    const wb = [mr, mg, mb].map(m => Math.min(1.8, Math.max(0.6, Math.pow(mm / Math.max(m, 1), 0.8 * A))));
-    const temp = aj.temp * 0.07; wb[0] *= 1 + temp; wb[2] *= 1 - temp;
-    const hist = new Uint32Array(256); let soma = 0;
-    for (let i = 0; i < d.length; i += 16) { const l = Math.min(255, (d[i] * wb[0] * 0.299 + d[i + 1] * wb[1] * 0.587 + d[i + 2] * wb[2] * 0.114) | 0); hist[l]++; soma += l; }
-    const pct = p => { let a = 0, alvo = cnt * p; for (let v = 0; v < 256; v++) { a += hist[v]; if (a >= alvo) return v; } return 255; };
-    const lo = pct(0.004) * A, hi = 255 - (255 - pct(0.996)) * A;
-    const mediaL = Math.max(0.05, Math.min(0.95, (soma / cnt - lo) / Math.max(hi - lo, 1)));
-    let gama = Math.log(0.46) / Math.log(mediaL); gama = 1 + (Math.max(0.6, Math.min(1.35, gama)) - 1) * A;  // x^gama: < 1 clareia, > 1 escurece
-    const expo = Math.pow(2, aj.exp * 0.7), ctr = 1 + aj.contraste * 0.35, somb = aj.sombras * 0.25;
-    const luts = [0, 1, 2].map(c => { const L = new Uint8ClampedArray(256); for (let v = 0; v < 256; v++) {
-        let x = (v * wb[c] - lo) / Math.max(hi - lo, 1); x = Math.max(0, x);
-        x = Math.pow(Math.min(x, 1.2), gama) * expo;
-        x = x + somb * (1 - x) * Math.pow(1 - Math.min(x, 1), 3);   // levanta sombras
-        x = 0.5 + (x - 0.5) * ctr;                                     // contraste
-        if (x > 0.85) x = 0.85 + (x - 0.85) * 0.6;                     // protege altas luzes
-        L[v] = Math.round(Math.max(0, Math.min(1, x)) * 255); } return L; });
-    const sat = aj.sat * 0.35;
-    for (let i = 0; i < d.length; i += 4) {
-        let r = luts[0][d[i]], g = luts[1][d[i + 1]], b = luts[2][d[i + 2]];
-        if (sat) { const l = r * 0.299 + g * 0.587 + b * 0.114, mx = Math.max(r, g, b), mn = Math.min(r, g, b), s0 = mx ? (mx - mn) / mx : 0, f = 1 + sat * (1 - s0); r = l + (r - l) * f; g = l + (g - l) * f; b = l + (b - l) * f; }
-        d[i] = r; d[i + 1] = g; d[i + 2] = b;
-    }
-    if (aj.nitidez > 0) { // nitidez (máscara de nitidez simples)
-        const s = new Uint8ClampedArray(d), a = aj.nitidez * 0.55, w4 = W * 4;
-        for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { const i = (y * W + x) * 4;
-            for (let c = 0; c < 3; c++) { const v = s[i + c], bl = (s[i - 4 + c] + s[i + 4 + c] + s[i - w4 + c] + s[i + w4 + c]) / 4; d[i + c] = v + (v - bl) * a; } }
-    }
+    const id = ctx.getImageData(0, 0, W, H);
+    fsMotor(id.data, W, H, aj);
     ctx.putImageData(id, 0, 0);
     return cv;
 }
@@ -20442,7 +20534,7 @@ function fsCapa(ctx, W, H, img, t, info) { // desenha a capa (t = 0..1 para o mo
 function FotoStudio({ imovel, onClose }) {
     const inicial = (imovel.fotos || []).map((f, i) => ({ id: f.id || "f" + i, src: f.url, original: f.original || f.url, principal: !!f.principal, nome: f.name || "foto-" + (i + 1), aj: Object.assign({}, FS_PADRAO, f.ajustes || {}), novo: false }));
     const [itens, setItens] = useState(inicial);
-    const [prev, setPrev] = useState({}); const [antes, setAntes] = useState(null);
+    const [prev, setPrev] = useState({}); const [antes, setAntes] = useState(0.5);
     const [sel, setSel] = useState(inicial[0] ? inicial[0].id : null);
     const [load, setLoad] = useState(""); const [msg, setMsg] = useState(""); const [ia, setIa] = useState(null);
     const [capa, setCapa] = useState(null); const [video, setVideo] = useState(null);
@@ -20452,6 +20544,12 @@ function FotoStudio({ imovel, onClose }) {
     async function atualizarPrev(lista) { for (const it of lista) { const im = await img(it); if (!im) continue; const cv = fsProcessar(im, it.aj, 900); const u = cv.toDataURL("image/jpeg", 0.85); setPrev(p => Object.assign({}, p, { [it.id]: u })); } }
     useEffect(() => { setLoad("Melhorando as fotos…"); atualizarPrev(itens).then(() => setLoad("")); }, []);
     const AJ = (k, v) => { const lista = itens.map(i => i.id === sel ? Object.assign({}, i, { aj: Object.assign({}, i.aj, { [k]: v }) }) : i); setItens(lista); const it = lista.find(i => i.id === sel); clearTimeout(window._fsT); window._fsT = setTimeout(() => atualizarPrev([it]), 120); };
+    function estilo(k, todas) {
+        const base = FS_ESTILOS[k]; if (!base) return;
+        const lista = itens.map(i => (todas || i.id === sel) ? Object.assign({}, i, { aj: Object.assign({}, base, { rot: i.aj.rot || 0, estilo: k }) }) : i);
+        setItens(lista); setLoad("Aplicando o estilo " + base.rotulo + "…");
+        atualizarPrev(todas ? lista : lista.filter(i => i.id === sel)).then(() => setLoad(""));
+    }
     function adicionar(files) {
         const novos = Array.from(files || []).filter(f => /^image\//.test(f.type)).map((f, i) => ({ id: "n" + uid(), src: URL.createObjectURL(f), original: URL.createObjectURL(f), nome: f.name, aj: Object.assign({}, FS_PADRAO), novo: true, principal: false }));
         if (!novos.length) return; const l = itens.concat(novos); setItens(l); if (!sel) setSel(novos[0].id); setLoad("Melhorando as fotos novas…"); atualizarPrev(novos).then(() => setLoad(""));
@@ -20464,13 +20562,13 @@ function FotoStudio({ imovel, onClose }) {
             const r = await holyFetch("/api/ia", { method: "POST", body: JSON.stringify({ max: 2500, imagens: thumbs, system: "Você é fotógrafo e editor de fotos de imóveis de alto padrão. Avalia com olhar técnico e comercial.", msg: `São ${lista.length} fotos do imóvel "${imovel.nome}" (${imovel.tipo}, ${imovel.bairro || ""} ${imovel.cidade || ""}). Responda APENAS com JSON:
 {"capa": índice da melhor foto para capa (fachada ou ambiente mais impactante, bem iluminado, sem bagunça),
  "ordem": [índices na ordem ideal para vender: capa, fachada/área externa, sala, cozinha, suíte master, demais quartos, banheiros, lazer, vista; remova duplicadas ou ruins colocando-as no fim],
- "fotos": [{"i": índice, "ambiente": "sala/fachada/…", "nota": 0-10, "problemas": "curto: escura, torta, amarelada, bagunça, dedo, reflexo…", "exposicao": -1 a 1, "temperatura": -1 (esfriar) a 1 (esquentar), "contraste": 0 a 1, "saturacao": 0 a 1, "endireitar_graus": -4 a 4 (positivo gira no sentido horário; só se as verticais estiverem tortas), "descartar": true/false}],
+ "fotos": [{"i": índice, "ambiente": "sala/fachada/…", "nota": 0-10, "problemas": "curto: escura, torta, amarelada, bagunça, dedo, reflexo…", "exposicao": -1 a 1, "temperatura": -1 (esfriar) a 1 (esquentar), "contraste": 0 a 1, "saturacao": 0 a 1, "endireitar_graus": -4 a 4 (positivo gira no sentido horário; só se as verticais estiverem tortas), "estilo": "luminoso" (interiores) | "fachada" (fachada, piscina, área externa, vista) | "editorial" (ambientes sofisticados, noturnos ou de iluminação cênica) | "natural", "descartar": true/false}],
  "titulo_capa": "título curto e elegante para a capa (até 38 caracteres, sem preço)",
  "dicas": "1 a 2 frases: o que refotografar para vender melhor"}` }) });
             const j = await r.json(); if (!j.success) throw new Error(j.error);
             const o = JSON.parse(String(j.text).replace(/```json|```/g, "").trim().replace(/^[^{]*/, "").replace(/[^}]*$/, ""));
             const cl = (v, a, b, def) => Number.isFinite(+v) ? Math.max(a, Math.min(b, +v)) : def;
-            let lista2 = itens.map((it, i) => { const f = (o.fotos || []).find(x => +x.i === i); if (!f) return it; return Object.assign({}, it, { ia: f, aj: Object.assign({}, it.aj, { exp: cl(f.exposicao, -1, 1, 0), temp: cl(f.temperatura, -1, 1, 0), contraste: cl(f.contraste, 0, 1, 0.3), sat: cl(f.saturacao, 0, 1, 0.3), rot: -cl(f.endireitar_graus, -4, 4, 0) }) }); });
+            let lista2 = itens.map((it, i) => { const f = (o.fotos || []).find(x => +x.i === i); if (!f) return it; const est = FS_ESTILOS[f.estilo] ? f.estilo : (it.aj.estilo && FS_ESTILOS[it.aj.estilo] ? it.aj.estilo : "natural"), b0 = FS_ESTILOS[est]; return Object.assign({}, it, { ia: f, aj: Object.assign({}, b0, { estilo: est, exp: b0.exp + cl(f.exposicao, -1, 1, 0) * 0.6, temp: b0.temp + cl(f.temperatura, -1, 1, 0) * 0.6, contraste: (b0.contraste + cl(f.contraste, 0, 1, b0.contraste)) / 2, sat: (b0.sat + cl(f.saturacao, 0, 1, b0.sat)) / 2, rot: -cl(f.endireitar_graus, -4, 4, 0) }) }); });
             setIa(o); setItens(lista2); setLoad("Aplicando os ajustes da IA…"); await atualizarPrev(lista2); setLoad("");
             setMsg("✅ IA analisou. Capa sugerida: foto " + (+o.capa + 1) + ". Use \"Aplicar ordem da IA\" para reorganizar.");
         } catch (e) { setLoad(""); setMsg("❌ " + e.message); }
@@ -20501,7 +20599,7 @@ function FotoStudio({ imovel, onClose }) {
             setLoad(""); setMsg("✅ " + fotos.length + " fotos salvas no imóvel (originais guardadas).");
         } catch (e) { setLoad(""); setMsg("❌ " + e.message); }
     }
-    function restaurar() { if (!item) return; setItens(l => l.map(i => i.id === sel ? Object.assign({}, i, { aj: Object.assign({}, FS_PADRAO, { auto: 0, contraste: 0, sat: 0, nitidez: 0, sombras: 0 }) }) : i)); setTimeout(() => atualizarPrev([Object.assign({}, item, { aj: Object.assign({}, FS_PADRAO, { auto: 0, contraste: 0, sat: 0, nitidez: 0, sombras: 0 }) })]), 50); }
+    function restaurar() { if (!item) return; setItens(l => l.map(i => i.id === sel ? Object.assign({}, i, { aj: Object.assign({}, FS_NEUTRO) }) : i)); setTimeout(() => atualizarPrev([Object.assign({}, item, { aj: Object.assign({}, FS_NEUTRO) })]), 50); }
     async function gerarCapa(fmtCapa) {
         const it = (ia && itens.find((x, i) => i === +ia.capa)) || itens.find(x => x.principal) || itens[0]; if (!it) return;
         setLoad("Criando a capa…");
@@ -20531,7 +20629,7 @@ function FotoStudio({ imovel, onClose }) {
         React.createElement("input", { type: "range", min: a, max: b, step: st || 0.05, value: item ? item.aj[k] : 0, onChange: e => AJ(k, +e.target.value), style: { accentColor: C.olive } }),
         React.createElement("span", { style: { fontFamily: "'DM Mono',monospace" } }, item ? (+item.aj[k]).toFixed(k === "rot" ? 1 : 2) : ""));
     return React.createElement(Modal, { onClose, width: 1120, z: 2700 },
-        React.createElement(MHead, { title: "✨ Estúdio de fotos: " + imovel.nome, sub: "Melhora luz, cor, nitidez e alinhamento sem inventar nada: o imóvel continua igual ao real. As originais ficam guardadas.", onClose }),
+        React.createElement(MHead, { title: "✨ Estúdio de fotos: " + imovel.nome, sub: "Tratamento profissional (HDR natural, luz de janela, cor correta, céu vivo, nitidez) sem inventar nada: o imóvel continua igual ao real. As originais ficam guardadas.", onClose }),
         React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10, alignItems: "center" } },
             React.createElement(PBtn, { sm: true, onClick: analisarIA, disabled: !!load || !itens.length }, "✦ IA: analisar, escolher capa e ajustar"),
             ia && React.createElement(PBtn, { sm: true, variant: "ghost", onClick: aplicarOrdem }, "↕ Aplicar ordem da IA"),
@@ -20543,9 +20641,13 @@ function FotoStudio({ imovel, onClose }) {
         ia && ia.dicas && React.createElement("div", { style: { fontSize: 12, color: C.inkMid, background: C.oliveGhost, borderRadius: 8, padding: "8px 12px", marginBottom: 10 } }, "📷 ", ia.dicas),
         React.createElement("div", { onDragOver: e => e.preventDefault(), onDrop: e => { e.preventDefault(); adicionar(e.dataTransfer.files); }, style: { display: "grid", gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr)", gap: 16 } },
             React.createElement("div", null,
-                item ? React.createElement("div", { onMouseDown: () => setAntes(item.id), onMouseUp: () => setAntes(null), onMouseLeave: () => setAntes(null), onTouchStart: () => setAntes(item.id), onTouchEnd: () => setAntes(null), style: { position: "relative", cursor: "pointer", userSelect: "none" } },
-                    React.createElement("img", { src: antes === item.id ? (/^https?:/.test(item.original) ? "/api/img?url=" + encodeURIComponent(item.original) : item.original) : (prev[item.id] || ""), style: { width: "100%", maxHeight: 460, objectFit: "contain", background: "#111", borderRadius: 10, display: "block" } }),
-                    React.createElement("div", { style: { position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 11, padding: "3px 8px", borderRadius: 4 } }, antes === item.id ? "ANTES" : "DEPOIS · segure para ver o antes"),
+                item ? React.createElement("div", { onPointerDown: e => { e.currentTarget.setPointerCapture(e.pointerId); const r = e.currentTarget.getBoundingClientRect(); setAntes(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))); }, onPointerMove: e => { if (e.buttons !== 1) return; const r = e.currentTarget.getBoundingClientRect(); setAntes(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))); }, style: { position: "relative", cursor: "ew-resize", userSelect: "none", touchAction: "none", background: "#111", borderRadius: 10, overflow: "hidden" } },
+                    React.createElement("img", { src: prev[item.id] || "", draggable: false, style: { width: "100%", maxHeight: 460, objectFit: "contain", display: "block" } }),
+                    React.createElement("img", { src: /^https?:/.test(item.original) ? "/api/img?url=" + encodeURIComponent(item.original) : item.original, draggable: false, style: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", clipPath: `inset(0 ${(1 - (antes == null ? 0.5 : antes)) * 100}% 0 0)` } }),
+                    React.createElement("div", { style: { position: "absolute", top: 0, bottom: 0, left: ((antes == null ? 0.5 : antes) * 100) + "%", width: 2, background: "#fff", boxShadow: "0 0 6px rgba(0,0,0,.5)", transform: "translateX(-1px)", pointerEvents: "none" } },
+                        React.createElement("div", { style: { position: "absolute", top: "50%", left: -15, width: 32, height: 32, marginTop: -16, borderRadius: "50%", background: "#fff", color: "#333", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 1px 6px rgba(0,0,0,.4)" } }, "⇆")),
+                    React.createElement("div", { style: { position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 11, padding: "3px 8px", borderRadius: 4, pointerEvents: "none" } }, "ANTES"),
+                    React.createElement("div", { style: { position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 11, padding: "3px 8px", borderRadius: 4, pointerEvents: "none" } }, "DEPOIS · " + ((FS_ESTILOS[item.aj.estilo] || {}).rotulo || "ajuste manual")),
                     item.ia && React.createElement("div", { style: { position: "absolute", bottom: 8, left: 8, right: 8, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 11, padding: "5px 8px", borderRadius: 4 } }, `${item.ia.ambiente || ""} · nota ${item.ia.nota}/10${item.ia.problemas ? " · " + item.ia.problemas : ""}${item.ia.descartar ? " · IA sugere tirar" : ""}`))
                     : React.createElement("div", { style: { height: 300, border: `1.5px dashed ${C.olivePale}`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: 13 } }, "Arraste as fotos aqui ou use + Adicionar fotos"),
                 React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(92px,1fr))", gap: 6, marginTop: 10 } },
@@ -20556,8 +20658,12 @@ function FotoStudio({ imovel, onClose }) {
                             React.createElement("button", { onClick: () => mover(it.id, 1), style: { border: "none", background: "none", cursor: "pointer", color: C.olive } }, "▶"),
                             React.createElement("button", { onClick: () => { setItens(l => l.filter(x => x.id !== it.id)); if (sel === it.id) setSel(null); }, title: "Tirar", style: { border: "none", background: "none", cursor: "pointer", color: C.danger } }, "✕")))))),
             React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
-                mkLbl("Ajustes da foto selecionada"),
-                sl("auto", "Correção auto", 0, 1), sl("exp", "Exposição", -1, 1), sl("sombras", "Sombras", 0, 1), sl("contraste", "Contraste", 0, 1), sl("temp", "Temperatura", -1, 1), sl("sat", "Vivacidade", 0, 1), sl("nitidez", "Nitidez", 0, 1), sl("rot", "Endireitar (°)", -5, 5, 0.1),
+                mkLbl("Estilo profissional"),
+                React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 } },
+                    Object.keys(FS_ESTILOS).map(k => React.createElement("button", { key: k, onClick: () => estilo(k, false), disabled: !item, style: { fontSize: 11.5, padding: "7px 8px", borderRadius: 7, cursor: "pointer", fontWeight: 600, border: `1.5px solid ${item && item.aj.estilo === k ? C.gold : C.border}`, background: item && item.aj.estilo === k ? "#faf4e3" : C.white, color: C.ink } }, FS_ESTILOS[k].rotulo))),
+                React.createElement("button", { onClick: () => item && estilo(item.aj.estilo && FS_ESTILOS[item.aj.estilo] ? item.aj.estilo : "natural", true), disabled: !item || !!load, style: { fontSize: 11, border: `0.5px solid ${C.border}`, background: C.white, borderRadius: 6, padding: "4px 8px", cursor: "pointer", alignSelf: "flex-start" } }, "Usar este estilo em todas as fotos"),
+                mkLbl("Ajuste fino"),
+                sl("exp", "Exposição", -1, 1), sl("hdr", "HDR natural", 0, 1), sl("sombras", "Sombras", 0, 1), sl("luzes", "Janelas/luzes", 0, 1), sl("contraste", "Contraste", 0, 1), sl("temp", "Temperatura", -1, 1), sl("sat", "Vivacidade", 0, 1), sl("ceu", "Céu e verde", 0, 1), sl("nitidez", "Nitidez", 0, 1), sl("vinheta", "Vinheta", 0, 1), sl("auto", "Correção auto", 0, 1), sl("rot", "Endireitar (°)", -5, 5, 0.1),
                 React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
                     React.createElement("button", { onClick: () => item && setItens(l => l.map(i => Object.assign({}, i, { aj: Object.assign({}, item.aj, { rot: i.aj.rot }) }))) || setTimeout(() => atualizarPrev(itens), 50), style: { fontSize: 11, border: `0.5px solid ${C.border}`, background: C.white, borderRadius: 6, padding: "4px 8px", cursor: "pointer" } }, "Aplicar estes ajustes a todas"),
                     React.createElement("button", { onClick: restaurar, style: { fontSize: 11, border: `0.5px solid ${C.border}`, background: C.white, borderRadius: 6, padding: "4px 8px", cursor: "pointer" } }, "Voltar ao original")),
