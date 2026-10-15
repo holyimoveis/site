@@ -19019,6 +19019,9 @@ function WaConfig({ cfg, setCfg, salvar, salvo }) {
                 React.createElement("input", { type: "checkbox", checked: cfg.retomada !== false, onChange: e => F("retomada", e.target.checked), style: { accentColor: C.olive } }),
                 "Retomar quem parou de responder (1 vez, com algo de valor, dentro da janela de 24h) depois de",
                 React.createElement("input", { type: "number", min: 1, max: 20, value: cfg.retomadaHoras || 4, onChange: e => F("retomadaHoras", +e.target.value || 4), style: { width: 54, padding: "4px 6px", borderRadius: 6, border: `0.5px solid ${C.border}` } }), "horas"),
+            React.createElement("label", { style: { display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12, color: C.inkMid, cursor: "pointer", background: "#faf4e3", border: `0.5px solid ${C.gold}`, borderRadius: 8, padding: "10px 12px", lineHeight: 1.5 } },
+                React.createElement("input", { type: "checkbox", checked: !!cfg.dossieAuto, onChange: e => F("dossieAuto", e.target.checked), style: { accentColor: C.gold, marginTop: 2 } }),
+                React.createElement("span", null, React.createElement("b", null, "📘 Helena envia o dossiê exclusivo automaticamente."), " Lead que chega por formulário (anúncio ou site) com imóvel/empreendimento recebe na hora o dossiê personalizado pelo WhatsApp, com carta escrita a partir das respostas. Na conversa, ela também envia quando o cliente demonstra interesse num item. Um dossiê por item por cliente; você é avisado a cada envio e a cada abertura.")),
             React.createElement(FI, { label: "Tom de voz (como você escreve)", rows: 5, value: cfg.tom, onChange: v => F("tom", v) }),
             React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: -8, lineHeight: 1.5 } }, "Dica: cole aqui 3 ou 4 mensagens reais suas (sem dados de clientes). O assistente imita o jeito de escrever."),
             React.createElement(FI, { label: "Sobre a Holy (o que ele pode contar)", rows: 6, value: cfg.infoHoly, onChange: v => F("infoHoly", v) }),
@@ -20009,12 +20012,13 @@ function InvestidoresPage({ clientes, imoveis }) {
 }
 // 📘 Dossiê premium: página exclusiva do imóvel para este cliente (rastreada)
 function DossieModal({ cliente, imoveis, onClose }) {
-    const disp = imoveis.filter(i => i.status !== "Vendido");
+    const disp = imoveis.filter(i => i.status !== "Vendido").map(i => Object.assign({}, i, { _k: "im" }))
+        .concat((HolyStore.get("empreendimentos", []) || []).filter(e => e && e.publicarSite !== false).map(e => Object.assign({}, e, { _k: "em", tipo: e.tipoLabel || "Empreendimento" })));
     const sugerido = (() => {
         const t = String(cliente.obs || "").toLowerCase();
         const porNome = disp.find(i => i.nome && t.includes(String(i.nome).toLowerCase().slice(0, 25)));
         if (porNome) return porNome.id;
-        const top = disp.map(i => ({ i, s: vMatch(cliente, i, "im").score })).sort((a, b) => b.s - a.s)[0];
+        const top = disp.map(i => ({ i, s: vMatch(cliente, i, i._k).score })).sort((a, b) => b.s - a.s)[0];
         return top ? top.i.id : "";
     })();
     const [imId, setImId] = useState(sugerido);
@@ -20028,7 +20032,7 @@ function DossieModal({ cliente, imoveis, onClose }) {
         if (!im) return;
         setIa(true);
         const p = vPerfil(cliente);
-        const r = await holyIA(`Cliente: ${cliente.nome}. O que sabemos dele (use só o que for útil e verdadeiro): ${JSON.stringify(p)}. Observações: ${String(cliente.obs || "").slice(-600)}\nImóvel: ${im.nome} | ${im.tipo} | ${im.bairro || ""}, ${String(im.cidade || "").replace(/-SC$/i, "")} | ${im.quartos || 0} quartos, ${im.suites || 0} suítes | ${(+im.areaPrivativa || +im.areaUtil) ? "área privativa: " + (+im.areaPrivativa || +im.areaUtil) + " m² (é a única metragem que você pode citar)" : "metragem: não cite nenhuma"} | diferenciais: ${(im.diferenciais || []).concat(im.lazer || []).join(", ")}\nEscreva a carta de abertura do dossiê.`, 500,
+        const r = await holyIA(`Cliente: ${cliente.nome}. O que sabemos dele (use só o que for útil e verdadeiro): ${JSON.stringify(p)}. Observações: ${String(cliente.obs || "").slice(-600)}\n${im._k === "em" ? "Empreendimento (lançamento/na planta): " + im.nome + " | " + (im.tipoLabel || "") + " | " + (im.cidade || "") + " | " + (im.preco || "") + " | destaques: " + (im.destaques || []).map(d => d.n + " " + d.l).join(", ") + " | diferenciais: " + [].concat(im.diferenciais || []).slice(0, 8).join(", ") + "\nIgnore a linha seguinte. " : ""}Imóvel: ${im.nome} | ${im.tipo} | ${im.bairro || ""}, ${String(im.cidade || "").replace(/-SC$/i, "")} | ${im.quartos || 0} quartos, ${im.suites || 0} suítes | ${(+im.areaPrivativa || +im.areaUtil) ? "área privativa: " + (+im.areaPrivativa || +im.areaUtil) + " m² (é a única metragem que você pode citar)" : "metragem: não cite nenhuma"} | diferenciais: ${(im.diferenciais || []).concat(im.lazer || []).join(", ")}\nEscreva a carta de abertura do dossiê.`, 500,
             "Você escreve a carta de abertura de um dossiê exclusivo de imóvel, assinada pelo corretor (Holy Curadoria Imobiliária, alto padrão em SC). 2 parágrafos curtos, no máximo 70 palavras no total. Comece pelo primeiro nome do cliente. Ligue 2 ou 3 características reais do imóvel ao que o cliente busca. Tom pessoal, elegante e calmo, sem exageros, sem 'imperdível', 'perfeito', 'top', sem emojis, sem pressão. Não invente nada que não esteja nos dados. Se citar metragem, use somente a área privativa informada e chame de \"área privativa\"; nunca use área total. Não assine. Responda só com o texto.");
         setIa(false);
         if (r && !r.error && r.text) setIntro(String(r.text).trim()); else alert("A IA não respondeu agora. Escreva à mão ou tente de novo.");
@@ -20037,7 +20041,7 @@ function DossieModal({ cliente, imoveis, onClose }) {
         if (!im) return alert("Escolha o imóvel.");
         setGerando(true);
         try {
-            const r = await holyFetch("/api/crm", { method: "POST", body: JSON.stringify({ acao: "dossie", clienteId: cliente.id, imovelId: im.id, intro }) });
+            const r = await holyFetch("/api/crm", { method: "POST", body: JSON.stringify({ acao: "dossie", clienteId: cliente.id, imovelId: im.id, kind: im._k, intro }) });
             const j = await r.json(); if (!j.success) throw new Error(j.error || "erro");
             setRes(j);
         } catch (e) { alert("Não foi possível gerar o dossiê: " + e.message); }
@@ -20053,9 +20057,11 @@ function DossieModal({ cliente, imoveis, onClose }) {
     return React.createElement(Modal, { onClose, width: 620 },
         React.createElement(MHead, { title: "📘 Dossiê exclusivo", sub: "Página premium do imóvel, personalizada para " + (nome1 || "o cliente") + ". Você é avisado quando ele abrir.", onClose }),
         !res && React.createElement("div", null,
-            React.createElement("label", { style: { fontSize: 12, color: C.muted } }, "Imóvel",
+            React.createElement("label", { style: { fontSize: 12, color: C.muted } }, "Imóvel ou empreendimento",
                 React.createElement("select", { style: Object.assign({}, mkInput, { marginTop: 4 }), value: imId, onChange: e => setImId(e.target.value) },
-                    React.createElement("option", { value: "" }, "Escolha…"), disp.map(i => React.createElement("option", { key: i.id, value: i.id }, i.nome + (i.valor ? " · " + fmt(i.valor) : ""))))),
+                    React.createElement("option", { value: "" }, "Escolha…"),
+                    React.createElement("optgroup", { label: "Imóveis" }, disp.filter(i => i._k === "im").map(i => React.createElement("option", { key: i.id, value: i.id }, i.nome + (i.valor ? " · " + fmt(i.valor) : "")))),
+                    disp.some(i => i._k === "em") && React.createElement("optgroup", { label: "Empreendimentos" }, disp.filter(i => i._k === "em").map(i => React.createElement("option", { key: i.id, value: i.id }, i.nome + (i.preco ? " · " + i.preco : "")))))),
             React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, marginBottom: 4 } },
                 React.createElement("span", { style: { fontSize: 12, color: C.muted } }, "Carta de abertura (aparece no topo, assinada por você)"),
                 React.createElement(PBtn, { sm: true, variant: "ghost", color: C.gold, disabled: ia || !im, onClick: escreverIA }, ia ? "Escrevendo…" : "✨ Escrever com IA")),
@@ -22276,7 +22282,7 @@ function App() {
                     page === "voz" && React.createElement(VozPage, { onAddIm: addIm, onAddCli: addCli, setPage: setPage }),
                     page === "config" && (holyPode("configCompleta") ? React.createElement(React.Fragment, null,
                     React.createElement("h2", { style: { margin: 0, fontSize: 14, fontWeight: 700, color: "#1a1c18", marginBottom: 20 } }, "\u2699\uFE0F Configura\u00E7\u00F5es"),
-                    React.createElement(ConfigPage), holyPerfil() === "admin" && React.createElement(BackupCard)) : React.createElement(MinhaConta)),
+                    React.createElement(ConfigPage), holyPerfil() === "admin" && React.createElement(SimuladorCard), holyPerfil() === "admin" && React.createElement(BackupCard)) : React.createElement(MinhaConta)),
                     page === "equipe" && holyPode("equipe") && React.createElement(EquipePage, { clientes: clientes, timeline: timeline, onEditCli: editCli }),
                     page === "usuarios" && holyPode("usuarios") && React.createElement(UsuariosPage),
                     page === "timeline" && React.createElement(React.Fragment, null,
@@ -22285,6 +22291,41 @@ function App() {
 }
 
 
+
+// 🧮 Taxa do simulador de financiamento do dossiê
+function SimuladorCard() {
+    const [cfg, setCfg] = usePS("site_config", {});
+    const sim = (cfg && cfg.simulador) || {};
+    const [ref, setRef] = useState(null);
+    const [taxa, setTaxa] = useState(sim.taxa ? String(sim.taxa).replace(".", ",") : "");
+    const [banco, setBanco] = useState(sim.banco || "CAIXA");
+    const [msg, setMsg] = useState("");
+    useEffect(() => { holyFetch("/api/crm?acao=taxaRef").then(r => r.json()).then(j => setRef(j.success ? j : { erro: j.error })).catch(() => setRef({ erro: "Sem conexão" })); }, []);
+    const salvar = (modo) => {
+        const t = parseFloat(String(taxa).replace(",", "."));
+        if (modo === "manual" && !(t > 3 && t < 30)) { setMsg("⚠ Informe uma taxa entre 3% e 30% ao ano."); return; }
+        setCfg(Object.assign({}, cfg || {}, { simulador: modo === "manual" ? { modo, taxa: t, banco: banco.trim(), data: new Date().toISOString().slice(0, 10) } : { modo: "auto" } }));
+        setMsg(modo === "manual" ? "✓ Taxa manual salva. Os dossiês passam a usar " + String(t).replace(".", ",") + "% ao ano." : "✓ Voltou para a taxa automática da CAIXA (Banco Central).");
+    };
+    const modo = sim.modo === "manual" ? "manual" : "auto";
+    const pill = { fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 4, background: C.oliveGhost, color: C.olive };
+    return React.createElement("div", { style: { marginTop: 24, background: "#fff", border: "1px solid " + C.border, borderRadius: 10, padding: 18 } },
+        React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#1a1c18" } }, "🧮 Simulador de financiamento (dossiê)"),
+        React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 3, lineHeight: 1.5 } }, "Taxa de juros usada como referência na simulação que o cliente vê no dossiê. A página sempre mostra o aviso de que é uma estimativa sem valor de proposta."),
+        React.createElement("div", { style: { marginTop: 12, fontSize: 12.5, lineHeight: 1.6 } },
+            React.createElement("span", { style: pill }, modo === "manual" ? "Em uso: taxa manual" : "Em uso: automática"), " ",
+            !ref ? "Consultando…" : ref.erro ? React.createElement("span", { style: { color: C.danger } }, "⚠ " + ref.erro) : React.createElement("span", null, ref.atual.texto),
+            ref && ref.auto && modo === "manual" && React.createElement("div", { style: { color: C.muted, fontSize: 11.5 } }, "Automática hoje: " + ref.auto.texto)),
+        ref && ref.auto && ref.auto.fonte === "padrao" && React.createElement("div", { style: { fontSize: 11.5, color: C.warn, marginTop: 4 } }, "⚠ Não consegui ler a taxa do Banco Central agora; usando 11,5% até a próxima tentativa (o sistema tenta de novo sozinho)."),
+        React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginTop: 14 } },
+            React.createElement("label", { style: { fontSize: 11, color: C.muted, display: "flex", flexDirection: "column", gap: 3 } }, "Taxa ao ano (%)",
+                React.createElement("input", { value: taxa, onChange: e => setTaxa(e.target.value), placeholder: "ex.: 11,49", inputMode: "decimal", style: Object.assign({}, mkInput, { width: 110 }) })),
+            React.createElement("label", { style: { fontSize: 11, color: C.muted, display: "flex", flexDirection: "column", gap: 3 } }, "Banco de referência",
+                React.createElement("input", { value: banco, onChange: e => setBanco(e.target.value), style: Object.assign({}, mkInput, { width: 140 }) })),
+            React.createElement("button", { onClick: () => salvar("manual"), style: { background: C.gold, color: "#fff", border: "none", borderRadius: 6, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" } }, "Usar esta taxa"),
+            modo === "manual" && React.createElement("button", { onClick: () => salvar("auto"), style: { background: "#fff", color: C.olive, border: "1px solid " + C.border, borderRadius: 6, padding: "9px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" } }, "Voltar para automática (CAIXA)")),
+        msg && React.createElement("div", { style: { fontSize: 12, marginTop: 10, color: msg.startsWith("✓") ? C.success : C.danger } }, msg));
+}
 
 // 🛡️ Backup diário do banco (cópia fora do Neon, em armazenamento privado)
 function BackupCard() {

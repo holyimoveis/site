@@ -28,6 +28,7 @@ export const PADRAO_CONFIG = {
   retorno: '',
   semHorario: true,
   avisoNumero: '',
+  dossieAuto: false,   // 📘 Helena envia o dossiê exclusivo sozinha (formulário e conversa)
   retomada: true,      // Helena retoma 1 vez quem parou de responder (dentro da janela de 24h)
   retomadaHoras: 4,    // depois de quantas horas sem resposta
 };
@@ -225,6 +226,8 @@ const FERRAMENTA = {
       etapa_funil: { type: 'string', enum: ETAPAS },
       transferir: { type: 'boolean', description: 'true para passar a conversa ao Édipo agora.' },
       motivo_transferencia: { type: 'string', enum: Object.keys(MOTIVOS) },
+      dossie_item: { type: 'string', description: 'Para enviar o DOSSIÊ EXCLUSIVO: o id do imóvel ou empreendimento do catálogo (o que vem depois de "#imovel-" ou "#empreendimento-" no link). Use só quando o cliente demonstrou interesse concreto nesse item (pediu detalhes, fotos, valores, condições ou disse que gostou) e você já sabe o primeiro nome dele. Vazio nos outros casos.' },
+      dossie_carta: { type: 'string', description: 'Se usar dossie_item: carta de abertura do dossiê, assinada pelo corretor, 2 parágrafos curtos (até 70 palavras), começando pelo primeiro nome do cliente e ligando 2 ou 3 características reais do item ao que ele contou. Só cite metragem se for área privativa. Sem preço nem promessas.' },
       resumo: { type: 'string', description: 'Resumo de 1 a 3 frases para o corretor: quem é, o que busca, como pretende pagar, quem decide, o que falta e o próximo passo sugerido.' },
     },
     required: ['resposta', 'temperatura', 'etapa_funil', 'maturidade', 'transferir', 'resumo'],
@@ -307,7 +310,7 @@ Ao transferir, avise com naturalidade que o Édipo vai continuar o atendimento p
 
 FORMATO
 Mensagens curtas de WhatsApp (até 4 ou 5 linhas). Sem títulos, tabelas ou markdown; pode usar *negrito* do WhatsApp com moderação. Links sempre completos.
-Use SEMPRE a ferramenta "responder".${cfg._retomada ? `
+${cfg.dossieAuto ? 'DOSSIÊ EXCLUSIVO: quando o cliente demonstrar interesse concreto num imóvel ou empreendimento do catálogo e você souber o nome dele, preencha dossie_item e dossie_carta. O sistema cria uma página exclusiva para ele e anexa o link ao fim da sua resposta; na resposta, diga em uma frase curta que preparou um material exclusivo (fotos, localização, simulação) e NÃO escreva link. Não envie dossiê do mesmo item duas vezes.\n' : ''}Use SEMPRE a ferramenta "responder".${cfg._retomada ? `
 
 RETOMADA (esta mensagem)
 O cliente parou de responder há algumas horas. Escreva UMA única mensagem curta de retomada, leve e sem pressão, que traga algo de valor ligado ao que ele contou: um imóvel ou empreendimento do catálogo compatível (com o link), uma informação útil sobre o bairro ou a condição, ou uma pergunta simples que facilite a resposta. Não repita o que já foi dito, não cobre resposta, não diga que ele sumiu. Se não houver nada de valor para oferecer, faça só uma pergunta curta e gentil. transferir = false.` : ''}${CORTE}AGORA: ${hoje}, ${hora} (horário de Brasília).${cfg._ficha ? `
@@ -467,9 +470,26 @@ export async function processarConversa(waId, site, nomePerfil) {
   if (novo[0].id !== meu) return;
   const pausa = (await sql.query('SELECT pausado FROM wa_conversas WHERE wa_id = $1', [waId]))[0];
   if (pausa && pausa.pausado) return; // você assumiu enquanto a IA pensava
+  let avisoDossie = null;
 
+  if (cfg.dossieAuto && out.dossie_item) {
+    try {
+      const { acharItem, dossieExistente, criarDossie } = await import('./_dossie.js');
+      const ach = await acharItem(String(out.dossie_item).replace(/^#?(imovel|empreendimento)-/, ''));
+      const nomeCli = String(out.nome_cliente || nomePerfil || conv.nome || '').trim();
+      if (ach) {
+        let d = await dossieExistente(conv.cliente_id, ach.item.id, nomeCli);
+        if (!d) {
+          d = await criarDossie({ clienteId: conv.cliente_id || null, imovelId: ach.item.id, kind: ach.kind, intro: out.dossie_carta || '', autor: process.env.CORRETOR_NOME || 'Édipo Junior', nome: nomeCli, perfil: out.perfil || {} });
+          avisoDossie = { nome: nomeCli, item: ach.item.nome, url: d.url };
+        }
+        out.resposta = String(out.resposta || '').trim() + '\n\n' + d.url;
+      }
+    } catch (e) { console.error('[dossie] Helena', e.message); }
+  }
   const wamid = await enviarTexto(waId, out.resposta);
   await salvarMensagem(waId, 'assistente', out.resposta, wamid);
+  if (avisoDossie) { try { const { enviarAviso } = await import('./_avisos.js'); await enviarAviso(`📘 A Helena enviou o dossiê de *${avisoDossie.item}* para *${avisoDossie.nome || 'um cliente'}*.\n${avisoDossie.url}?previa=1\nVocê será avisado quando ele abrir.`); } catch (e) { /* aviso não é crítico */ } }
   if (out.transferir) {
     await sql.query('UPDATE wa_conversas SET pausado = true, aguardando = true, motivo = $2 WHERE wa_id = $1',
       [waId, MOTIVOS[out.motivo_transferencia] || MOTIVOS.outro]);
@@ -511,7 +531,8 @@ export async function criarModeloAviso() {
   const h = { 'X-API-Key': process.env.KAPSO_API_KEY, 'Content-Type': 'application/json' };
   const lst = await fetch(`${KAPSO_META}/${waba}/message_templates?name=${MODELO_AVISO}`, { headers: h }).then((r) => r.json()).catch(() => ({}));
   const ja = (Array.isArray(lst.data) ? lst.data : []).find((t) => t.name === MODELO_AVISO);
-  if (ja) return { status: ja.status, existente: true };
+  const dossie = await criarModeloDossie(waba, h).catch((e) => ({ erro: e.message }));
+  if (ja) return { status: ja.status, existente: true, dossie };
   const r = await fetch(`${KAPSO_META}/${waba}/message_templates`, { method: 'POST', headers: h, body: JSON.stringify({
     name: MODELO_AVISO, category: 'UTILITY', language: 'pt_BR',
     components: [{ type: 'BODY', text: 'Novo atendimento passado pela Helena: {{1}}, WhatsApp {{2}}. Motivo: {{3}}. Resumo: {{4}}. Responda pelo WhatsApp da Holy.',
@@ -519,6 +540,43 @@ export async function criarModeloAviso() {
   }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error('A Meta recusou o modelo: ' + ((j.error && (j.error.message || j.error)) || JSON.stringify(j).slice(0, 200)));
+  return { status: j.status || 'PENDING', existente: false, dossie };
+}
+
+// ── Dossiê automático: 1ª mensagem para quem preencheu formulário (fora da janela de 24h exige modelo aprovado) ──
+export const MODELO_DOSSIE = 'dossie_lead';
+export async function enviarDossieWhatsApp(telefone, nome1, itemNome, code, url) {
+  let d = String(telefone || '').replace(/\D/g, ''); if (d.length <= 11) d = '55' + d;
+  if (d.length < 12) throw new Error('telefone inválido');
+  const texto = `Olá${nome1 ? ', ' + nome1 : ''}! Aqui é a Helena, da Holy Curadoria Imobiliária. Recebemos seu interesse no ${itemNome} e preparei um material exclusivo para você, com fotos, localização e simulação de pagamento: ${url}\n\nQualquer dúvida, é só responder por aqui.`;
+  let j, via = 'modelo';
+  try {
+    j = await postar({ to: d, type: 'template', template: { name: MODELO_DOSSIE, language: { code: 'pt_BR' }, components: [
+      { type: 'body', parameters: [{ type: 'text', text: limpar(nome1 || 'tudo bem', 40) }, { type: 'text', text: limpar(itemNome, 80) }] },
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] }] } });
+  } catch (e) {
+    via = 'texto'; // modelo ainda não aprovado: só é entregue se o cliente falou com a Holy nas últimas 24h
+    j = await postar({ to: d, type: 'text', text: { body: texto, preview_url: true } });
+  }
+  const wamid = j && j.messages && j.messages[0] && j.messages[0].id;
+  await salvarMensagem(d, 'assistente', texto, wamid || null);
+  return { waId: d, via };
+}
+async function criarModeloDossie(waba, h) {
+  const lst = await fetch(`${KAPSO_META}/${waba}/message_templates?name=${MODELO_DOSSIE}`, { headers: h }).then((r) => r.json()).catch(() => ({}));
+  const ja = (Array.isArray(lst.data) ? lst.data : []).find((t) => t.name === MODELO_DOSSIE);
+  if (ja) return { status: ja.status, existente: true };
+  const base = (process.env.SITE_URL || 'https://www.holyimoveis.com').replace(/\/$/, '');
+  const r = await fetch(`${KAPSO_META}/${waba}/message_templates`, { method: 'POST', headers: h, body: JSON.stringify({
+    name: MODELO_DOSSIE, category: 'MARKETING', language: 'pt_BR',
+    components: [
+      { type: 'BODY', text: 'Olá, {{1}}! Aqui é a Helena, da Holy Curadoria Imobiliária. Recebemos seu interesse no {{2}} e preparei um material exclusivo para você, com fotos, localização e simulação de pagamento. Qualquer dúvida, é só responder esta mensagem.',
+        example: { body_text: [['Marcos', 'Maison Ladurée']] } },
+      { type: 'BUTTONS', buttons: [{ type: 'URL', text: 'Ver meu dossiê', url: base + '/d/{{1}}', example: [base + '/d/Ab12Cd34Ef'] }] },
+    ],
+  }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return { erro: 'A Meta recusou o modelo do dossiê: ' + ((j.error && (j.error.message || j.error)) || JSON.stringify(j).slice(0, 200)) };
   return { status: j.status || 'PENDING', existente: false };
 }
 

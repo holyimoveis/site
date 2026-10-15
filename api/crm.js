@@ -14,7 +14,7 @@ import { sincronizarLeads } from './_sync.js';
 import { enviarAviso, avisoConfigurado } from './_avisos.js';
 import { linkContato } from './_contato.js';
 import { personalizarLote } from './_investidores.js';
-import { criarDossie, listarDossies, localizarEndereco } from './_dossie.js';
+import { criarDossie, listarDossies, localizarEndereco, taxaReferencia } from './_dossie.js';
 import { fazerBackup, listarBackups, baixarBackup, backupConfigurado } from './_backup.js';
 import { statusCliente, iniciarSequencia, pausarSequencia, emailTeste, emailConfigurado } from './_email.js';
 import { esquemaRastreio } from './leads.js'; // /api/usuarios é atendido aqui (limite de 12 funções do plano Hobby da Vercel)
@@ -126,6 +126,7 @@ export default async function handler(req, res) {
         res.setHeader('Content-Disposition', 'attachment; filename="' + String(q.p).split('/').pop() + '"');
         return res.status(200).send(buf);
       }
+      if (q.acao === 'taxaRef') return ok(res, { auto: await taxaReferencia(true), atual: await taxaReferencia() }); // 🧮 taxa do simulador
       if (q.acao === 'geocode') { // 📍 endereço → coordenadas (cadastro de imóvel)
         return ok(res, await localizarEndereco({ rua: q.rua, numero: q.numero, bairro: q.bairro, cidade: q.cidade, cep: q.cep }));
       }
@@ -225,7 +226,7 @@ export default async function handler(req, res) {
       if (b.acao === 'dossie') { // 📘 dossiê exclusivo do imóvel para um cliente
         if (!b.imovelId) return err(res, 400, 'Escolha o imóvel.');
         if (b.clienteId && s.perfil === 'corretor') { const c = arr((await ler('clientes')).data).find((x) => x.id === b.clienteId); if (!c || !ehDoUsuario(c, s.uid)) return err(res, 403, 'Cliente de outro corretor.'); }
-        const d = await criarDossie({ clienteId: b.clienteId || null, imovelId: String(b.imovelId), intro: b.intro, autor: s.nome || '' });
+        const d = await criarDossie({ clienteId: b.clienteId || null, imovelId: String(b.imovelId), kind: b.kind === 'em' ? 'em' : 'im', intro: b.intro, autor: s.nome || '' });
         return ok(res, d);
       }
       if (b.acao === 'link') {

@@ -4,6 +4,7 @@
 import crypto from 'node:crypto';
 import { sql, ensureSchema, atualizarDoc } from './_lib.js';
 import { paraSite } from './imoveis.js';
+import { paraSite as empSite } from './empreendimentos.js';
 import { enviarAviso, avisoConfigurado } from './_avisos.js';
 
 const WA = '5549988454873';
@@ -32,6 +33,7 @@ export async function esquemaDossie() {
       code TEXT PRIMARY KEY, cliente_id TEXT, cliente TEXT, item_id TEXT NOT NULL, item_nome TEXT,
       intro TEXT, autor TEXT, perfil JSONB, aberturas INT NOT NULL DEFAULT 0, ultima TIMESTAMPTZ,
       eventos JSONB NOT NULL DEFAULT '{}'::jsonb, criado_em TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  await sql.query("ALTER TABLE dossies ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'im'");
   await sql.query(`CREATE TABLE IF NOT EXISTS geo_cache (chave TEXT PRIMARY KEY, valor JSONB, atualizado TIMESTAMPTZ NOT NULL DEFAULT now())`);
   pronto = true;
 }
@@ -244,18 +246,110 @@ export async function geoImovel(im) {
   return valor;
 }
 
-// ── Criar (CRM) ──
-export async function criarDossie({ clienteId, imovelId, intro, autor }) {
+// 🧮 Taxa de referência do simulador: manual (CRM › Configurações) ou automática — taxa média que a CAIXA
+// cobrou no financiamento imobiliário (pessoa física, taxas de mercado, pós-fixado em TR), publicada pelo Banco Central.
+const TAXA_PADRAO = 11.5;
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const mesAno = (d) => { const t = new Date(String(d || '').slice(0, 10) + 'T12:00:00'); return isNaN(t) ? '' : MESES[t.getMonth()] + '/' + t.getFullYear(); };
+async function taxaCaixaBCB() {
+  const base = 'https://olinda.bcb.gov.br/olinda/servico/taxaJuros/versao/v2/odata/TaxasJurosDiariaPorInicioPeriodo';
+  const filtros = ["cnpj8 eq '00360305'", "contains(InstituicaoFinanceira,'CAIXA ECON')"];
+  for (const f of filtros) {
+    try {
+      const u = base + '?$format=json&$top=400&$orderby=' + encodeURIComponent('InicioPeriodo desc') + '&$filter=' + encodeURIComponent(f);
+      const r = await fetch(u, { headers: UA, signal: AbortSignal.timeout(12000) });
+      if (!r.ok) continue;
+      const lin = ((await r.json()) || {}).value || [];
+      const pf = lin.filter((x) => /f[ií]sica/i.test(x.Segmento || 'física') && /imobili/i.test(x.Modalidade || '') && +x.TaxaJurosAoAno > 3 && +x.TaxaJurosAoAno < 30);
+      const pref = pf.filter((x) => /mercado/i.test(x.Modalidade) && /\bTR\b/.test(x.Modalidade));
+      const lista = (pref.length ? pref : pf.filter((x) => /mercado/i.test(x.Modalidade)).length ? pf.filter((x) => /mercado/i.test(x.Modalidade)) : pf)
+        .sort((a, b) => String(b.InicioPeriodo || '').localeCompare(String(a.InicioPeriodo || '')));
+      if (lista[0]) return { taxa: Math.round(+lista[0].TaxaJurosAoAno * 100) / 100, periodo: lista[0].FimPeriodo || lista[0].InicioPeriodo, modalidade: lista[0].Modalidade };
+    } catch (e) { console.error('[taxa] bcb', e.message); }
+  }
+  return null;
+}
+export async function taxaReferencia(ignorarManual) {
   await esquemaDossie();
-  const im = (await doc('imoveis')).find((x) => x && String(x.id) === String(imovelId));
-  if (!im) throw new Error('Imóvel não encontrado.');
+  const sc = ((await sql.query("SELECT valor FROM crm_docs WHERE chave = 'site_config'"))[0] || {}).valor || {};
+  const cfg = sc.simulador || {};
+  if (!ignorarManual && cfg.modo === 'manual' && +cfg.taxa > 0) return { taxa: +cfg.taxa, fonte: 'manual', texto: `${String(+cfg.taxa).replace('.', ',')}% ao ano + TR${cfg.banco ? ' · referência ' + cfg.banco : ''}${cfg.data ? ' (atualizada em ' + mesAno(cfg.data) + ')' : ''}` };
+  const c = (await sql.query("SELECT valor FROM geo_cache WHERE chave = $1 AND atualizado > now() - interval '7 days'", ['taxa:caixa']))[0];
+  let v = c && c.valor;
+  if (!v) {
+    v = await taxaCaixaBCB().catch(() => null);
+    if (v) await sql.query('INSERT INTO geo_cache (chave, valor) VALUES ($1, $2) ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado = now()', ['taxa:caixa', JSON.stringify(v)]);
+    else { const velho = (await sql.query('SELECT valor FROM geo_cache WHERE chave = $1', ['taxa:caixa']))[0]; v = velho && velho.valor; }
+  }
+  if (v && v.taxa) return { taxa: v.taxa, fonte: 'caixa', texto: `${String(v.taxa).replace('.', ',')}% ao ano + TR · taxa média da CAIXA no financiamento imobiliário${v.periodo ? ' (Banco Central, ' + mesAno(v.periodo) + ')' : ' (Banco Central)'}` };
+  return { taxa: TAXA_PADRAO, fonte: 'padrao', texto: `${String(TAXA_PADRAO).replace('.', ',')}% ao ano + TR · média de mercado` };
+}
+
+// ── Criar (CRM) ──
+// Empreendimento (CRM › Empreendimentos) no mesmo formato que a página do dossiê usa para imóveis
+function empComoItem(bruto) {
+  const e = empSite(bruto);
+  const end = String(e.endereco || '').split('·').map((x) => x.trim()).filter(Boolean);
+  return {
+    it: { id: e.id, nome: e.nome, valor: valorTexto(e.preco), preco: e.preco, cidade: e.cidade, bairro: end.length > 1 ? end[end.length - 2] : '', descricao: e.descricao,
+      fotos: e.fotos.concat(e.lazerFotos), diferenciais: e.diferenciais, lazer: e.lazer, plantas: e.plantas, destaques: e.destaques, ficha: e.ficha, finalidade: 'Venda', status: e.status, tipoLabel: e.tipoLabel },
+    geoIn: { id: e.id, mapa: Array.isArray(e.coords) ? e.coords.join(', ') : '', rua: end[0] || '', bairro: end.length > 1 ? end[end.length - 2] : '', cidade: e.cidade },
+  };
+}
+// Encontra imóvel ou empreendimento pelo id ou pelo nome (leads de anúncio chegam só com o nome)
+export async function acharItem(ref) {
+  const k = String(ref || '').trim(); if (!k) return null;
+  const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const ims = (await doc('imoveis')).filter((x) => x && x.status !== 'Vendido');
+  const ems = (await doc('empreendimentos')).filter((x) => x && x.publicarSite !== false);
+  let x = ims.find((i) => String(i.id) === k); if (x) return { kind: 'im', item: x };
+  x = ems.find((i) => String(i.id) === k); if (x) return { kind: 'em', item: x };
+  const n = norm(k); if (n.length < 4) return null;
+  x = ims.find((i) => norm(i.nome) === n) || ems.find((i) => norm(i.nome) === n);
+  if (!x) x = ims.find((i) => norm(i.nome) && (n.includes(norm(i.nome)) || norm(i.nome).includes(n))) || ems.find((i) => norm(i.nome) && (n.includes(norm(i.nome)) || norm(i.nome).includes(n)));
+  return x ? { kind: ims.includes(x) ? 'im' : 'em', item: x } : null;
+}
+export async function dossieExistente(clienteId, itemId, nome) {
+  await esquemaDossie();
+  const r = (await sql.query("SELECT code FROM dossies WHERE item_id = $2 AND (cliente_id = $1 OR ($3 <> '' AND cliente = $3)) ORDER BY criado_em DESC LIMIT 1", [String(clienteId || '-'), String(itemId), String(nome || '').trim()]))[0];
+  return r ? { code: r.code, url: SITE() + '/d/' + r.code } : null;
+}
+
+// Carta de abertura escrita pela IA a partir das respostas do formulário (fallback: texto padrão)
+export async function cartaDossie({ nome, kind, item, respostas }) {
+  const key = process.env.ANTHROPIC_API_KEY; if (!key) return '';
+  const n1 = primeiro(nome);
+  const desc = kind === 'em'
+    ? (() => { const e = empSite(item); return `Empreendimento na planta: ${e.nome} | ${e.cidade} | ${e.tipoLabel} | ${e.preco} | destaques: ${e.destaques.map((d) => d.n + ' ' + d.l).join(', ')} | diferenciais: ${e.diferenciais.slice(0, 8).join(', ')} | lazer: ${e.lazer.slice(0, 8).join(', ')}`; })()
+    : (() => { const i = paraSite(item); return `Imóvel: ${i.nome} | ${i.tipo} | ${[i.bairro, i.cidade].filter(Boolean).join(', ')} | ${i.quartos || 0} quartos, ${i.suites || 0} suítes | ${i.areaPrivativa ? 'área privativa ' + i.areaPrivativa + ' m² (única metragem que pode citar)' : 'não cite metragem'} | diferenciais: ${(i.diferenciais || []).concat(i.lazer || []).slice(0, 10).join(', ')}`; })();
+  const prompt = `Você escreve a carta de abertura de um dossiê exclusivo, assinada pelo corretor Édipo Junior (Holy Curadoria Imobiliária, alto padrão em SC).
+Cliente: ${nome || 'cliente'}. Respostas que ele deu no formulário do anúncio: ${String(respostas || '').slice(0, 600) || 'nenhuma'}.
+${desc}
+Regras: 2 parágrafos curtos, no máximo 70 palavras no total. Comece com "${n1 || 'Olá'}," e ligue 2 ou 3 características REAIS do item ao que o cliente respondeu (objetivo, prazo, forma de pagamento). Tom pessoal, elegante e direto, sem exageros, sem preço, sem prometer condições, sem emoji. Não invente nada que não esteja acima. Responda só com a carta.`;
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5', max_tokens: 400, messages: [{ role: 'user', content: prompt }] }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const d = await r.json();
+    return (d.content || []).map((c) => c.text || '').join('').trim().slice(0, 1200);
+  } catch (e) { return ''; }
+}
+
+export async function criarDossie({ clienteId, imovelId, intro, autor, kind, nome, perfil: perfilExtra }) {
+  await esquemaDossie();
+  const ach = kind === 'em' ? { kind: 'em', item: (await doc('empreendimentos')).find((x) => x && String(x.id) === String(imovelId)) }
+    : { kind: 'im', item: (await doc('imoveis')).find((x) => x && String(x.id) === String(imovelId)) };
+  const im = ach.item;
+  if (!im) throw new Error(kind === 'em' ? 'Empreendimento não encontrado.' : 'Imóvel não encontrado.');
   const cli = clienteId ? (await doc('clientes')).find((x) => x && x.id === clienteId) : null;
-  const p = (cli && cli.perfilWhatsApp) || {};
+  const p = Object.assign({}, perfilExtra || {}, (cli && cli.perfilWhatsApp) || {});
   const perfil = { pagamento: p.pagamento || '', entrada: p.entrada || '', financiamento: p.financiamento || '', permuta: p.imovel_permuta || (/permuta/i.test(String(p.pagamento || '')) ? 'sim' : '') };
   const code = crypto.randomBytes(8).toString('base64url').replace(/[-_]/g, 'x').slice(0, 10);
-  await sql.query('INSERT INTO dossies (code, cliente_id, cliente, item_id, item_nome, intro, autor, perfil) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-    [code, clienteId || null, String((cli && cli.nome) || '').slice(0, 120), String(im.id), String(im.nome || '').slice(0, 160), String(intro || '').slice(0, 1500), String(autor || '').slice(0, 80), JSON.stringify(perfil)]);
-  await geoImovel(im).catch((e) => console.error('[dossie] geo', e.message)); // já deixa o mapa pronto para a 1ª abertura
+  await sql.query('INSERT INTO dossies (code, cliente_id, cliente, item_id, item_nome, intro, autor, perfil, kind) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+    [code, clienteId || null, String((cli && cli.nome) || nome || '').slice(0, 120), String(im.id), String(im.nome || '').slice(0, 160), String(intro || '').slice(0, 1500), String(autor || '').slice(0, 80), JSON.stringify(perfil), ach.kind]);
+  await geoImovel(ach.kind === 'em' ? empComoItem(im).geoIn : im).catch((e) => console.error('[dossie] geo', e.message)); // já deixa o mapa pronto para a 1ª abertura
   return { code, url: SITE() + '/d/' + code };
 }
 export async function listarDossies(clienteId) {
@@ -308,9 +402,10 @@ export async function paginaDossie(code, req) {
   await esquemaDossie();
   const r = (await sql.query('SELECT * FROM dossies WHERE code = $1', [code]))[0];
   if (!r) return null;
-  const bruto = (await doc('imoveis')).find((x) => x && String(x.id) === String(r.item_id));
+  const ehEmp = r.kind === 'em';
+  const bruto = (await doc(ehEmp ? 'empreendimentos' : 'imoveis')).find((x) => x && String(x.id) === String(r.item_id));
   const nome1 = primeiro(r.cliente);
-  if (!bruto || bruto.status === 'Vendido') {
+  if (!bruto || bruto.status === 'Vendido' || (ehEmp && bruto.publicarSite === false)) {
     return pagina(`<div class="fim"><img src="/assets/holy-logo-escuro.svg" alt="Holy"><h1>${nome1 ? esc(nome1) + ', este' : 'Este'} imóvel não está mais disponível</h1><p>Mas a curadoria continua: me chame que eu separo opções parecidas para você.</p><a class="cta" href="https://wa.me/${WA}?text=${encodeURIComponent('Olá! ' + (nome1 ? 'Aqui é ' + nome1 + '. ' : '') + 'O dossiê de ' + (r.item_nome || 'um imóvel') + ' não está mais disponível. Pode me mandar opções parecidas?')}">Falar no WhatsApp</a></div>`, 'Holy Curadoria Imobiliária', '');
   }
   // abertura (robôs que geram a prévia do link não contam)
@@ -320,8 +415,9 @@ export async function paginaDossie(code, req) {
     await registrar(r, 'abriu', `📘 Abriu o dossiê de ${r.item_nome}` + (n > 1 ? ` (${n}ª vez)` : ''), 6,
       `📘 *${r.cliente || 'Um cliente'}* abriu agora o dossiê de *${r.item_nome}*` + (n > 1 ? ` (${n}ª vez)` : '') + '. Bom momento para chamar!').catch((e) => console.error('[dossie] abertura', e.message));
   }
-  const it = paraSite(bruto);
-  const geo = await geoImovel(bruto).catch(() => null);
+  const em = ehEmp ? empComoItem(bruto) : null;
+  const it = ehEmp ? em.it : paraSite(bruto);
+  const geo = await geoImovel(ehEmp ? em.geoIn : bruto).catch(() => null);
   const pf = r.perfil || {};
   // Nome de quem assina: nomes genéricos de login (Administrador, admin, Sistema…) viram o corretor responsável
   const autorBruto = String(r.autor || '').trim();
@@ -331,7 +427,7 @@ export async function paginaDossie(code, req) {
   const priv = it.areaPrivativa; // só a área privativa (a área total não aparece como se fosse do apartamento)
   const m2 = it.valor && priv ? Math.round(it.valor / priv) : 0;
   const local = [it.bairro, it.cidade].filter(Boolean).join(', ');
-  const specs = [[priv, 'm² privativos'], [it.quartos, it.quartos == 1 ? 'quarto' : 'quartos'], [it.suites, it.suites == 1 ? 'suíte' : 'suítes'], [it.vagas, it.vagas == 1 ? 'vaga' : 'vagas'], [it.banheiros, 'banheiros']].filter((s) => +s[0]);
+  const specs = ehEmp ? (it.destaques || []).slice(0, 5).map((d) => [d.n, d.l]) : [[priv, 'm² privativos'], [it.quartos, it.quartos == 1 ? 'quarto' : 'quartos'], [it.suites, it.suites == 1 ? 'suíte' : 'suítes'], [it.vagas, it.vagas == 1 ? 'vaga' : 'vagas'], [it.banheiros, 'banheiros']].filter((s) => +s[0]);
   const tags = (it.diferenciais || []).concat(it.lazer || []).slice(0, 30);
   const avista = /vista/i.test(pf.pagamento || '') && !/financ/i.test(pf.pagamento || '');
   const txtVisita = `Olá, ${primeiro(autor)}! ${nome1 ? 'Aqui é ' + nome1 + '. ' : ''}Vi o dossiê de ${it.nome} e gostaria de agendar uma visita.`;
@@ -340,7 +436,8 @@ export async function paginaDossie(code, req) {
   const perto = (geo && geo.perto) || [];
   const dist = (d) => (d < 1000 ? Math.round(d / 10) * 10 + ' m' : (d / 1000).toFixed(1).replace('.', ',') + ' km');
   const modo = (d) => (d <= 1500 ? Math.max(1, Math.round(d / 80)) + ' min a pé' : Math.max(2, Math.round(d / 450)) + ' min de carro');
-  const dados = { code, valor: it.valor || 0, entrada: valorTexto(pf.entrada, it.valor), coords: geo && geo.coords && geo.coords.map((v) => Math.round(v * 1000) / 1000) /* ~100 m de margem: o endereço exato não vai para o cliente */, perto: perto.map((p) => ({ n: p.nome, c: p.cat, p: p.p })), exato: !!(geo && geo.exato) };
+  const tx = await taxaReferencia().catch(() => ({ taxa: TAXA_PADRAO, texto: '11,5% ao ano + TR · média de mercado' }));
+  const dados = { code, taxa: tx.taxa, valor: it.valor || 0, entrada: valorTexto(pf.entrada, it.valor), coords: geo && geo.coords && geo.coords.map((v) => Math.round(v * 1000) / 1000) /* ~100 m de margem: o endereço exato não vai para o cliente */, perto: perto.map((p) => ({ n: p.nome, c: p.cat, p: p.p })), exato: !!(geo && geo.exato) };
 
   const corpo = `
 <header class="top"><img src="/assets/holy-logo-claro.svg" alt="Holy Curadoria Imobiliária"><span>Dossiê exclusivo${nome1 ? ' · ' + esc(nome1) : ''}</span></header>
@@ -349,7 +446,7 @@ export async function paginaDossie(code, req) {
     <div class="selo" title="Selecionado pela curadoria Holy">${SELO}</div>
     ${nome1 ? `<div class="para">Preparado para ${esc(r.cliente)}</div>` : ''}
     <h1>${esc(it.nome)}</h1>
-    <div class="loc">${esc(local)}${it.valor ? ' · <b>' + esc(brl(it.valor)) + '</b>' : ''}</div>
+    <div class="loc">${esc(local)}${ehEmp ? (it.preco ? ' · <b>' + esc(it.preco) + '</b>' : '') : it.valor ? ' · <b>' + esc(brl(it.valor)) + '</b>' : ''}</div>
   </div>
 </section>
 <main>
@@ -359,7 +456,9 @@ export async function paginaDossie(code, req) {
 </section>
 ${specs.length ? `<section class="nums rev">${specs.map((s) => `<div><b>${esc(s[0])}</b><span>${esc(s[1])}</span></div>`).join('')}${m2 ? `<div><b>${esc(brl(m2))}</b><span>por m²</span></div>` : ''}</section>` : ''}
 ${fotos.length > 1 ? `<section class="sec rev"><h2>Fotos</h2><div class="gal">${fotos.map((f, i) => `<button onclick="lb(${i})" aria-label="Ampliar foto ${i + 1}"><img src="${esc(f)}" alt="${esc(it.nome)} – foto ${i + 1}" loading="${i < 3 ? 'eager' : 'lazy'}"></button>`).join('')}</div></section>` : ''}
-${it.descricao ? `<section class="sec rev"><h2>Sobre o imóvel</h2><div class="desc">${esc(it.descricao).replace(/\n{2,}/g, '</p><p>').replace(/^/, '<p>').replace(/$/, '</p>').replace(/\n/g, '<br>')}</div></section>` : ''}
+${it.descricao ? `<section class="sec rev"><h2>${ehEmp ? 'Sobre o empreendimento' : 'Sobre o imóvel'}</h2><div class="desc">${esc(it.descricao).replace(/\n{2,}/g, '</p><p>').replace(/^/, '<p>').replace(/$/, '</p>').replace(/\n/g, '<br>')}</div></section>` : ''}
+${ehEmp && (it.plantas || []).length ? `<section class="sec rev"><h2>Plantas</h2><div class="plantas">${it.plantas.map((pl) => `<figure><a href="${esc(pl.img)}" target="_blank" rel="noopener"><img src="${esc(pl.img)}" alt="${esc(pl.nome)}" loading="lazy"></a><figcaption><b>${esc(pl.nome)}</b>${pl.sub ? '<span>' + esc(pl.sub) + '</span>' : ''}</figcaption></figure>`).join('')}</div></section>` : ''}
+${ehEmp && (it.ficha || []).length ? `<section class="sec rev"><h2>Ficha técnica</h2><dl class="ficha">${it.ficha.map((f) => `<div><dt>${esc(f[0])}</dt><dd>${esc(f[1])}</dd></div>`).join('')}</dl></section>` : ''}
 ${tags.length ? `<section class="sec rev"><h2>Diferenciais</h2><div class="tags">${tags.map((t) => `<span>${esc(t)}</span>`).join('')}</div></section>` : ''}
 ${(it.condominio || it.iptu) ? `<section class="sec rev custos">${it.condominio ? `<div><span>Condomínio</span><b>${esc(brl(it.condominio))}/mês</b></div>` : ''}${it.iptu ? `<div><span>IPTU</span><b>${esc(brl(it.iptu))}</b></div>` : ''}</section>` : ''}
 <section class="sec rev" id="local"><h2>Localização</h2>
@@ -374,21 +473,26 @@ ${it.valor && it.finalidade !== 'Locação' ? `<section class="sec rev" id="sim"
     <div class="ctl">
       <label>Entrada <output id="o-ent"></output><input id="s-ent" type="range" min="20" max="90" step="5"></label>
       <label>Prazo <output id="o-anos"></output><input id="s-anos" type="range" min="5" max="35" step="1" value="30"></label>
-      <label>Juros ao ano (%)<input id="s-taxa" type="number" min="5" max="20" step="0.1" value="11.5" inputmode="decimal"></label>
+      <label>Juros ao ano (%) + TR<input id="s-taxa" type="number" min="5" max="25" step="0.01" value="${tx.taxa}" inputmode="decimal"><small class="ref">Referência: ${esc(tx.texto)}</small></label>
     </div>
     <div class="res">
+      <div class="aviso"><b>Estimativa sem valor de proposta.</b> Não é oferta de crédito nem compromisso de condições. Taxa, prazo, valor aprovado e parcela final dependem do banco e da análise de crédito.</div>
       <div class="r1"><span>Valor financiado</span><b id="r-fin"></b></div>
       <div class="r2"><div><span>Tabela SAC · 1ª parcela</span><b id="r-sac1"></b><small id="r-sacn"></small></div><div><span>Tabela Price · parcela fixa</span><b id="r-price"></b><small>do início ao fim</small></div></div>
-      <div class="r1"><span>Renda familiar sugerida (SAC)</span><b id="r-renda"></b></div>
+      <div class="r1"><span>+ Seguros e tarifa (estimativa)</span><b id="r-seg"></b></div>
+      <div class="r1"><span>1ª parcela total estimada (SAC)</span><b id="r-tot"></b></div>
+      <div class="r1"><span>Renda familiar sugerida</span><b id="r-renda"></b></div>
+      <div class="r1"><span>ITBI e registro (à parte, 3% a 5%)</span><b id="r-itbi"></b></div>
     </div>
   </div>
-  <div class="nota">Simulação ilustrativa: não inclui seguros obrigatórios, taxas do banco, correção (TR) nem os custos de ITBI e registro. As condições reais dependem do banco e da análise de crédito. Eu faço a simulação oficial com os bancos parceiros para você.</div>
+  ${ehEmp ? `<div class="nota">Simulação feita com o valor de entrada da tabela (${esc(it.preco)}). Em lançamentos, a construtora costuma ter condições próprias de pagamento até as chaves; o financiamento bancário entra no saldo, na entrega.</div>` : ''}
+  <div class="nota">Simulação ilustrativa feita pela Holy com as fórmulas SAC e Price. Os seguros (MIP e DFI) variam com a idade e o banco; a TR corrige o saldo e não está somada. O banco exige entrada mínima de cerca de 20% e analisa renda e crédito. Valores sujeitos a alteração sem aviso. Eu faço a simulação oficial com os bancos para você.</div>
   ${avista ? '</details>' : ''}
 </section>` : ''}
 ${pf.permuta ? `<section class="sec rev perm"><h2>Seu imóvel na negociação</h2><p>Você comentou que pensa em usar um imóvel na compra. Me mande fotos, endereço e metragem dele que eu já levo a avaliação para a conversa com o proprietário.</p></section>` : ''}
 <section class="final rev">
   <h2>${nome1 ? esc(nome1) + ', quer' : 'Quer'} conhecer pessoalmente?</h2>
-  <p>A visita é o momento de sentir o imóvel: luz, silêncio, vizinhança. Eu acompanho você e respondo tudo na hora.</p>
+  <p>${ehEmp ? 'Posso te levar ao decorado ou ao local da obra, mostrar a tabela completa e as condições direto com a construtora.' : 'A visita é o momento de sentir o imóvel: luz, silêncio, vizinhança. Eu acompanho você e respondo tudo na hora.'}</p>
   <a class="cta" data-ev="visita" href="https://wa.me/${WA}?text=${encodeURIComponent(txtVisita)}" target="_blank" rel="noopener">Agendar visita</a>
   <a class="cta2" data-ev="duvida" href="https://wa.me/${WA}?text=${encodeURIComponent(txtDuvida)}" target="_blank" rel="noopener">Tirar uma dúvida</a>
 </section>
@@ -447,6 +551,8 @@ main{max-width:1080px;margin:0 auto;padding:0 22px}
 .mapa{width:100%;height:380px;border:0;border-radius:4px;background:var(--cr2)}
 .leaflet-tile-pane{filter:grayscale(.75) sepia(.12)}
 .nota{font-size:12px;color:var(--mut);line-height:1.6;margin-top:10px}
+.plantas{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}.plantas figure{background:#fff;border:1px solid var(--cr2);border-radius:4px;overflow:hidden}.plantas img{width:100%;aspect-ratio:4/3;object-fit:contain;background:#fff}.plantas figcaption{padding:10px 12px;display:flex;flex-direction:column;gap:2px;font-size:13px}.plantas figcaption span{color:var(--mut);font-size:12px}
+.ficha{display:grid;grid-template-columns:1fr 1fr;gap:0 36px}.ficha div{display:flex;flex-direction:column;gap:3px;padding:12px 0;border-bottom:1px solid var(--cr2)}.ficha dt{font-size:12px;color:var(--mut)}.ficha dd{font-size:14px}@media(max-width:760px){.ficha{grid-template-columns:1fr}}
 .perto{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:0 36px}
 .perto li{display:flex;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid var(--cr2)}
 .perto li div{display:flex;flex-direction:column}.perto li span{font-size:13px;color:var(--mut);margin-top:2px}.perto .d{text-align:right;white-space:nowrap}
@@ -455,7 +561,7 @@ main{max-width:1080px;margin:0 auto;padding:0 22px}
 .ctl output{color:var(--ink);font-weight:600;font-size:15px}
 input[type=range]{accent-color:var(--ol2);width:100%}input[type=number]{font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--cr2);border-radius:4px;width:120px}
 .res{display:flex;flex-direction:column;gap:14px}.r1{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--cr2);padding-bottom:12px;font-size:14px;color:var(--mut)}
-.r1 b{font-size:18px;color:var(--ink)}.r2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.r1{gap:12px}.r1 b{font-size:18px;color:var(--ink);white-space:nowrap;text-align:right}.ref{font-size:11.5px;color:var(--mut);line-height:1.4}.aviso{font-size:12.5px;line-height:1.5;background:#fbf4e6;border-left:3px solid var(--gd);padding:10px 12px;border-radius:3px;color:var(--ink)}.r2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .r2 div{background:var(--cr);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:4px}.r2 span{font-size:12px;color:var(--mut)}.r2 b{font-family:'Playfair Display',Georgia,serif;font-size:26px;font-weight:500;color:var(--ol2)}.r2 small{font-size:12px;color:var(--mut)}
 details summary{list-style:none;cursor:pointer}details summary::-webkit-details-marker{display:none}details summary h2{display:inline;margin:0}details summary span{display:block;font-size:13px;color:var(--gd);margin:6px 0 20px}
 .perm{background:#fff;border-left:3px solid var(--gd);padding:28px 32px;border-radius:4px}.perm h2{font-size:24px;margin-bottom:10px}.perm p{line-height:1.7;color:#3b3f34}
@@ -502,8 +608,12 @@ if(se&&V){
     document.getElementById('r-sac1').textContent=brl(s1);
     document.getElementById('r-sacn').textContent='caindo até '+brl(sn)+' na última';
     document.getElementById('r-price').textContent=brl(price);
-    document.getElementById('r-renda').textContent=brl(s1/0.3);
-    if(user){clearTimeout(tm);tm=setTimeout(function(){bc('sim','entrada='+Math.round(ent)+'&anos='+an+'&parcela='+Math.round(s1));},2500);}
+    var seg=P*0.00025+V*0.00007+25,tot=s1+seg;
+    document.getElementById('r-seg').textContent='~ '+brl(seg)+'/mês';
+    document.getElementById('r-tot').textContent=brl(tot);
+    document.getElementById('r-renda').textContent=brl(tot/0.3);
+    document.getElementById('r-itbi').textContent=brl(V*0.03)+' a '+brl(V*0.05);
+    if(user){clearTimeout(tm);tm=setTimeout(function(){bc('sim','entrada='+Math.round(ent)+'&anos='+an+'&parcela='+Math.round(tot));},2500);}
   }
   [se,sa,st].forEach(function(el){el.addEventListener('input',function(){calc(1);});});calc(0);
 }
